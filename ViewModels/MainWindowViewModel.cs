@@ -46,6 +46,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private string _status = "Ready.";
     [ObservableProperty] private DockEntry? _selectedDockEntry;
     [ObservableProperty] private string _selectedOutput = string.Empty;
+    [ObservableProperty] private int _runningCount;
 
     public MainWindowViewModel(
         IJsonStore<AppConfig> configStore,
@@ -225,6 +226,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _state.RecentlyRun = RecentRuns.Add(_state.RecentlyRun, path, DateTimeOffset.UtcNow);
         _stateStore.Save(_state);
         RebuildRecent();
+
+        // Surface the just-run script: select its Recent entry so its output shows in the console
+        // immediately (selection re-pins the console to the bottom).
+        SelectedDockEntry = Recent.FirstOrDefault(e => string.Equals(e.Path, path, StringComparison.Ordinal));
     }
 
     private void RebuildFromProcesses() => Guard("refresh", () =>
@@ -252,11 +257,24 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         var selectedPath = SelectedDockEntry?.Path;
 
         Recent.Clear();
-        foreach (var entry in DockListBuilder.Build(_state.RecentlyRun, _runner.Active))
+        foreach (var entry in DockListBuilder.Build(_state.RecentlyRun, _runner.Active, BuildLabels()))
             Recent.Add(entry);
 
         SelectedDockEntry = Recent.FirstOrDefault(e => string.Equals(e.Path, selectedPath, StringComparison.Ordinal));
+        RunningCount = _runner.Active.Count(p => p.State == RunState.Running);
         RefreshOutput();
+    }
+
+    // The shortest unambiguous label per path, over every path any list could show, so a
+    // script reads identically in the Scripts tiles and the Recent list.
+    private IReadOnlyDictionary<string, string> BuildLabels()
+    {
+        var paths = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var path in _lastFound) paths.Add(path);
+        foreach (var path in _removed) paths.Add(path);
+        foreach (var run in _state.RecentlyRun) paths.Add(run.Path);
+        foreach (var process in _runner.Active) paths.Add(process.ScriptPath);
+        return ScriptLabels.Build(paths);
     }
 
     private void RebuildScripts()
@@ -266,7 +284,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             _runner.Active.Where(p => p.State == RunState.Running).Select(p => p.ScriptPath),
             StringComparer.Ordinal);
 
-        var items = ScriptListBuilder.BuildScripts(_lastFound, _removed, hidden, _newPaths, running, ShowHidden);
+        var items = ScriptListBuilder.BuildScripts(_lastFound, _removed, hidden, _newPaths, running, BuildLabels(), ShowHidden);
 
         Scripts.Clear();
         foreach (var item in items)

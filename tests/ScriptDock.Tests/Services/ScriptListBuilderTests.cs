@@ -10,6 +10,14 @@ public sealed class ScriptListBuilderTests
 {
     private static HashSet<string> Set(params string[] values) => new(values, StringComparer.Ordinal);
 
+    private static IReadOnlyDictionary<string, string> Labels(params (string Path, string Label)[] entries)
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (path, label) in entries)
+            map[path] = label;
+        return map;
+    }
+
     [Fact]
     public void BuildScripts_FlagsNew_MarksRunning_SortsByDisplayName()
     {
@@ -22,6 +30,7 @@ public sealed class ScriptListBuilderTests
             hidden: Set(),
             newPaths: Set(bigmouth),
             runningPaths: Set(aholist),
+            labels: Labels((bigmouth, "bigmouth/run-dev.command"), (aholist, "aholist/run-dev.command")),
             showHidden: false);
 
         Assert.Equal(2, scripts.Count);
@@ -37,11 +46,12 @@ public sealed class ScriptListBuilderTests
     public void BuildScripts_HidesHidden_UnlessShowHidden()
     {
         var hiddenPath = "/code/x/scripts/run-dev.command";
+        var labels = Labels((hiddenPath, "x/run-dev.command"));
 
-        var withoutHidden = ScriptListBuilder.BuildScripts([hiddenPath], [], Set(hiddenPath), Set(), Set(), showHidden: false);
+        var withoutHidden = ScriptListBuilder.BuildScripts([hiddenPath], [], Set(hiddenPath), Set(), Set(), labels, showHidden: false);
         Assert.Empty(withoutHidden);
 
-        var withHidden = ScriptListBuilder.BuildScripts([hiddenPath], [], Set(hiddenPath), Set(), Set(), showHidden: true);
+        var withHidden = ScriptListBuilder.BuildScripts([hiddenPath], [], Set(hiddenPath), Set(), Set(), labels, showHidden: true);
         Assert.Single(withHidden);
         Assert.True(withHidden[0].IsHidden);
     }
@@ -51,7 +61,7 @@ public sealed class ScriptListBuilderTests
     {
         var removed = "/code/x/scripts/gone.command";
 
-        var scripts = ScriptListBuilder.BuildScripts([], [removed], Set(), Set(), Set(), showHidden: false);
+        var scripts = ScriptListBuilder.BuildScripts([], [removed], Set(), Set(), Set(), Labels((removed, "x/gone.command")), showHidden: false);
 
         Assert.Single(scripts);
         Assert.Equal(ScriptFlag.Removed, scripts[0].Flag);

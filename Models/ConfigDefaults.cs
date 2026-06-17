@@ -22,10 +22,20 @@ public static class ConfigDefaults
     [
         "/node_modules/",
         "/\\.git/",
+        "/\\.svn/",
+        "/\\.hg/",
         "/\\.venv/",
-        "/obj/",
+        "/venv/",
+        "/__pycache__/",
         "/bin/",
+        "/obj/",
+        "/target/",
+        "/dist/",
+        "/build/",
+        "/out/",
         "/publish/",
+        "/\\.next/",
+        "/Pods/",
     ];
 
     /// <summary>A config seeded for first run: the user's <c>~/code</c> as the initial

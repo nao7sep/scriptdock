@@ -10,10 +10,11 @@
         Background="{StaticResource AppBackgroundBrush}">
 
     <Window.Resources>
-        <!-- Content-sized script tile: new → amber bg, removed → red text, hidden → gray; a green dot when running. -->
+        <!-- Content-sized script tile: bordered + rounded; new → amber bg, removed → red text, hidden → gray; green dot when running. -->
         <DataTemplate x:Key="ScriptTile" x:DataType="models:ScriptItem">
             <Border Background="{Binding Converter={StaticResource ScriptColor}, ConverterParameter=bg}"
-                    CornerRadius="4" Padding="8,5" Margin="2">
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                    CornerRadius="5" Padding="8,5" Margin="2">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <Ellipse Width="7" Height="7" Fill="#16A34A" VerticalAlignment="Center" IsVisible="{Binding IsRunning}"/>
                     <TextBlock Text="{Binding DisplayName}"
@@ -23,51 +24,53 @@
         </DataTemplate>
     </Window.Resources>
 
-    <DockPanel Margin="10">
+    <DockPanel>
 
-        <!-- Top toolbar: wordmark, primary actions, hamburger -->
-        <Border DockPanel.Dock="Top" Classes="card" Margin="0,0,0,10">
+        <!-- Flat header: wordmark + hamburger, with a single bottom border. -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="14,10">
             <DockPanel>
                 <TextBlock Text="ScriptDock" FontWeight="Bold" FontSize="15" VerticalAlignment="Center"/>
-                <Button Content="☰" Classes="tool" DockPanel.Dock="Right" FontSize="16">
+                <Button Classes="tool" DockPanel.Dock="Right" Padding="8,4">
+                    <Path Width="18" Height="18" Stretch="None" Fill="{StaticResource TextPrimaryBrush}"
+                          Data="M1,3 H17 V5 H1 Z M1,8 H17 V10 H1 Z M1,13 H17 V15 H1 Z"/>
                     <Button.Flyout>
                         <MenuFlyout Placement="BottomEdgeAlignedRight">
-                            <MenuItem x:Name="SettingsMenuItem" Header="Settings" Click="OnSettingsClick"/>
-                            <MenuItem x:Name="ShortcutsMenuItem" Header="Keyboard Shortcuts" Click="OnShortcutsClick"/>
-                            <MenuItem Header="About" Click="OnAboutClick"/>
                             <MenuItem Header="Reveal Logs" Click="OnRevealLogsClick"/>
+                            <MenuItem Header="Settings" Click="OnSettingsClick"/>
+                            <MenuItem Header="Keyboard Shortcuts" Click="OnShortcutsClick"/>
+                            <MenuItem Header="About" Click="OnAboutClick"/>
                         </MenuFlyout>
                     </Button.Flyout>
                 </Button>
-                <StackPanel Orientation="Horizontal" Spacing="10" Margin="16,0,0,0" VerticalAlignment="Center">
-                    <Button Content="Rescan" Classes="accent" Command="{Binding RescanCommand}"/>
-                    <CheckBox Content="Show hidden" IsChecked="{Binding ShowHidden}"/>
-                </StackPanel>
             </DockPanel>
         </Border>
 
-        <!-- Status bar -->
-        <Border DockPanel.Dock="Bottom" Classes="card" Margin="0,10,0,0" Padding="10,6">
+        <!-- Status bar: left = status, right = N running. -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="14,6">
             <DockPanel>
-                <TextBlock Text="Scanning…" DockPanel.Dock="Right" IsVisible="{Binding IsScanning}"
+                <TextBlock DockPanel.Dock="Right" Text="{Binding RunningCount, StringFormat='{}{0} running'}"
                            Foreground="{StaticResource TextSecondaryBrush}"/>
                 <TextBlock Text="{Binding Status}" Foreground="{StaticResource TextSecondaryBrush}"/>
             </DockPanel>
         </Border>
 
-        <!-- Body: lists row, splitter, console row -->
-        <Grid x:Name="BodyGrid" RowDefinitions="*,6,220">
+        <!-- Body: lists row, splitter, console row. -->
+        <Grid x:Name="BodyGrid" Margin="12" RowDefinitions="*,6,220">
 
             <Grid x:Name="ListsGrid" Grid.Row="0" ColumnDefinitions="*,6,340">
 
-                <!-- Scripts (content-sized tiles) -->
+                <!-- Scripts (content-sized tiles); Rescan + Show-hidden act on this list. -->
                 <Border Grid.Column="0" Classes="card">
                     <DockPanel>
                         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
                             <TextBlock Text="Scripts" Classes="cardHeader" VerticalAlignment="Center"/>
-                            <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                            <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <Button Content="Rescan" Classes="tool" Command="{Binding RescanCommand}"/>
+                                <CheckBox Content="Show hidden" IsChecked="{Binding ShowHidden}" VerticalAlignment="Center"/>
                                 <Button Content="Run" Classes="tool" Command="{Binding RunScriptCommand}" CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
-                                <Button Content="Hide / Show" Classes="tool" Command="{Binding ToggleHiddenCommand}" CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
+                                <Button Content="Hide" Classes="tool" Command="{Binding ToggleHiddenCommand}" CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
                             </StackPanel>
                         </DockPanel>
                         <ListBox x:Name="ScriptsList" ItemsSource="{Binding Scripts}"
@@ -84,7 +87,7 @@
 
                 <GridSplitter Grid.Column="1" Width="6" Background="Transparent" ResizeDirection="Columns"/>
 
-                <!-- Recent (running + recently-run, dismissible) -->
+                <!-- Recent (running + recently-run, dismissible). -->
                 <Border Grid.Column="2" Classes="card">
                     <DockPanel>
                         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
@@ -117,7 +120,7 @@
 
             <GridSplitter Grid.Row="1" Height="6" Background="Transparent" ResizeDirection="Rows" HorizontalAlignment="Stretch"/>
 
-            <!-- Console: the selected Recent item's output -->
+            <!-- Console: the selected Recent item's output (auto-scrolls when pinned to the bottom). -->
             <Border Grid.Row="2" Classes="card">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="0,0,0,6">
@@ -125,10 +128,10 @@
                         <TextBlock Text="{Binding SelectedDockEntry.DisplayName}" Classes="cardHeader"
                                    Foreground="{StaticResource TextSecondaryBrush}"/>
                     </StackPanel>
-                    <TextBox Text="{Binding SelectedOutput}" IsReadOnly="True" AcceptsReturn="True"
-                             TextWrapping="NoWrap" FontFamily="Menlo,Consolas,monospace" FontSize="12"
-                             ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+                    <ScrollViewer x:Name="ConsoleScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                        <SelectableTextBlock Text="{Binding SelectedOutput}" TextWrapping="NoWrap"
+                                             FontFamily="Menlo,Consolas,monospace" FontSize="12"/>
+                    </ScrollViewer>
                 </DockPanel>
             </Border>
         </Grid>

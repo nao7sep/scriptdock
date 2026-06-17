@@ -10,24 +10,26 @@ namespace ScriptDock.ViewModels;
 /// persisted last-run time with its live process (if any). A running process makes the entry
 /// Running (with output); a finished one keeps its output and exit code until the entry is
 /// dismissed; a recent with no live process (carried over from a past session) shows idle.
-/// Built fresh by <see cref="DockListBuilder"/> on each refresh.
+/// The <see cref="DisplayName"/> is the same disambiguated label the Scripts list uses. Built
+/// fresh by <see cref="DockListBuilder"/> on each refresh.
 /// </summary>
 public sealed class DockEntry
 {
     private static readonly TimeZoneInfo DisplayZone = ResolveDisplayZone();
 
-    public DockEntry(string path, DateTimeOffset lastRanAt, ScriptProcess? process)
+    public DockEntry(string path, string displayName, DateTimeOffset lastRanAt, ScriptProcess? process)
     {
         Path = path;
+        DisplayName = displayName;
         LastRanAt = lastRanAt;
         Process = process;
     }
 
     public string Path { get; }
+    public string DisplayName { get; }
     public DateTimeOffset LastRanAt { get; }
     public ScriptProcess? Process { get; }
 
-    public string DisplayName => ScriptDisplayName.For(Path);
     public bool IsRunning => Process is { State: RunState.Running };
 
     /// <summary>The last-run time in local (JST) display form.</summary>

@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.ComponentModel;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using ScriptDock.Models;
 using ScriptDock.Services;
 using ScriptDock.ViewModels;
@@ -14,14 +15,19 @@ namespace ScriptDock.Views;
 
 public partial class MainWindow : Window
 {
+    // Within this many pixels of the bottom counts as "pinned": new output then auto-scrolls.
+    private const double ConsolePinThreshold = 24;
+
     private MainWindowViewModel? ViewModel => DataContext as MainWindowViewModel;
     private IReadOnlyList<ShortcutItem> _shortcuts = [];
+    private bool _consolePinnedToBottom = true;
 
     public MainWindow()
     {
         InitializeComponent();
         Loaded += OnLoaded;
         Closing += OnClosing;
+        ConsoleScroll.ScrollChanged += OnConsoleScrollChanged;
     }
 
     private async void OnLoaded(object? sender, RoutedEventArgs e)
@@ -45,12 +51,11 @@ public partial class MainWindow : Window
             if (vm.SavedConsoleHeight is { } consoleHeight && consoleHeight > 60)
                 BodyGrid.RowDefinitions[2].Height = new GridLength(consoleHeight, GridUnitType.Pixel);
 
-            // One catalog drives both the live accelerators and the help modal, with the command key
-            // (Cmd on macOS, Ctrl on Windows) resolved by the framework — so a label never describes a
-            // binding that does not exist, and the menu hints match the live bindings.
+            // Catalog drives the live accelerators (the help modal renders the same source); the
+            // command key (Cmd on macOS, Ctrl on Windows) is resolved by the framework.
             _shortcuts = ShortcutCatalog.Build(this);
-            SettingsMenuItem.InputGesture = GestureFor(ShortcutAction.OpenSettings);
-            ShortcutsMenuItem.InputGesture = GestureFor(ShortcutAction.ShowShortcuts);
+
+            vm.PropertyChanged += OnViewModelPropertyChanged;
 
             await vm.InitializeAsync();
         }
@@ -78,8 +83,30 @@ public partial class MainWindow : Window
         }
     }
 
-    // Application accelerators matched against the catalog, so a key can only fire a binding the help
-    // modal also shows. Control-owned keys (Enter/Space/Delete/arrows) are handled by the lists.
+    // Console: keep the view glued to the latest output unless the user has scrolled up to read.
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainWindowViewModel.SelectedDockEntry))
+            _consolePinnedToBottom = true; // a freshly-selected run starts pinned to its latest line
+        else if (e.PropertyName == nameof(MainWindowViewModel.SelectedOutput))
+            Dispatcher.UIThread.Post(ScrollConsoleIfPinned);
+    }
+
+    private void OnConsoleScrollChanged(object? sender, ScrollChangedEventArgs e)
+    {
+        var distanceFromBottom = ConsoleScroll.Extent.Height - ConsoleScroll.Viewport.Height - ConsoleScroll.Offset.Y;
+        _consolePinnedToBottom = distanceFromBottom <= ConsolePinThreshold;
+    }
+
+    private void ScrollConsoleIfPinned()
+    {
+        if (!_consolePinnedToBottom)
+            return;
+
+        var maxY = Math.Max(0, ConsoleScroll.Extent.Height - ConsoleScroll.Viewport.Height);
+        ConsoleScroll.Offset = new Vector(ConsoleScroll.Offset.X, maxY);
+    }
+
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
         foreach (var item in _shortcuts)
@@ -109,9 +136,6 @@ public partial class MainWindow : Window
                 break;
         }
     }
-
-    private KeyGesture? GestureFor(ShortcutAction action) =>
-        _shortcuts.FirstOrDefault(s => s.Action == action)?.Gesture;
 
     private void OnSettingsClick(object? sender, RoutedEventArgs e) => _ = OpenSettingsAsync();
 

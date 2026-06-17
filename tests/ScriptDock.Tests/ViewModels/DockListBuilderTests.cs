@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using ScriptDock.Models;
 using ScriptDock.Services;
@@ -9,6 +10,8 @@ namespace ScriptDock.Tests.ViewModels;
 
 public sealed class DockListBuilderTests
 {
+    private static readonly IReadOnlyDictionary<string, string> NoLabels = new Dictionary<string, string>();
+
     private static RecentRun Run(string path, int minute) =>
         new() { Path = path, RanAt = new DateTimeOffset(2026, 6, 17, 0, minute, 0, TimeSpan.Zero) };
 
@@ -24,7 +27,7 @@ public sealed class DockListBuilderTests
     [Fact]
     public void Build_OneEntryPerRecent_NewestFirst_NoProcesses()
     {
-        var entries = DockListBuilder.Build([Run("/b", 5), Run("/a", 1)], []);
+        var entries = DockListBuilder.Build([Run("/b", 5), Run("/a", 1)], [], NoLabels);
 
         Assert.Equal(["/b", "/a"], entries.Select(e => e.Path));
         Assert.All(entries, e => Assert.Null(e.Process));
@@ -36,7 +39,7 @@ public sealed class DockListBuilderTests
     {
         var running = Running("/a");
 
-        var entry = Assert.Single(DockListBuilder.Build([Run("/a", 1)], [running]));
+        var entry = Assert.Single(DockListBuilder.Build([Run("/a", 1)], [running], NoLabels));
 
         Assert.True(entry.IsRunning);
         Assert.Same(running, entry.Process);
@@ -48,7 +51,7 @@ public sealed class DockListBuilderTests
     {
         var stopped = Stopped("/a");
 
-        var entry = Assert.Single(DockListBuilder.Build([Run("/a", 1)], [stopped]));
+        var entry = Assert.Single(DockListBuilder.Build([Run("/a", 1)], [stopped], NoLabels));
 
         Assert.False(entry.IsRunning);
         Assert.Same(stopped, entry.Process);
@@ -60,7 +63,7 @@ public sealed class DockListBuilderTests
         var stopped = Stopped("/a");
         var running = Running("/a");
 
-        var entry = Assert.Single(DockListBuilder.Build([Run("/a", 1)], [stopped, running]));
+        var entry = Assert.Single(DockListBuilder.Build([Run("/a", 1)], [stopped, running], NoLabels));
 
         Assert.Same(running, entry.Process);
     }

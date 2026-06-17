@@ -10,10 +10,11 @@
         <!-- Root directories -->
         <StackPanel Spacing="6">
             <TextBlock Text="Root directories" Classes="cardHeader"/>
-            <ListBox x:Name="RootList" ItemsSource="{Binding RootDirs}" Height="96"/>
+            <ListBox x:Name="RootList" ItemsSource="{Binding RootDirs}" Height="96"
+                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
             <DockPanel>
                 <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemoveRootClick"/>
-                <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Click="OnAddRootClick"/>
+                <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddRootClick"/>
                 <TextBox x:Name="RootEntry" PlaceholderText="/path/to/scan" KeyDown="OnRootKeyDown"/>
             </DockPanel>
         </StackPanel>
@@ -21,10 +22,11 @@
         <!-- Extensions -->
         <StackPanel Spacing="6">
             <TextBlock Text="Extensions" Classes="cardHeader"/>
-            <ListBox x:Name="ExtList" ItemsSource="{Binding Extensions}" Height="80"/>
+            <ListBox x:Name="ExtList" ItemsSource="{Binding Extensions}" Height="80"
+                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
             <DockPanel>
                 <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemoveExtClick"/>
-                <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Click="OnAddExtClick"/>
+                <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddExtClick"/>
                 <TextBox x:Name="ExtEntry" PlaceholderText=".command" KeyDown="OnExtKeyDown"/>
             </DockPanel>
         </StackPanel>
@@ -32,10 +34,11 @@
         <!-- Ignore patterns -->
         <StackPanel Spacing="6">
             <TextBlock Text="Ignore patterns (regex over full path)" Classes="cardHeader"/>
-            <ListBox x:Name="PatternList" ItemsSource="{Binding IgnorePatterns}" Height="96"/>
+            <ListBox x:Name="PatternList" ItemsSource="{Binding IgnorePatterns}" Height="96"
+                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
             <DockPanel>
                 <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemovePatternClick"/>
-                <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Click="OnAddPatternClick"/>
+                <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddPatternClick"/>
                 <TextBox x:Name="PatternEntry" PlaceholderText="/node_modules/" KeyDown="OnPatternKeyDown"/>
             </DockPanel>
             <TextBlock Text="{Binding PatternError}" Foreground="#DC2626" FontSize="12" TextWrapping="Wrap"

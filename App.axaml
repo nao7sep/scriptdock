@@ -99,5 +99,10 @@
             <Setter Property="Padding" Value="8,3"/>
             <Setter Property="FontSize" Value="12"/>
         </Style>
+
+        <!-- Consistent text-input border colour (the Fluent default reads near-black). -->
+        <Style Selector="TextBox">
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        </Style>
     </Application.Styles>
 </Application>

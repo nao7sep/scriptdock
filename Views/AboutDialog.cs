@@ -34,7 +34,7 @@ public sealed class AboutDialog : DialogBase
                 new TextBlock { Text = $"Version {version}", FontSize = 13, Foreground = Brushes.Gray, Margin = new Thickness(0, 0, 0, 12) },
                 new TextBlock
                 {
-                    Text = "Finds the launcher scripts scattered across your project repos and runs and reliably restarts them as processes it owns — so finished runs live in one window instead of a hundred terminal tabs.",
+                    Text = "Finds the launcher scripts across your repos and runs and reliably restarts them as processes it owns.",
                     TextWrapping = TextWrapping.Wrap,
                     FontSize = 13,
                     Margin = new Thickness(0, 0, 0, 16),

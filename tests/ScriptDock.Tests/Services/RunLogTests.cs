@@ -62,4 +62,20 @@ public sealed class RunLogTests : IDisposable
 
         Assert.Contains("live line", RunLog.ReadTail(_file));
     }
+
+    [Fact]
+    public void ReadTail_CollapsesCarriageReturnProgressUpdates()
+    {
+        File.WriteAllText(_file, "Building 1\rBuilding 2\rBuilding 3\n");
+
+        Assert.Equal(["Building 3"], RunLog.ReadTail(_file));
+    }
+
+    [Fact]
+    public void ReadTail_KeepsFinishedLines_CollapsesTrailingProgress()
+    {
+        File.WriteAllText(_file, "Compiling a\nBuilding 1\rBuilding 2\rCompiling b\nBuilding 3\rBuilding 4");
+
+        Assert.Equal(["Compiling a", "Compiling b", "Building 4"], RunLog.ReadTail(_file));
+    }
 }

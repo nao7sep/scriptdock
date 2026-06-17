@@ -79,18 +79,18 @@ public static class ShortcutCatalog
         return new List<ShortcutItem>
         {
             // Scripts — running is owned by the tile (pointer + keys), listed for discoverability.
-            Display(ShortcutGroup.Scripts, "Run the selected script — or restart it if it is already running", "Double-click / Enter / Space", asKeycap: false),
+            Display(ShortcutGroup.Scripts, "Run or restart the selection", "Double-click / Enter / Space", asKeycap: false),
 
             // Recent — Delete is owned by the Recent list while it has focus.
-            Display(ShortcutGroup.Recent, "Stop a running item, or dismiss a stopped one", "Delete"),
+            Display(ShortcutGroup.Recent, "Stop or dismiss the selection", "Delete"),
 
             // Navigation — native list selection.
-            Display(ShortcutGroup.Navigation, "Move the selection up or down a list", "Up / Down"),
+            Display(ShortcutGroup.Navigation, "Move the selection", "Up / Down"),
 
             // App — the centralized command accelerators.
-            Command(ShortcutGroup.App, "Rescan the root directories", cmd, Key.R, "R", ShortcutAction.Rescan),
-            Command(ShortcutGroup.App, "Open Settings", cmd, Key.OemComma, ",", ShortcutAction.OpenSettings),
-            Command(ShortcutGroup.App, "Show this shortcuts list", cmd, Key.OemQuestion, "Slash", ShortcutAction.ShowShortcuts),
+            Command(ShortcutGroup.App, "Rescan", cmd, Key.R, "R", ShortcutAction.Rescan),
+            Command(ShortcutGroup.App, "Open Settings", cmd, Key.OemComma, "Comma", ShortcutAction.OpenSettings),
+            Command(ShortcutGroup.App, "Show shortcuts", cmd, Key.OemQuestion, "Slash", ShortcutAction.ShowShortcuts),
         };
     }
 

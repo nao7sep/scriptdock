@@ -53,6 +53,7 @@ public static class RunLog
             var lines = reader.ReadToEnd()
                 .Replace("\r\n", "\n")
                 .Split('\n')
+                .Select(CollapseCarriageReturns)
                 .Select(AnsiStripper.Strip)
                 .ToList();
 
@@ -70,6 +71,15 @@ public static class RunLog
         {
             return Array.Empty<string>();
         }
+    }
+
+    // Emulate a terminal's carriage-return overwrite: within a line, only the content after the
+    // last bare '\r' stays visible — so a progress bar that redraws its line in place collapses to
+    // its latest frame instead of one console line per redraw.
+    private static string CollapseCarriageReturns(string line)
+    {
+        var index = line.LastIndexOf('\r');
+        return index >= 0 ? line[(index + 1)..] : line;
     }
 
     private static string Sanitize(string name)
