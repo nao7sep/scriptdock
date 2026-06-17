@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -12,6 +15,7 @@ namespace ScriptDock.Views;
 public partial class MainWindow : Window
 {
     private MainWindowViewModel? ViewModel => DataContext as MainWindowViewModel;
+    private IReadOnlyList<ShortcutItem> _shortcuts = [];
 
     public MainWindow()
     {
@@ -41,6 +45,13 @@ public partial class MainWindow : Window
             if (vm.SavedConsoleHeight is { } consoleHeight && consoleHeight > 60)
                 BodyGrid.RowDefinitions[2].Height = new GridLength(consoleHeight, GridUnitType.Pixel);
 
+            // One catalog drives both the live accelerators and the help modal, with the command key
+            // (Cmd on macOS, Ctrl on Windows) resolved by the framework — so a label never describes a
+            // binding that does not exist, and the menu hints match the live bindings.
+            _shortcuts = ShortcutCatalog.Build(this);
+            SettingsMenuItem.InputGesture = GestureFor(ShortcutAction.OpenSettings);
+            ShortcutsMenuItem.InputGesture = GestureFor(ShortcutAction.ShowShortcuts);
+
             await vm.InitializeAsync();
         }
         catch (Exception ex)
@@ -67,7 +78,46 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnSettingsClick(object? sender, RoutedEventArgs e)
+    // Application accelerators matched against the catalog, so a key can only fire a binding the help
+    // modal also shows. Control-owned keys (Enter/Space/Delete/arrows) are handled by the lists.
+    private void OnWindowKeyDown(object? sender, KeyEventArgs e)
+    {
+        foreach (var item in _shortcuts)
+        {
+            if (item.Gesture is { } gesture && gesture.Matches(e))
+            {
+                e.Handled = true;
+                TryRunShortcut(item.Action!.Value);
+                return;
+            }
+        }
+    }
+
+    private void TryRunShortcut(ShortcutAction action)
+    {
+        switch (action)
+        {
+            case ShortcutAction.Rescan:
+                if (ViewModel?.RescanCommand.CanExecute(null) == true)
+                    ViewModel.RescanCommand.Execute(null);
+                break;
+            case ShortcutAction.OpenSettings:
+                _ = OpenSettingsAsync();
+                break;
+            case ShortcutAction.ShowShortcuts:
+                _ = ShowShortcutsAsync();
+                break;
+        }
+    }
+
+    private KeyGesture? GestureFor(ShortcutAction action) =>
+        _shortcuts.FirstOrDefault(s => s.Action == action)?.Gesture;
+
+    private void OnSettingsClick(object? sender, RoutedEventArgs e) => _ = OpenSettingsAsync();
+
+    private void OnShortcutsClick(object? sender, RoutedEventArgs e) => _ = ShowShortcutsAsync();
+
+    private async Task OpenSettingsAsync()
     {
         try
         {
@@ -85,10 +135,16 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnShortcutsClick(object? sender, RoutedEventArgs e)
+    private async Task ShowShortcutsAsync()
     {
-        try { await ShortcutsDialog.ShowAsync(this); }
-        catch (Exception ex) { Log.Error("ui: open shortcuts failed", ex); }
+        try
+        {
+            await new ShortcutsDialog(_shortcuts).ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("ui: open shortcuts failed", ex);
+        }
     }
 
     private async void OnAboutClick(object? sender, RoutedEventArgs e)
@@ -101,17 +157,6 @@ public partial class MainWindow : Window
     {
         try { LogReveal.Reveal(); }
         catch (Exception ex) { Log.Error("ui: reveal logs failed", ex); }
-    }
-
-    // Cmd+R rescans, regardless of which list has focus.
-    private void OnWindowKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.R && e.KeyModifiers.HasFlag(KeyModifiers.Meta))
-        {
-            e.Handled = true;
-            if (ViewModel?.RescanCommand.CanExecute(null) == true)
-                ViewModel.RescanCommand.Execute(null);
-        }
     }
 
     private void OnScriptDoubleTapped(object? sender, TappedEventArgs e)
@@ -147,8 +192,8 @@ public partial class MainWindow : Window
         }
     }
 
-    // Keep a saved position usable if the display layout changed: fall back to a small
-    // offset when the saved point sits off every screen's working area.
+    // Keep a saved position usable if the display layout changed: fall back to a small offset when
+    // the saved point sits off every screen's working area.
     private PixelPoint ClampToVisible(WindowBounds bounds)
     {
         var point = new PixelPoint((int)bounds.X, (int)bounds.Y);

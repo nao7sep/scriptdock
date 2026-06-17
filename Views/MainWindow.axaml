@@ -32,8 +32,8 @@
                 <Button Content="☰" Classes="tool" DockPanel.Dock="Right" FontSize="16">
                     <Button.Flyout>
                         <MenuFlyout Placement="BottomEdgeAlignedRight">
-                            <MenuItem Header="Settings" Click="OnSettingsClick"/>
-                            <MenuItem Header="Keyboard Shortcuts" Click="OnShortcutsClick"/>
+                            <MenuItem x:Name="SettingsMenuItem" Header="Settings" Click="OnSettingsClick"/>
+                            <MenuItem x:Name="ShortcutsMenuItem" Header="Keyboard Shortcuts" Click="OnShortcutsClick"/>
                             <MenuItem Header="About" Click="OnAboutClick"/>
                             <MenuItem Header="Reveal Logs" Click="OnRevealLogsClick"/>
                         </MenuFlyout>
