@@ -7,15 +7,17 @@ using ScriptDock.Models;
 namespace ScriptDock.Services;
 
 /// <summary>
-/// One launched script as ScriptDock owns it: its state, exit code, and retained output.
-/// Created and driven by <see cref="ProcessRunner"/>; exposed to the UI (Phase 4) as a
-/// bindable handle. Exit is finalised exactly once, whether observed via the process's
-/// Exited event or an explicit <see cref="WaitForExit"/>.
+/// One launched script as ScriptDock owns it: its state, exit code, and the path to the
+/// run-log file the child writes (read on demand for the console — ScriptDock holds no pipe
+/// to the child). Created and driven by <see cref="ProcessRunner"/>; exposed to the UI as a
+/// bindable handle. Exit is finalised exactly once, whether via the process's Exited event
+/// or an explicit <see cref="WaitForExit"/>.
 /// </summary>
 public sealed class ScriptProcess
 {
     private int _finalized;
     private bool _terminating;
+    private string? _failureMessage;
 
     public ScriptProcess(int id, string scriptPath, DateTimeOffset startedAt)
     {
@@ -29,7 +31,9 @@ public sealed class ScriptProcess
     public DateTimeOffset StartedAt { get; }
     public RunState State { get; private set; } = RunState.Running;
     public int? ExitCode { get; private set; }
-    public OutputBuffer Output { get; } = new();
+
+    /// <summary>Path of the file the child shell writes stdout+stderr to; null if the run never started.</summary>
+    public string? LogFilePath { get; internal set; }
 
     /// <summary>Raised when <see cref="State"/> changes. May fire on a background thread;
     /// the UI marshals to its dispatcher.</summary>
@@ -37,10 +41,17 @@ public sealed class ScriptProcess
 
     internal Process? Process { get; set; }
 
-    public IReadOnlyList<string> Snapshot() => Output.Snapshot();
+    /// <summary>The tail of this run's output (ANSI-stripped), read from the run-log file.</summary>
+    public IReadOnlyList<string> ReadOutput()
+    {
+        if (_failureMessage is not null)
+            return [_failureMessage];
+
+        return LogFilePath is null ? Array.Empty<string>() : RunLog.ReadTail(LogFilePath);
+    }
 
     /// <summary>Blocks until the process exits or the timeout elapses; returns whether it
-    /// exited. On exit, async output is flushed and the state finalised.</summary>
+    /// exited. On exit, the state is finalised.</summary>
     public bool WaitForExit(TimeSpan timeout)
     {
         var process = Process;
@@ -50,15 +61,8 @@ public sealed class ScriptProcess
         if (!process.WaitForExit((int)timeout.TotalMilliseconds))
             return false;
 
-        process.WaitForExit(); // flush async output readers
         Complete();
         return true;
-    }
-
-    internal void AppendOutput(string? line)
-    {
-        if (line is not null)
-            Output.AppendLine(line);
     }
 
     internal void MarkTerminating() => _terminating = true;
@@ -76,7 +80,7 @@ public sealed class ScriptProcess
 
     internal void Fail(string message)
     {
-        AppendOutput(message);
+        _failureMessage = message;
         Interlocked.Exchange(ref _finalized, 1);
         SetState(RunState.Failed);
     }

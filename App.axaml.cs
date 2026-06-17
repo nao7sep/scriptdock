@@ -18,6 +18,10 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // Install the UI-thread crash net before the window exists, so even a failure
+        // during first load degrades to a log line instead of taking the process down.
+        CrashGuard.Install();
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow

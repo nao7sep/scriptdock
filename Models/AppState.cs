@@ -24,4 +24,10 @@ public sealed class AppState
 
     /// <summary>Recently-run scripts, held newest-first (sorted on <see cref="RecentRun.RanAt"/>).</summary>
     public List<RecentRun> RecentlyRun { get; set; } = [];
+
+    /// <summary>Persisted width of the Recent pane (the resizable right column); null until first saved.</summary>
+    public double? RecentPaneWidth { get; set; }
+
+    /// <summary>Persisted height of the Console pane; null until first saved.</summary>
+    public double? ConsoleHeight { get; set; }
 }

@@ -24,9 +24,6 @@ public sealed class AppConfig
     /// subtree, a file match skips that file.</summary>
     public List<string> IgnorePatterns { get; set; } = [];
 
-    /// <summary>Absolute paths the user has marked as favorites.</summary>
-    public List<string> Favorites { get; set; } = [];
-
     /// <summary>Absolute paths the user has hidden from the default list.</summary>
     public List<string> Hidden { get; set; } = [];
 }

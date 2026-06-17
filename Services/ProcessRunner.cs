@@ -3,24 +3,29 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading;
 
 namespace ScriptDock.Services;
 
 /// <summary>
-/// Owns the scripts ScriptDock launches as child processes. Each launch goes through a
-/// login shell with stdin closed (so a script's "press enter" pause self-clears), its
-/// output captured into a retained buffer. Termination kills the whole process tree —
-/// npm/dotnet spawn children, and killing only the parent would orphan them and hold
-/// ports — which is what makes restart reliable. The active list is runtime-only and
-/// never persisted; quitting the app ends these children.
+/// Owns the scripts ScriptDock launches as child processes. Each run goes through a login
+/// shell that writes the script's output to a per-run log file and reads stdin from
+/// <c>/dev/null</c> — so ScriptDock holds no pipe to the child, and its own crash leaves the
+/// child no broken pipe to die on. Termination kills the whole process tree (npm/dotnet
+/// spawn children) so restart is reliable and ports are freed. The active list is
+/// runtime-only and never persisted; quitting the app ends these children.
 /// </summary>
 public sealed class ProcessRunner
 {
     private readonly List<ScriptProcess> _processes = new();
     private readonly object _gate = new();
+    private readonly string _runsDirectory;
     private int _nextId;
+
+    /// <param name="runsDirectory">Where per-run log files are written; defaults to
+    /// <see cref="RunLog.DefaultDirectory"/>. Injected so tests stay isolated.</param>
+    public ProcessRunner(string? runsDirectory = null) =>
+        _runsDirectory = runsDirectory ?? RunLog.DefaultDirectory;
 
     /// <summary>Raised when a process is started, restarted, or dismissed.</summary>
     public event EventHandler? ProcessesChanged;
@@ -33,38 +38,34 @@ public sealed class ProcessRunner
     public ScriptProcess Start(string scriptPath)
     {
         var id = Interlocked.Increment(ref _nextId);
-        var handle = new ScriptProcess(id, scriptPath, DateTimeOffset.UtcNow);
+        var startedAt = DateTimeOffset.UtcNow;
+        var handle = new ScriptProcess(id, scriptPath, startedAt);
 
         try
         {
-            var command = ShellCommand.For(scriptPath);
+            Directory.CreateDirectory(_runsDirectory);
+            var logPath = RunLog.PathFor(_runsDirectory, id, scriptPath, startedAt);
+            handle.LogFilePath = logPath;
+
+            var command = ShellCommand.ForRun(scriptPath, logPath);
             var startInfo = new ProcessStartInfo
             {
                 FileName = command.FileName,
                 WorkingDirectory = Path.GetDirectoryName(scriptPath) ?? string.Empty,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                RedirectStandardInput = true,
                 UseShellExecute = false,
                 CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8,
+                // No stdout/stderr/stdin redirection: the child shell sends output to the run
+                // log and reads stdin from /dev/null, so we hold no pipe that a crash could break.
             };
             foreach (var arg in command.Arguments)
                 startInfo.ArgumentList.Add(arg);
 
             var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
-            process.OutputDataReceived += (_, e) => handle.AppendOutput(e.Data);
-            process.ErrorDataReceived += (_, e) => handle.AppendOutput(e.Data);
             process.Exited += (_, _) => handle.Complete();
             handle.Process = process;
 
             process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-            try { process.StandardInput.Close(); } catch { /* child may already have closed it */ }
-
-            Log.Info("run: started", new { id, script = scriptPath });
+            Log.Info("run: started", new { id, script = scriptPath, log = logPath });
         }
         catch (Exception ex)
         {

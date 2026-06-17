@@ -12,7 +12,9 @@ namespace ScriptDock.Services;
 /// </summary>
 public static class RecentRuns
 {
-    public const int DefaultMax = 50;
+    // High safety bound only — curation is by dismissal, not eviction (the Recent list is the
+    // user's auto-favorites, kept until explicitly dismissed).
+    public const int DefaultMax = 500;
 
     public static List<RecentRun> Add(IReadOnlyList<RecentRun> existing, string path, DateTimeOffset ranAt, int max = DefaultMax)
     {
