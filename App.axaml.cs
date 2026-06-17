@@ -51,6 +51,9 @@ public partial class App : Application
             recentlyRun = state.RecentlyRun.Count,
         });
 
-        return new MainWindowViewModel(configStore, stateStore, config, state);
+        var scanner = new ScriptScanner();
+        var runner = new ProcessRunner();
+
+        return new MainWindowViewModel(configStore, stateStore, config, state, scanner, runner);
     }
 }
