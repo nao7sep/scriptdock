@@ -1,0 +1,84 @@
+using System;
+using System.IO;
+using System.Linq;
+using ScriptDock.Services;
+using Xunit;
+
+namespace ScriptDock.Tests.Services;
+
+/// <summary>
+/// Exercises the scanner against a real temp directory tree (no global state, so these run
+/// in parallel safely). Covers the three classifications — found, pruned directory, skipped
+/// file — plus extension filtering, invalid-pattern collection, and missing roots.
+/// </summary>
+public sealed class ScriptScannerTests : IDisposable
+{
+    private readonly string _root;
+
+    public ScriptScannerTests()
+    {
+        _root = Path.Combine(Path.GetTempPath(), "scriptdock-scan-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_root);
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_root, recursive: true); }
+        catch { /* best-effort cleanup */ }
+    }
+
+    private void Touch(string relativePath)
+    {
+        var full = Path.Combine(_root, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        File.WriteAllText(full, "#");
+    }
+
+    [Fact]
+    public void Scan_FindsCandidates_PrunesDirs_SkipsFiles_FiltersByExtension()
+    {
+        Touch("a.command");
+        Touch("keep/b.command");
+        Touch("node_modules/c.command");
+        Touch("ignore-me.command");
+        Touch("notes.txt");
+
+        var report = new ScriptScanner().Scan(
+            rootDirs: [_root],
+            extensions: [".command"],
+            ignorePatterns: ["/node_modules/", "ignore-me"]);
+
+        var foundNames = report.Found.Select(Path.GetFileName).ToList();
+        Assert.Contains("a.command", foundNames);
+        Assert.Contains("b.command", foundNames);
+        Assert.DoesNotContain("c.command", foundNames);         // inside a pruned directory
+        Assert.DoesNotContain("ignore-me.command", foundNames); // skipped by pattern
+        Assert.DoesNotContain("notes.txt", foundNames);         // wrong extension
+
+        Assert.Contains(report.PrunedDirectories, e => Path.GetFileName(e.Path) == "node_modules" && e.Pattern == "/node_modules/");
+        Assert.Contains(report.SkippedFiles, e => Path.GetFileName(e.Path) == "ignore-me.command" && e.Pattern == "ignore-me");
+        Assert.Empty(report.InvalidPatterns);
+    }
+
+    [Fact]
+    public void Scan_CollectsInvalidPatterns_AndStillScans()
+    {
+        Touch("a.command");
+
+        var report = new ScriptScanner().Scan([_root], [".command"], ["["]);
+
+        Assert.Contains("[", report.InvalidPatterns);
+        Assert.Contains(report.Found, p => Path.GetFileName(p) == "a.command");
+    }
+
+    [Fact]
+    public void Scan_MissingRoot_IsRecordedInaccessible()
+    {
+        var missing = Path.Combine(_root, "does-not-exist");
+
+        var report = new ScriptScanner().Scan([missing], [".command"], []);
+
+        Assert.Contains(Path.GetFullPath(missing), report.Inaccessible);
+        Assert.Empty(report.Found);
+    }
+}
