@@ -37,6 +37,13 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         _label = label;
     }
 
+    /// <summary>
+    /// True when a live document or its backup already exists on disk. Distinguishes a
+    /// first run ("seed defaults") from a document the user has deliberately emptied,
+    /// which <see cref="Load"/> alone cannot tell apart.
+    /// </summary>
+    public bool Exists => File.Exists(_filePath) || File.Exists(_backupPath);
+
     public T Load()
     {
         if (TryLoadFile(_filePath, out var value))

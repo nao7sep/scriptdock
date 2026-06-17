@@ -7,10 +7,10 @@ namespace ScriptDock.Models;
 /// survive across sessions and are the settings a user deliberately changes.
 /// </summary>
 /// <remarks>
-/// Phase 0 establishes the shape with empty defaults. Phase 1 adds first-run seeding
-/// (the platform-default extension, the built-in ignore patterns) and the behavior
-/// that reads and edits these. Adding to this model later is forward-compatible — no
-/// field declared here is expected to be removed.
+/// The shape, with empty defaults; <c>ConfigDefaults</c> supplies the first-run seed
+/// (the platform-default extension and the built-in ignore patterns), applied by
+/// <c>ConfigBootstrap</c> only when no config file exists yet. Adding to this model
+/// later is forward-compatible — no field declared here is expected to be removed.
 /// </remarks>
 public sealed class AppConfig
 {
