@@ -1,0 +1,3 @@
+# ScriptDock app assets (icons, images) land here. Empty for now — the app icon is
+# deferred. This file keeps the directory present so the csproj's AvaloniaResource
+# glob (Assets\**) has a folder to match.
