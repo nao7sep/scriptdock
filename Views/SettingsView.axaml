@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ScriptDock.ViewModels"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             x:Class="ScriptDock.Views.SettingsView"
+             x:DataType="vm:SettingsDialogViewModel"
+             Width="480">
+    <StackPanel Spacing="14">
+
+        <!-- Root directories -->
+        <StackPanel Spacing="6">
+            <TextBlock Text="Root directories" Classes="cardHeader"/>
+            <ListBox x:Name="RootList" ItemsSource="{Binding RootDirs}" Height="96"/>
+            <DockPanel>
+                <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemoveRootClick"/>
+                <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Click="OnAddRootClick"/>
+                <TextBox x:Name="RootEntry" PlaceholderText="/path/to/scan" KeyDown="OnRootKeyDown"/>
+            </DockPanel>
+        </StackPanel>
+
+        <!-- Extensions -->
+        <StackPanel Spacing="6">
+            <TextBlock Text="Extensions" Classes="cardHeader"/>
+            <ListBox x:Name="ExtList" ItemsSource="{Binding Extensions}" Height="80"/>
+            <DockPanel>
+                <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemoveExtClick"/>
+                <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Click="OnAddExtClick"/>
+                <TextBox x:Name="ExtEntry" PlaceholderText=".command" KeyDown="OnExtKeyDown"/>
+            </DockPanel>
+        </StackPanel>
+
+        <!-- Ignore patterns -->
+        <StackPanel Spacing="6">
+            <TextBlock Text="Ignore patterns (regex over full path)" Classes="cardHeader"/>
+            <ListBox x:Name="PatternList" ItemsSource="{Binding IgnorePatterns}" Height="96"/>
+            <DockPanel>
+                <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemovePatternClick"/>
+                <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Click="OnAddPatternClick"/>
+                <TextBox x:Name="PatternEntry" PlaceholderText="/node_modules/" KeyDown="OnPatternKeyDown"/>
+            </DockPanel>
+            <TextBlock Text="{Binding PatternError}" Foreground="#DC2626" FontSize="12" TextWrapping="Wrap"
+                       IsVisible="{Binding PatternError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
+        </StackPanel>
+
+    </StackPanel>
+</UserControl>

@@ -33,6 +33,7 @@
             <DockPanel>
                 <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                     <Button Content="Rescan" Classes="accent" Command="{Binding RescanCommand}"/>
+                    <Button Content="Settings" Classes="tool" Click="OnSettingsClick"/>
                     <CheckBox Content="Show hidden" IsChecked="{Binding ShowHidden}"/>
                     <TextBlock Text="Scanning…" VerticalAlignment="Center"
                                Foreground="{StaticResource TextSecondaryBrush}"

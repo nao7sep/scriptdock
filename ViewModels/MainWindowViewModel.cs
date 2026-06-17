@@ -101,6 +101,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _stateStore.Save(_state);
     }
 
+    /// <summary>A fresh editable draft of the scan configuration for the settings dialog.</summary>
+    public SettingsDialogViewModel CreateSettingsDraft() => new(_config);
+
+    /// <summary>Applies an edited settings draft to the durable config and persists it. The
+    /// new roots/extensions/patterns take effect on the next scan, so the user is nudged to
+    /// rescan rather than the lists being silently rebuilt from a stale scan.</summary>
+    public void ApplySettings(SettingsDialogViewModel draft)
+    {
+        _config.RootDirs = draft.RootDirs.ToList();
+        _config.Extensions = draft.Extensions.ToList();
+        _config.IgnorePatterns = draft.IgnorePatterns.ToList();
+        _configStore.Save(_config);
+        Status = "Configuration changed — Rescan to apply.";
+    }
+
     [RelayCommand]
     private async Task RescanAsync()
     {

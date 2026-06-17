@@ -45,6 +45,17 @@ public partial class MainWindow : Window
         vm.Shutdown();
     }
 
+    private async void OnSettingsClick(object? sender, RoutedEventArgs e)
+    {
+        var vm = ViewModel;
+        if (vm is null)
+            return;
+
+        var draft = vm.CreateSettingsDraft();
+        if (await SettingsDialog.EditAsync(this, draft))
+            vm.ApplySettings(draft);
+    }
+
     // Cmd+R rescans. Handled at the window level so it works regardless of which list has focus.
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
