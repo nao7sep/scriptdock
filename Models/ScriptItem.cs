@@ -1,5 +1,3 @@
-using System;
-
 namespace ScriptDock.Models;
 
 /// <summary>
@@ -18,23 +16,5 @@ public sealed class ScriptItem
 
     /// <summary>A compact label: <c>app/script</c> for the conventional
     /// <c>&lt;app&gt;/scripts/&lt;name&gt;</c> layout, otherwise the file name.</summary>
-    public string DisplayName
-    {
-        get
-        {
-            var name = System.IO.Path.GetFileName(Path);
-            var dir = System.IO.Path.GetDirectoryName(Path);
-            if (dir is null)
-                return name;
-
-            if (string.Equals(System.IO.Path.GetFileName(dir), "scripts", StringComparison.OrdinalIgnoreCase))
-            {
-                var app = System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(dir) ?? string.Empty);
-                if (!string.IsNullOrEmpty(app))
-                    return $"{app}/{name}";
-            }
-
-            return name;
-        }
-    }
+    public string DisplayName => ScriptDisplayName.For(Path);
 }

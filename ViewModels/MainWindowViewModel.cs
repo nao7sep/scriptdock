@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ScriptDock.Models;
@@ -14,10 +15,9 @@ namespace ScriptDock.ViewModels;
 /// <summary>
 /// Root view model. Holds the durable config and volatile state, drives scanning through
 /// <see cref="ScriptScanner"/> and launching through <see cref="ProcessRunner"/>, and
-/// exposes the script and favorite lists the window binds to. The process and recently-run
-/// lists and the output pane are wired in the next UI sub-step; the list-building and
+/// exposes the four lists and the console pane the window binds to. The list-building and
 /// recent-run logic live in pure, tested helpers (<see cref="ScriptListBuilder"/>,
-/// <see cref="RecentRuns"/>).
+/// <see cref="RecentRuns"/>); the console polls the selected process's output.
 /// </summary>
 public sealed partial class MainWindowViewModel : ViewModelBase
 {
@@ -34,8 +34,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private ISet<string> _newPaths = new HashSet<string>(StringComparer.Ordinal);
     private IReadOnlyList<string> _removed = [];
 
+    private DispatcherTimer? _outputTimer;
+
     public ObservableCollection<ScriptItem> Scripts { get; } = [];
     public ObservableCollection<ScriptItem> Favorites { get; } = [];
+    public ObservableCollection<ProcessItem> Processes { get; } = [];
+    public ObservableCollection<RecentItem> Recent { get; } = [];
 
     [ObservableProperty]
     private bool _showHidden;
@@ -45,6 +49,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private string _status = "Ready.";
+
+    [ObservableProperty]
+    private ProcessItem? _selectedProcess;
+
+    [ObservableProperty]
+    private string _selectedOutput = string.Empty;
 
     public MainWindowViewModel(
         IJsonStore<AppConfig> configStore,
@@ -61,14 +71,35 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _scanner = scanner;
         _runner = runner;
         _showHidden = state.ShowHidden; // set the field directly: no save/rebuild during construction
+
+        _runner.ProcessesChanged += OnProcessesChanged;
     }
 
-    /// <summary>Placeholder bound by the scaffold window until the real UI lands in the next sub-step.</summary>
-    public string Placeholder =>
-        $"ScriptDock — {_config.RootDirs.Count} root(s), {_config.Extensions.Count} extension(s) configured.";
+    /// <summary>The geometry to restore the window to, if any was saved.</summary>
+    public WindowBounds? SavedBounds => _state.Window;
 
-    /// <summary>Runs the first scan; called from the window's Loaded handler.</summary>
-    public Task InitializeAsync() => RescanAsync();
+    /// <summary>Builds the recently-run list, starts the console poll, and runs the first scan.</summary>
+    public async Task InitializeAsync()
+    {
+        RebuildRecent();
+        StartOutputTimer();
+        await RescanAsync();
+    }
+
+    /// <summary>Persists the window geometry so the next launch reopens here.</summary>
+    public void PersistWindowBounds(double x, double y, double width, double height)
+    {
+        _state.Window = new WindowBounds { X = x, Y = y, Width = width, Height = height };
+        _stateStore.Save(_state);
+    }
+
+    /// <summary>Stops the poll, terminates everything still running, and persists state.</summary>
+    public void Shutdown()
+    {
+        _outputTimer?.Stop();
+        _runner.ShutdownAll();
+        _stateStore.Save(_state);
+    }
 
     [RelayCommand]
     private async Task RescanAsync()
@@ -105,24 +136,20 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Runs the script — or, if it is already running, restarts it. This is the
+    /// <summary>Runs the script — or, if it is already running, restarts it. The
     /// restart-like-crazy primitive: double-click a running script to relaunch it.</summary>
     [RelayCommand]
     private void Run(ScriptItem? item)
     {
-        if (item is null)
-            return;
+        if (item is not null)
+            RunByPath(item.Path);
+    }
 
-        var running = _runner.Active.FirstOrDefault(p =>
-            string.Equals(p.ScriptPath, item.Path, StringComparison.Ordinal) && p.State == RunState.Running);
-
-        if (running is not null)
-            _runner.Restart(running);
-        else
-            _runner.Start(item.Path);
-
-        _state.RecentlyRun = RecentRuns.Add(_state.RecentlyRun, item.Path, DateTimeOffset.UtcNow);
-        _stateStore.Save(_state);
+    [RelayCommand]
+    private void RunRecent(RecentItem? item)
+    {
+        if (item is not null)
+            RunByPath(item.Path);
     }
 
     [RelayCommand]
@@ -151,11 +178,73 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         RebuildLists();
     }
 
+    [RelayCommand]
+    private void RestartProcess(ProcessItem? item)
+    {
+        if (item is not null)
+            _runner.Restart(item.Process);
+    }
+
+    [RelayCommand]
+    private void TerminateProcess(ProcessItem? item)
+    {
+        if (item is not null)
+            _runner.Terminate(item.Process);
+    }
+
+    [RelayCommand]
+    private void DismissProcess(ProcessItem? item)
+    {
+        if (item is not null)
+            _runner.Dismiss(item.Process);
+    }
+
     partial void OnShowHiddenChanged(bool value)
     {
         _state.ShowHidden = value;
         _stateStore.Save(_state);
         RebuildLists();
+    }
+
+    partial void OnSelectedProcessChanged(ProcessItem? value) => RefreshOutput();
+
+    private void RunByPath(string path)
+    {
+        var running = _runner.Active.FirstOrDefault(p =>
+            string.Equals(p.ScriptPath, path, StringComparison.Ordinal) && p.State == RunState.Running);
+
+        if (running is not null)
+            _runner.Restart(running);
+        else
+            _runner.Start(path);
+
+        _state.RecentlyRun = RecentRuns.Add(_state.RecentlyRun, path, DateTimeOffset.UtcNow);
+        _stateStore.Save(_state);
+        RebuildRecent();
+    }
+
+    private void OnProcessesChanged(object? sender, EventArgs e) => Dispatcher.UIThread.Post(RebuildProcesses);
+
+    private void RebuildProcesses()
+    {
+        var selectedId = SelectedProcess?.Id;
+
+        foreach (var existing in Processes)
+            existing.Dispose();
+        Processes.Clear();
+
+        foreach (var process in _runner.Active.OrderByDescending(p => p.StartedAt))
+            Processes.Add(new ProcessItem(process));
+
+        SelectedProcess = Processes.FirstOrDefault(p => p.Id == selectedId);
+        RefreshOutput();
+    }
+
+    private void RebuildRecent()
+    {
+        Recent.Clear();
+        foreach (var run in _state.RecentlyRun)
+            Recent.Add(new RecentItem(run));
     }
 
     private void RebuildLists()
@@ -166,6 +255,22 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         Replace(Scripts, ScriptListBuilder.BuildScripts(_lastFound, _removed, favorites, hidden, _newPaths, ShowHidden));
         Replace(Favorites, ScriptListBuilder.BuildFavorites(_config.Favorites, foundSet));
+    }
+
+    private void StartOutputTimer()
+    {
+        if (_outputTimer is not null)
+            return;
+
+        _outputTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+        _outputTimer.Tick += (_, _) => RefreshOutput();
+        _outputTimer.Start();
+    }
+
+    private void RefreshOutput()
+    {
+        var snapshot = SelectedProcess?.Process.Snapshot();
+        SelectedOutput = snapshot is null ? string.Empty : string.Join(Environment.NewLine, snapshot);
     }
 
     private static void Replace(ObservableCollection<ScriptItem> target, IReadOnlyList<ScriptItem> items)

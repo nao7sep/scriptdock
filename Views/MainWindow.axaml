@@ -1,18 +1,157 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:ScriptDock.ViewModels"
+        xmlns:models="using:ScriptDock.Models"
         x:Class="ScriptDock.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="ScriptDock"
-        Width="1000" Height="640"
+        Width="1100" Height="720"
+        MinWidth="860" MinHeight="540"
+        KeyDown="OnWindowKeyDown"
         Background="{StaticResource AppBackgroundBrush}">
 
-    <!-- Phase 0 scaffold: the real launcher UI (script/favorites/recently-run/process
-         lists, toolbars, and the output pane) lands in Phase 4. -->
-    <TextBlock Text="{Binding Placeholder}"
-               HorizontalAlignment="Center"
-               VerticalAlignment="Center"
-               FontSize="16"
-               Foreground="{StaticResource TextSecondaryBrush}"/>
+    <Window.Resources>
+        <!-- Shared row for the script and favorites lists. New → amber background; removed →
+             red text; hidden → gray text; a star marks favorites. -->
+        <DataTemplate x:Key="ScriptRow" x:DataType="models:ScriptItem">
+            <Border Background="{Binding Converter={StaticResource ScriptColor}, ConverterParameter=bg}"
+                    CornerRadius="3" Padding="4,2">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="★" Foreground="#E0A500" IsVisible="{Binding IsFavorite}"/>
+                    <TextBlock Text="{Binding DisplayName}"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{Binding Converter={StaticResource ScriptColor}, ConverterParameter=fg}"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
 
+    <DockPanel Margin="10">
+
+        <!-- Top toolbar -->
+        <Border DockPanel.Dock="Top" Classes="card" Margin="0,0,0,10">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <Button Content="Rescan" Classes="accent" Command="{Binding RescanCommand}"/>
+                    <CheckBox Content="Show hidden" IsChecked="{Binding ShowHidden}"/>
+                    <TextBlock Text="Scanning…" VerticalAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               IsVisible="{Binding IsScanning}"/>
+                </StackPanel>
+                <TextBlock Text="{Binding Status}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+            </DockPanel>
+        </Border>
+
+        <!-- Console -->
+        <Border DockPanel.Dock="Bottom" Classes="card" Height="200" Margin="0,10,0,0">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="0,0,0,6">
+                    <TextBlock Text="Output" Classes="cardHeader"/>
+                    <TextBlock Text="{Binding SelectedProcess.DisplayName}" Classes="cardHeader"
+                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                </StackPanel>
+                <TextBox Text="{Binding SelectedOutput}" IsReadOnly="True" AcceptsReturn="True"
+                         TextWrapping="NoWrap" FontFamily="Menlo,Consolas,monospace" FontSize="12"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+            </DockPanel>
+        </Border>
+
+        <!-- Center: scripts (left) + favorites / recently-run / processes (right) -->
+        <Grid ColumnDefinitions="*,10,360">
+
+            <Border Grid.Column="0" Classes="card">
+                <DockPanel>
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                        <TextBlock Text="Scripts" Classes="cardHeader" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                            <Button Content="Run" Classes="tool" Command="{Binding RunCommand}"
+                                    CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
+                            <Button Content="Favorite" Classes="tool" Command="{Binding ToggleFavoriteCommand}"
+                                    CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
+                            <Button Content="Hide / Show" Classes="tool" Command="{Binding ToggleHiddenCommand}"
+                                    CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
+                        </StackPanel>
+                    </DockPanel>
+                    <ListBox x:Name="ScriptsList" ItemsSource="{Binding Scripts}"
+                             ItemTemplate="{StaticResource ScriptRow}"
+                             DoubleTapped="OnScriptDoubleTapped" KeyDown="OnScriptKeyDown"/>
+                </DockPanel>
+            </Border>
+
+            <Grid Grid.Column="2" RowDefinitions="*,10,*,10,*">
+
+                <Border Grid.Row="0" Classes="card">
+                    <DockPanel>
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                            <TextBlock Text="Favorites" Classes="cardHeader" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                                <Button Content="Run" Classes="tool" Command="{Binding RunCommand}"
+                                        CommandParameter="{Binding #FavoritesList.SelectedItem}"/>
+                                <Button Content="Unfavorite" Classes="tool" Command="{Binding ToggleFavoriteCommand}"
+                                        CommandParameter="{Binding #FavoritesList.SelectedItem}"/>
+                            </StackPanel>
+                        </DockPanel>
+                        <ListBox x:Name="FavoritesList" ItemsSource="{Binding Favorites}"
+                                 ItemTemplate="{StaticResource ScriptRow}"
+                                 DoubleTapped="OnScriptDoubleTapped" KeyDown="OnScriptKeyDown"/>
+                    </DockPanel>
+                </Border>
+
+                <Border Grid.Row="2" Classes="card">
+                    <DockPanel>
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                            <TextBlock Text="Recently run" Classes="cardHeader" VerticalAlignment="Center"/>
+                            <Button Content="Run" Classes="tool" HorizontalAlignment="Right"
+                                    Command="{Binding RunRecentCommand}"
+                                    CommandParameter="{Binding #RecentList.SelectedItem}"/>
+                        </DockPanel>
+                        <ListBox x:Name="RecentList" ItemsSource="{Binding Recent}"
+                                 DoubleTapped="OnRecentDoubleTapped">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:RecentItem">
+                                    <DockPanel>
+                                        <TextBlock Text="{Binding RanAtDisplay}" DockPanel.Dock="Right" Margin="8,0,0,0"
+                                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+                </Border>
+
+                <Border Grid.Row="4" Classes="card">
+                    <DockPanel>
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                            <TextBlock Text="Processes" Classes="cardHeader" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                                <Button Content="Restart" Classes="tool" Command="{Binding RestartProcessCommand}"
+                                        CommandParameter="{Binding #ProcessList.SelectedItem}"/>
+                                <Button Content="Terminate" Classes="tool" Command="{Binding TerminateProcessCommand}"
+                                        CommandParameter="{Binding #ProcessList.SelectedItem}"/>
+                                <Button Content="Dismiss" Classes="tool" Command="{Binding DismissProcessCommand}"
+                                        CommandParameter="{Binding #ProcessList.SelectedItem}"/>
+                            </StackPanel>
+                        </DockPanel>
+                        <ListBox x:Name="ProcessList" ItemsSource="{Binding Processes}"
+                                 SelectedItem="{Binding SelectedProcess, Mode=TwoWay}"
+                                 KeyDown="OnProcessKeyDown">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ProcessItem">
+                                    <DockPanel>
+                                        <TextBlock Text="{Binding StateText}" DockPanel.Dock="Right" Margin="8,0,0,0"
+                                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+                </Border>
+
+            </Grid>
+        </Grid>
+    </DockPanel>
 </Window>
