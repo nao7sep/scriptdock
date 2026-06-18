@@ -9,12 +9,14 @@ namespace ScriptDock.Tests.Storage;
 
 /// <summary>
 /// Exercises the real file I/O of <see cref="JsonStore{T}"/> against a temp
-/// directory redirected via <see cref="StorageRoot.Override"/>. These touch the
+/// directory redirected via the <c>SCRIPTDOCK_HOME</c> environment variable — the one
+/// relocation seam, used the same way in tests and production. These touch the
 /// disk on purpose: atomic-write and backup-recovery are the behaviours that
 /// protect the user's saved data, and a fake filesystem would not exercise them.
 /// A self-contained <see cref="SampleDoc"/> stands in for any persisted model, so
 /// these tests do not depend on the app's evolving config/state shape.
 /// </summary>
+[Collection(StorageRootEnvironment.CollectionName)]
 public sealed class JsonStoreTests : IDisposable
 {
     public enum SampleKind
@@ -31,16 +33,20 @@ public sealed class JsonStoreTests : IDisposable
     }
 
     private readonly string _root;
+    private readonly string? _previousHome;
 
     public JsonStoreTests()
     {
         _root = Path.Combine(Path.GetTempPath(), "scriptdock-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_root);
-        StorageRoot.Override(_root);
+
+        _previousHome = Environment.GetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable);
+        Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, _root);
     }
 
     public void Dispose()
     {
+        Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, _previousHome);
         try { Directory.Delete(_root, recursive: true); }
         catch { /* best-effort cleanup */ }
     }

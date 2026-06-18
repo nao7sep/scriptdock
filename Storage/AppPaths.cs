@@ -6,7 +6,7 @@ namespace ScriptDock.Storage;
 /// Canonical file names and resolved paths for the app's own data under
 /// <c>~/.scriptdock/</c>. Keeps the store file names in one place so callers do not
 /// repeat string literals. Paths resolve against <see cref="StorageRoot.Directory"/>,
-/// so a test that calls <see cref="StorageRoot.Override"/> redirects these too.
+/// so a test that sets <c>SCRIPTDOCK_HOME</c> redirects these too.
 /// </summary>
 public static class AppPaths
 {
