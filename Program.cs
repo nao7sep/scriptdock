@@ -12,6 +12,23 @@ sealed class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // Resolve and create the storage root before anything else reads or writes it.
+        // An unusable SCRIPTDOCK_HOME (or an unwritable home) is a startup error we report
+        // and STOP on — never a silent fallback that lets the app run unable to persist.
+        // This runs before Log.Start (the log directory lives under the root) and before
+        // StorageRoot.LogsDirectory is ever evaluated, so a malformed override can never
+        // throw uncaught ahead of the try below.
+        try
+        {
+            StorageRoot.EnsureExists();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(
+                "ScriptDock cannot start: its storage location could not be created. " + ex.Message);
+            return 1;
+        }
+
         // One JSON-Lines file per launch under the app's logs directory; the logger
         // installs its own crash hooks and console fallback.
         Log.Start(StorageRoot.LogsDirectory);
