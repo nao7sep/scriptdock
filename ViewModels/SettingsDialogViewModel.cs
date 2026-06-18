@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.Linq;
@@ -52,11 +53,38 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     public bool AddRootDir(string value)
     {
         var trimmed = value.Trim();
-        if (trimmed.Length == 0 || RootDirs.Contains(trimmed))
+        if (trimmed.Length == 0)
             return false;
 
-        RootDirs.Add(trimmed);
+        // Resolve to an absolute path at commit — expand a leading ~ and anchor a
+        // relative entry to the home directory, never the working directory, so it
+        // cannot later resolve against cwd in the scanner (storage-path-conventions).
+        var resolved = ResolveRoot(trimmed);
+        if (RootDirs.Contains(resolved))
+            return false;
+
+        RootDirs.Add(resolved);
         return true;
+    }
+
+    // Expand a leading ~ / ~/ and make the value absolute against the home
+    // directory. The folder need not exist yet — the scanner reports a missing
+    // root as inaccessible rather than failing.
+    private static string ResolveRoot(string value)
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string expanded;
+        if (value == "~")
+            expanded = home;
+        else if (value.StartsWith("~/", StringComparison.Ordinal) ||
+                 value.StartsWith("~" + Path.DirectorySeparatorChar))
+            expanded = Path.Combine(home, value[2..]);
+        else
+            expanded = value;
+
+        return Path.IsPathRooted(expanded)
+            ? Path.GetFullPath(expanded)
+            : Path.GetFullPath(Path.Combine(home, expanded));
     }
 
     public bool AddExtension(string value)
