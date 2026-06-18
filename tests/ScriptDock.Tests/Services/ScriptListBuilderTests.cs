@@ -22,22 +22,22 @@ public sealed class ScriptListBuilderTests
     public void BuildScripts_FlagsNew_MarksRunning_SortsByDisplayName()
     {
         var bigmouth = "/code/bigmouth/scripts/run-dev.command";
-        var aholist = "/code/aholist/scripts/run-dev.command";
+        var daynote = "/code/daynote/scripts/run-dev.command";
 
         var scripts = ScriptListBuilder.BuildScripts(
-            found: [bigmouth, aholist],
+            found: [daynote, bigmouth],
             removed: [],
             hidden: Set(),
-            newPaths: Set(bigmouth),
-            runningPaths: Set(aholist),
-            labels: Labels((bigmouth, "bigmouth/run-dev.command"), (aholist, "aholist/run-dev.command")),
+            newPaths: Set(daynote),
+            runningPaths: Set(bigmouth),
+            labels: Labels((bigmouth, "bigmouth/run-dev.command"), (daynote, "daynote/run-dev.command")),
             showHidden: false);
 
         Assert.Equal(2, scripts.Count);
-        Assert.Equal("aholist/run-dev.command", scripts[0].DisplayName); // sorts first
+        Assert.Equal("bigmouth/run-dev.command", scripts[0].DisplayName); // sorts first
         Assert.True(scripts[0].IsRunning);
         Assert.Equal(ScriptFlag.None, scripts[0].Flag);
-        Assert.Equal("bigmouth/run-dev.command", scripts[1].DisplayName);
+        Assert.Equal("daynote/run-dev.command", scripts[1].DisplayName);
         Assert.Equal(ScriptFlag.New, scripts[1].Flag);
         Assert.False(scripts[1].IsRunning);
     }

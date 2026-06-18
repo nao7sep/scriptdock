@@ -17,14 +17,14 @@ public sealed class ScriptLabelsTests
     [Fact]
     public void ConventionLayout_CompactsToAppSlashFile()
     {
-        var a = "/code/aholist/scripts/run-dev.command";
-        var b = "/code/bigmouth/scripts/run-dev.command";
+        var a = "/code/bigmouth/scripts/run-dev.command";
+        var b = "/code/daynote/scripts/run-dev.command";
 
         var labels = ScriptLabels.Build([a, b]);
 
         // "scripts" is a shared interior segment that does not disambiguate, so it is dropped.
-        Assert.Equal("aholist/run-dev.command", labels[a]);
-        Assert.Equal("bigmouth/run-dev.command", labels[b]);
+        Assert.Equal("bigmouth/run-dev.command", labels[a]);
+        Assert.Equal("daynote/run-dev.command", labels[b]);
     }
 
     [Fact]
