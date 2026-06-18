@@ -66,4 +66,69 @@ public sealed class StorageRootTests : IDisposable
             Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), relative)),
             StorageRoot.Directory);
     }
+
+    [Fact]
+    public void Override_Expands_Environment_References()
+    {
+        // The resolver expands the %VAR% form (here) as well as the POSIX $VAR / ${VAR} forms
+        // (covered by the test below); an unset reference expands to empty.
+        var varName = "SCRIPTDOCK_EXPAND_TEST_" + Guid.NewGuid().ToString("N");
+        var target = Path.Combine(Path.GetTempPath(), "scriptdock-expand-" + Guid.NewGuid().ToString("N"));
+        var previousVar = Environment.GetEnvironmentVariable(varName);
+        try
+        {
+            Environment.SetEnvironmentVariable(varName, target);
+            Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, "%" + varName + "%");
+
+            Assert.Equal(Path.GetFullPath(target), Path.GetFullPath(StorageRoot.Directory));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(varName, previousVar);
+        }
+    }
+
+    [Fact]
+    public void Override_Expands_A_Leading_Tilde()
+    {
+        var sub = "scriptdock-tilde-" + Guid.NewGuid().ToString("N");
+        Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, "~/" + sub);
+
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        Assert.Equal(Path.GetFullPath(Path.Combine(home, sub)), StorageRoot.Directory);
+    }
+
+    [Fact]
+    public void Override_Expands_Dollar_Environment_References()
+    {
+        var varName = "SCRIPTDOCK_EXPAND_TEST_" + Guid.NewGuid().ToString("N");
+        var target = Path.Combine(Path.GetTempPath(), "scriptdock-dollar-" + Guid.NewGuid().ToString("N"));
+        var previousVar = Environment.GetEnvironmentVariable(varName);
+        try
+        {
+            Environment.SetEnvironmentVariable(varName, target);
+
+            Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, "$" + varName);
+            Assert.Equal(Path.GetFullPath(target), Path.GetFullPath(StorageRoot.Directory));
+
+            Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, "${" + varName + "}");
+            Assert.Equal(Path.GetFullPath(target), Path.GetFullPath(StorageRoot.Directory));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(varName, previousVar);
+        }
+    }
+
+    [Fact]
+    public void Override_That_Expands_To_Empty_Is_Rejected()
+    {
+        // A reference to a variable that is definitely unset expands to empty; that is a
+        // misconfiguration, reported rather than silently collapsing onto the home directory.
+        var unsetVar = "SCRIPTDOCK_UNSET_PROBE_" + Guid.NewGuid().ToString("N");
+        Environment.SetEnvironmentVariable(unsetVar, null);
+        Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, "$" + unsetVar);
+
+        Assert.Throws<InvalidOperationException>(() => _ = StorageRoot.Directory);
+    }
 }
