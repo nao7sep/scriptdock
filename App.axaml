@@ -30,10 +30,11 @@
 
         <!-- State colours. DangerText is danger red as *text* on a dark surface (validation
              errors, removed scripts) — lighter than the danger button fill for legibility.
-             ScriptNewBackground tints a newly-found tile; ScriptHidden dims hidden scripts;
-             Running is the green run indicator. -->
+             ScriptNew is the orange dot flagging a newly-found script — an accent, not a
+             background tint (a warm fill reads as mud on this cool blue palette); ScriptHidden
+             dims hidden scripts; Running is the green run indicator. -->
         <Color x:Key="DangerText">#F87171</Color>
-        <Color x:Key="ScriptNewBackground">#3A2F15</Color>
+        <Color x:Key="ScriptNew">#FB923C</Color>
         <Color x:Key="ScriptHidden">#667085</Color>
         <Color x:Key="Running">#22C55E</Color>
         <!-- Script chips sit on the card surface; a touch lighter so they read as chips without a hard border. -->
@@ -51,7 +52,7 @@
         <SolidColorBrush x:Key="DangerHoverBrush" Color="{StaticResource DangerHover}"/>
 
         <SolidColorBrush x:Key="DangerTextBrush" Color="{StaticResource DangerText}"/>
-        <SolidColorBrush x:Key="ScriptNewBackgroundBrush" Color="{StaticResource ScriptNewBackground}"/>
+        <SolidColorBrush x:Key="ScriptNewBrush" Color="{StaticResource ScriptNew}"/>
         <SolidColorBrush x:Key="ScriptHiddenBrush" Color="{StaticResource ScriptHidden}"/>
         <SolidColorBrush x:Key="RunningBrush" Color="{StaticResource Running}"/>
         <SolidColorBrush x:Key="ChipBackgroundBrush" Color="{StaticResource ChipBackground}"/>

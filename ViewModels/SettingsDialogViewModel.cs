@@ -10,8 +10,8 @@ using ScriptDock.Models;
 namespace ScriptDock.ViewModels;
 
 /// <summary>
-/// Editable draft of the scan configuration shown by the settings dialog: root
-/// directories, file extensions, and ignore patterns. Add validates (non-empty, no
+/// Editable draft of the configuration shown by the settings dialog: root directories,
+/// file extensions, ignore patterns, and the process-lifecycle settings. Add validates (non-empty, no
 /// duplicate; a pattern must compile; an extension is normalised to a leading dot at
 /// commit time — never mid-keystroke, per the text-input-ime-conventions). <see
 /// cref="IsDirty"/> is the draft differing from the config it was seeded from, so the
@@ -22,6 +22,8 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     private readonly List<string> _originalRoots;
     private readonly List<string> _originalExtensions;
     private readonly List<string> _originalPatterns;
+    private readonly bool _originalKillProcessesOnClose;
+    private readonly bool _originalRecaptureProcessesOnLaunch;
 
     public ObservableCollection<string> RootDirs { get; }
     public ObservableCollection<string> Extensions { get; }
@@ -30,11 +32,24 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     [ObservableProperty]
     private string _patternError = string.Empty;
 
+    // Process-lifecycle settings. NotifyPropertyChangedFor keeps IsDirty live as they toggle.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDirty))]
+    private bool _killProcessesOnClose;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDirty))]
+    private bool _recaptureProcessesOnLaunch;
+
     public SettingsDialogViewModel(AppConfig config)
     {
         _originalRoots = config.RootDirs.ToList();
         _originalExtensions = config.Extensions.ToList();
         _originalPatterns = config.IgnorePatterns.ToList();
+        _originalKillProcessesOnClose = config.KillProcessesOnClose;
+        _originalRecaptureProcessesOnLaunch = config.RecaptureProcessesOnLaunch;
+        _killProcessesOnClose = config.KillProcessesOnClose;          // field, not property: no dirty flip during construction
+        _recaptureProcessesOnLaunch = config.RecaptureProcessesOnLaunch;
 
         RootDirs = new ObservableCollection<string>(_originalRoots);
         Extensions = new ObservableCollection<string>(_originalExtensions);
@@ -48,7 +63,9 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     public bool IsDirty =>
         !RootDirs.SequenceEqual(_originalRoots) ||
         !Extensions.SequenceEqual(_originalExtensions) ||
-        !IgnorePatterns.SequenceEqual(_originalPatterns);
+        !IgnorePatterns.SequenceEqual(_originalPatterns) ||
+        KillProcessesOnClose != _originalKillProcessesOnClose ||
+        RecaptureProcessesOnLaunch != _originalRecaptureProcessesOnLaunch;
 
     public bool AddRootDir(string value)
     {

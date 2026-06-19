@@ -153,6 +153,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _config.RootDirs = draft.RootDirs.ToList();
         _config.Extensions = draft.Extensions.ToList();
         _config.IgnorePatterns = draft.IgnorePatterns.ToList();
+        _config.KillProcessesOnClose = draft.KillProcessesOnClose;
+        _config.RecaptureProcessesOnLaunch = draft.RecaptureProcessesOnLaunch;
         _configStore.Save(_config);
         Status = "Configuration changed — Rescan to apply.";
     });

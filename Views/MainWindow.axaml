@@ -11,18 +11,20 @@
         Background="{StaticResource AppBackgroundBrush}">
 
     <Window.Resources>
-        <!-- Content-sized script chip: filled + rounded (no hard border); new → amber bg, removed → red text,
-             hidden → gray; green dot when running. A transparent border reserves space for the accent ring
-             the selected-chip style draws, so selection never shifts the layout. -->
+        <!-- Content-sized script chip: a single neutral fill for every state. A newly-found script is
+             flagged by an orange dot (an accent — a warm background tint reads as mud on this blue palette);
+             removed → red text, hidden → gray text; green dot when running. The 1px border is transparent
+             by default (the selected-chip style colours it, so selection never shifts the layout). -->
         <DataTemplate x:Key="ScriptTile" x:DataType="models:ScriptItem">
             <Border Classes="chip"
-                    Background="{Binding Converter={StaticResource ScriptColor}, ConverterParameter=bg}"
-                    BorderBrush="Transparent" BorderThickness="1"
+                    Background="{StaticResource ChipBackgroundBrush}"
+                    BorderThickness="1"
                     CornerRadius="6" Padding="12,7" Margin="3">
                 <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Ellipse Width="7" Height="7" Fill="{StaticResource ScriptNewBrush}" VerticalAlignment="Center" IsVisible="{Binding IsNew}"/>
                     <Ellipse Width="7" Height="7" Fill="{StaticResource RunningBrush}" VerticalAlignment="Center" IsVisible="{Binding IsRunning}"/>
                     <TextBlock Text="{Binding DisplayName}"
-                               Foreground="{Binding Converter={StaticResource ScriptColor}, ConverterParameter=fg}"/>
+                               Foreground="{Binding Converter={StaticResource ScriptColor}}"/>
                 </StackPanel>
             </Border>
         </DataTemplate>

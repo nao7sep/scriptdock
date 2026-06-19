@@ -108,6 +108,24 @@ public sealed class SettingsDialogViewModelTests
     }
 
     [Fact]
+    public void ProcessSettings_SeedFromConfig_AndDirtyOnToggle()
+    {
+        var config = Seed();
+        config.KillProcessesOnClose = false;
+        config.RecaptureProcessesOnLaunch = true;
+        var vm = new SettingsDialogViewModel(config);
+
+        // Seeded from config; an unchanged draft is not dirty.
+        Assert.False(vm.KillProcessesOnClose);
+        Assert.True(vm.RecaptureProcessesOnLaunch);
+        Assert.False(vm.IsDirty);
+
+        // Toggling a process setting dirties the draft (so Save enables).
+        vm.KillProcessesOnClose = true;
+        Assert.True(vm.IsDirty);
+    }
+
+    [Fact]
     public void Remove_BackToOriginal_ClearsDirty()
     {
         var vm = new SettingsDialogViewModel(Seed());

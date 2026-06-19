@@ -7,11 +7,11 @@ using ScriptDock.Models;
 namespace ScriptDock.Converters;
 
 /// <summary>
-/// Colours a script row by its state. With parameter <c>bg</c> it returns the background:
-/// newly found → amber tint, otherwise the neutral chip background. With any other parameter it returns the
-/// foreground: removed → danger red, hidden → dimmed gray, otherwise the primary text colour.
-/// All colours are resolved from the shared <see cref="Palette"/> so the app's dark palette in
-/// <c>App.axaml</c> stays the single source of truth — a converter cannot bind a <c>StaticResource</c>.
+/// The foreground brush for a script row by its state: removed → danger red, hidden → dimmed
+/// gray, otherwise the primary text colour. (A newly-found script is flagged by an accent dot in
+/// the tile, not by a colour here, and the chip background is a single neutral token.) Resolved
+/// from the shared <see cref="Palette"/> so <c>App.axaml</c> stays the single source of truth — a
+/// converter cannot bind a <c>StaticResource</c>.
 /// </summary>
 public sealed class ScriptItemColorConverter : IValueConverter
 {
@@ -19,9 +19,6 @@ public sealed class ScriptItemColorConverter : IValueConverter
     {
         if (value is not ScriptItem item)
             return Brushes.Transparent;
-
-        if (string.Equals(parameter as string, "bg", StringComparison.Ordinal))
-            return Palette.Brush(item.Flag == ScriptFlag.New ? "ScriptNewBackgroundBrush" : "ChipBackgroundBrush");
 
         if (item.Flag == ScriptFlag.Removed)
             return Palette.Brush("DangerTextBrush");

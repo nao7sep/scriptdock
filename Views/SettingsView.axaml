@@ -45,5 +45,14 @@
                        IsVisible="{Binding PatternError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
         </StackPanel>
 
+        <!-- Process lifecycle -->
+        <StackPanel Spacing="6">
+            <TextBlock Text="Processes" Classes="cardHeader"/>
+            <CheckBox Content="Terminate running scripts when ScriptDock quits"
+                      IsChecked="{Binding KillProcessesOnClose}"/>
+            <CheckBox Content="Reattach to scripts left running, on next launch"
+                      IsChecked="{Binding RecaptureProcessesOnLaunch}"/>
+        </StackPanel>
+
     </StackPanel>
 </UserControl>

@@ -15,4 +15,7 @@ public sealed class ScriptItem
     public bool IsHidden { get; init; }
     public bool IsRunning { get; init; }
     public ScriptFlag Flag { get; init; }
+
+    /// <summary>True when the script was newly found in the latest scan — flagged by an accent dot.</summary>
+    public bool IsNew => Flag == ScriptFlag.New;
 }
