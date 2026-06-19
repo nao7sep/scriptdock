@@ -110,6 +110,7 @@ public sealed class ProcessRunner
     /// primitive. The old handle is dismissed; the new one is returned.</summary>
     public ScriptProcess Restart(ScriptProcess handle, TimeSpan? grace = null)
     {
+        Log.Info("run: restarted", new { id = handle.Id, script = handle.ScriptPath });
         Terminate(handle);
         handle.WaitForExit(grace ?? TimeSpan.FromSeconds(10));
         Dismiss(handle);

@@ -58,6 +58,7 @@ public partial class MainWindow : Window
             _shortcuts = ShortcutCatalog.Build(this);
 
             vm.PropertyChanged += OnViewModelPropertyChanged;
+            vm.ConsoleInputFocusRequested += OnConsoleInputFocusRequested;
 
             await vm.InitializeAsync();
         }
@@ -97,6 +98,11 @@ public partial class MainWindow : Window
             _scrollConsolePending = true; // follow new output — but only after it has been laid out
         }
     }
+
+    // The view-model asks for this when an input-accepting run starts. Post it so the input's
+    // IsEnabled (bound to CanSendInput) has settled first — focusing a disabled control is a no-op.
+    private void OnConsoleInputFocusRequested(object? sender, EventArgs e) =>
+        Dispatcher.UIThread.Post(() => ConsoleInput.Focus());
 
     private void OnConsoleScrollChanged(object? sender, ScrollChangedEventArgs e)
     {

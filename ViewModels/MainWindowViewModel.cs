@@ -90,6 +90,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// Show a hidden one). Defaults to "Hide" when nothing is selected.</summary>
     public string ToggleHiddenLabel => SelectedScript?.IsHidden == true ? "Show" : "Hide";
 
+    /// <summary>Raised after running an input-accepting script, asking the view to focus the console
+    /// input field so the user can type immediately. Focus is a view concern, so it is signalled here
+    /// rather than performed.</summary>
+    public event EventHandler? ConsoleInputFocusRequested;
+
     /// <summary>Starts the console poll, builds the Recent list, and runs the first scan.</summary>
     public async Task InitializeAsync()
     {
@@ -99,27 +104,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         StartOutputTimer();
         RebuildRecent();
         await RescanAsync();
-        SeedTestNewFlags();
     }
-
-    // ─────────────────────────────────────────────────────────────────────────────
-    // TEMPORARY TEST SCAFFOLD — MUST BE REMOVED BEFORE RELEASE.
-    // Randomly marks ~1/5 of the scanned scripts as "just detected" (New) on launch so the
-    // amber just-scanned styling is always visible during human testing. Tracked in the
-    // refinement plan ("Remove the just-scanned test scaffold before release"). The fake flags
-    // clear on the next real Rescan, which recomputes _newPaths from the actual scan diff.
-    private void SeedTestNewFlags()
-    {
-        if (_lastFound.Count == 0)
-            return;
-
-        foreach (var path in _lastFound)
-            if (Random.Shared.Next(5) == 0)
-                _newPaths.Add(path);
-
-        RebuildScripts();
-    }
-    // ─────────────────────────────────────────────────────────────────────────────
 
     public void PersistPaneSizes(double recentWidth, double consoleHeight) => Guard("save pane sizes", () =>
     {
@@ -248,6 +233,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         if (entry is null)
             return;
 
+        // Remember the dismissed row's position so focus lands on its neighbour, not nowhere.
+        var index = Recent.IndexOf(entry);
+
         if (entry.Process is not null)
         {
             if (entry.Process.State == RunState.Running)
@@ -259,7 +247,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             .Where(r => !string.Equals(r.Path, entry.Path, StringComparison.Ordinal))
             .ToList();
         _stateStore.Save(_state);
+        Log.Info("ui: dismiss", new { script = entry.Path });
         RebuildRecent();
+
+        // The dismissed path is gone, so RebuildRecent cleared the selection; move it to the
+        // neighbour at that position instead (the next entry, or the previous if it was last).
+        SelectedDockEntry = index < 0 || Recent.Count == 0 ? null : Recent[Math.Min(index, Recent.Count - 1)];
     });
 
     [RelayCommand]
@@ -268,11 +261,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         if (item is null)
             return;
 
-        if (!_config.Hidden.Remove(item.Path))
+        var nowHidden = !_config.Hidden.Remove(item.Path);
+        if (nowHidden)
             _config.Hidden.Add(item.Path);
 
         _configStore.Save(_config);
-        RebuildScripts();
+        Log.Info("ui: toggle hidden", new { script = item.Path, hidden = nowHidden });
+        // Keep the toggled script selected; if hiding made it vanish (Show hidden off), fall to its
+        // neighbour so the Scripts selection — and the Hide/Show label — never just resets.
+        RebuildScripts(selectNeighbourIfGone: true);
     });
 
     partial void OnShowHiddenChanged(bool value) => Guard("show hidden", () =>
@@ -306,6 +303,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         // Surface the just-run script: select its Recent entry so its output shows in the console
         // immediately (selection re-pins the console to the bottom).
         SelectedDockEntry = Recent.FirstOrDefault(e => string.Equals(e.Path, path, StringComparison.Ordinal));
+
+        // A freshly started/restarted run owns a stdin pipe, so move keyboard focus to the console
+        // input for immediate typing. Gated on CanSendInput so a non-input run never steals focus.
+        if (CanSendInput)
+            ConsoleInputFocusRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void RebuildFromProcesses() => Guard("refresh", () =>
@@ -359,7 +361,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             .ToDictionary(kv => kv.Key, kv => kv.Value.Replace("/", " › "), StringComparer.Ordinal);
     }
 
-    private void RebuildScripts()
+    private void RebuildScripts(bool selectNeighbourIfGone = false)
     {
         var hidden = new HashSet<string>(_config.Hidden, StringComparer.Ordinal);
         var running = new HashSet<string>(
@@ -368,9 +370,25 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         var items = ScriptListBuilder.BuildScripts(_lastFound, _removed, hidden, _newPaths, running, BuildLabels(), ShowHidden);
 
+        // Capture the selection before the rebuild discards the old item instances, so the user's
+        // place survives a rebuild (a new scan, a hide/show toggle, or a running-dot refresh).
+        var selectedPath = SelectedScript?.Path;
+        var selectedIndex = SelectedScript is null ? -1 : Scripts.IndexOf(SelectedScript);
+
         Scripts.Clear();
         foreach (var item in items)
             Scripts.Add(item);
+
+        // Re-select the same script by path. If it is gone (e.g. just hidden while "Show hidden" is
+        // off), optionally drop to the nearest surviving neighbour at that position; otherwise clear.
+        // Setting SelectedScript drives both the ListBox selection and the Hide/Show button label.
+        var restored = selectedPath is null
+            ? null
+            : Scripts.FirstOrDefault(s => string.Equals(s.Path, selectedPath, StringComparison.Ordinal));
+        if (restored is null && selectNeighbourIfGone && selectedIndex >= 0 && Scripts.Count > 0)
+            restored = Scripts[Math.Min(selectedIndex, Scripts.Count - 1)];
+        SelectedScript = restored;
+
         OnPropertyChanged(nameof(NoScripts));
     }
 

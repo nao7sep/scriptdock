@@ -64,6 +64,8 @@ public static class ScriptLabels
 
     // Greedily drop a shared interior segment value, accepting a drop only when every label
     // stays unique afterward. Repeats until no safe drop remains; never loosens uniqueness.
+    // Candidates are tried in a fixed (ordinal-sorted) order so the greedy choice — and thus the
+    // whole result — is independent of input order, as the type's contract promises.
     private static Dictionary<string, string> Compact(Dictionary<string, string> labels)
     {
         var current = new Dictionary<string, string>(labels, StringComparer.Ordinal);
@@ -101,7 +103,8 @@ public static class ScriptLabels
             for (var i = 1; i < parts.Length - 1; i++)
                 seen.Add(parts[i]);
         }
-        return seen;
+        // Ordinal-sorted, not raw HashSet order, so compaction is deterministic regardless of input order.
+        return seen.OrderBy(s => s, StringComparer.Ordinal);
     }
 
     private static string DropInterior(string label, string value)
