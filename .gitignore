@@ -3,6 +3,10 @@
 [Oo]bj/
 publish/
 
+# Test results (dotnet test --logger trx, coverage, etc.)
+[Tt]est[Rr]esults/
+*.trx
+
 # IDE and editor
 .vs/
 .idea/

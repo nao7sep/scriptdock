@@ -48,6 +48,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private string _selectedOutput = string.Empty;
     [ObservableProperty] private int _runningCount;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ToggleHiddenLabel))]
+    private ScriptItem? _selectedScript;
+
     public MainWindowViewModel(
         IJsonStore<AppConfig> configStore,
         IJsonStore<AppState> stateStore,
@@ -77,6 +81,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// <summary>Whether the console input field can send: the selected run is running and accepts input
     /// (a recaptured run does not). Re-evaluated whenever the selected entry changes.</summary>
     public bool CanSendInput => SelectedDockEntry?.Process is { State: RunState.Running, AcceptsInput: true };
+
+    /// <summary>Whether a Recent entry is selected — drives the Output header's script-name pill.</summary>
+    public bool HasSelection => SelectedDockEntry is not null;
+
+    /// <summary>The Scripts pane's Hide/Show toggle label, reflecting the selected script's current
+    /// state. Single-selection list, so the one button serves both directions (Hide a visible script,
+    /// Show a hidden one). Defaults to "Hide" when nothing is selected.</summary>
+    public string ToggleHiddenLabel => SelectedScript?.IsHidden == true ? "Show" : "Hide";
 
     /// <summary>Starts the console poll, builds the Recent list, and runs the first scan.</summary>
     public async Task InitializeAsync()
@@ -273,6 +285,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     partial void OnSelectedDockEntryChanged(DockEntry? value)
     {
         OnPropertyChanged(nameof(CanSendInput));
+        OnPropertyChanged(nameof(HasSelection));
         RefreshOutput();
     }
 

@@ -153,11 +153,15 @@
             <Setter Property="Padding" Value="10"/>
         </Style>
         <!-- A card's header strip: the title/toolbar row set off from the content by a single bottom
-             border line. Used by a card with Padding=0 so the line spans the full width. -->
+             border line. Used by a card with Padding=0 so the line spans the full width. The fixed
+             height keeps every section header the same height regardless of whether it holds toolbar
+             buttons (Scripts/Recent) or just a title (Output); horizontal-only padding leaves the
+             centered content to sit consistently within that height. -->
         <Style Selector="Border.sectionHeader">
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="0,0,0,1"/>
-            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="Height" Value="46"/>
+            <Setter Property="Padding" Value="10,0"/>
         </Style>
         <Style Selector="TextBlock.cardHeader">
             <Setter Property="FontWeight" Value="SemiBold"/>

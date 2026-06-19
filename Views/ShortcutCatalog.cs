@@ -28,16 +28,14 @@ public enum ShortcutAction
 /// <summary>
 /// One row of the shortcut catalog. <see cref="Gesture"/> and <see cref="Action"/> are set only for
 /// window-level command accelerators, which the window both binds and dispatches; display-only rows
-/// describe behavior owned by a control and carry just the label. <see cref="ShowAsKeycap"/> is true for
-/// everything that names a key and false for the non-key affordances rendered as plain text.
+/// describe behavior owned by a control and carry just the label.
 /// </summary>
 public sealed record ShortcutItem(
     ShortcutGroup Group,
     string Description,
     string Label,
     KeyGesture? Gesture = null,
-    ShortcutAction? Action = null,
-    bool ShowAsKeycap = true);
+    ShortcutAction? Action = null);
 
 /// <summary>
 /// The single source of truth for ScriptDock's keyboard shortcuts. Both the live window accelerators
@@ -79,13 +77,13 @@ public static class ShortcutCatalog
         return new List<ShortcutItem>
         {
             // Scripts — running is owned by the tile (pointer + keys), listed for discoverability.
-            Display(ShortcutGroup.Scripts, "Run or restart the selection", "Double-click / Enter / Space", asKeycap: false),
+            Display(ShortcutGroup.Scripts, "Run or restart the selected script", "Double-click / Enter / Space"),
 
             // Recent — Delete is owned by the Recent list while it has focus.
-            Display(ShortcutGroup.Recent, "Stop or dismiss the selection", "Delete"),
+            Display(ShortcutGroup.Recent, "Stop or dismiss the selected run", "Delete"),
 
             // Navigation — native list selection.
-            Display(ShortcutGroup.Navigation, "Move the selection", "Up / Down"),
+            Display(ShortcutGroup.Navigation, "Move between items in the focused list", "Up / Down"),
 
             // App — the centralized command accelerators.
             Command(ShortcutGroup.App, "Rescan", cmd, Key.R, "R", ShortcutAction.Rescan),
@@ -102,6 +100,6 @@ public static class ShortcutCatalog
         ShortcutGroup group, string description, KeyModifiers cmd, Key key, string keyName, ShortcutAction action) =>
         new(group, description, "Cmd/Ctrl+" + keyName, new KeyGesture(key, cmd), action);
 
-    private static ShortcutItem Display(ShortcutGroup group, string description, string label, bool asKeycap = true) =>
-        new(group, description, label, ShowAsKeycap: asKeycap);
+    private static ShortcutItem Display(ShortcutGroup group, string description, string label) =>
+        new(group, description, label);
 }

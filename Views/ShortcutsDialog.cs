@@ -16,7 +16,12 @@ public sealed class ShortcutsDialog : DialogBase
 {
     public ShortcutsDialog(IReadOnlyList<ShortcutItem> shortcuts)
     {
-        Width = 460;
+        // Size to content rather than a guessed fixed width: the dialog ends up exactly as wide as
+        // its widest row needs (description + keycap on one line). MaxWidth caps it so an unusually
+        // long future label wraps instead of producing an over-wide window. (DialogBase already sizes
+        // the height to content; this adds the width dimension.)
+        SizeToContent = Avalonia.Controls.SizeToContent.WidthAndHeight;
+        MaxWidth = 720;
         Title = "Keyboard Shortcuts";
 
         var sections = new StackPanel { Spacing = 16 };
@@ -89,14 +94,17 @@ public sealed class ShortcutsDialog : DialogBase
         Grid.SetColumn(description, 0);
         grid.Children.Add(description);
 
-        Control key = item.ShowAsKeycap ? Keycap(item.Label) : PlainAffordance(item.Label);
-        Grid.SetColumn(key, 1);
-        grid.Children.Add(key);
+        var keycap = Keycap(item.Label);
+        Grid.SetColumn(keycap, 1);
+        grid.Children.Add(keycap);
 
         return grid;
     }
 
-    // A keycap: a small rounded border with a subtle fill and SemiBold text.
+    // A keycap: a small recessed rounded box with a subtle fill and SemiBold text, matching the
+    // other fleet shortcut modals (DayNote, ZipKit). Used for every row — including the non-key
+    // affordances (e.g. "Double-click / Enter / Space") — so the whole right column is boxed
+    // consistently rather than mixing boxed keys with plain affordance text.
     private Border Keycap(string label) => new()
     {
         Background = Palette.Brush("AppBackgroundBrush"),
@@ -113,16 +121,5 @@ public sealed class ShortcutsDialog : DialogBase
             FontSize = 12,
             Foreground = Palette.Brush("TextPrimaryBrush"),
         },
-    };
-
-    // A non-key affordance (e.g. double-click): plain right-aligned text, no keycap box.
-    private TextBlock PlainAffordance(string label) => new()
-    {
-        Text = label,
-        FontWeight = FontWeight.SemiBold,
-        FontSize = 12,
-        Foreground = Palette.Brush("TextSecondaryBrush"),
-        HorizontalAlignment = HorizontalAlignment.Right,
-        VerticalAlignment = VerticalAlignment.Center,
     };
 }
