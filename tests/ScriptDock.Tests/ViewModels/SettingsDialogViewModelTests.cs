@@ -83,6 +83,18 @@ public sealed class SettingsDialogViewModelTests
     }
 
     [Fact]
+    public void AddExtension_DedupsCaseInsensitively_MatchingTheScanner()
+    {
+        var vm = new SettingsDialogViewModel(Seed()); // seeded with ".command"
+
+        // The scanner matches extensions case-insensitively, so a differently-cased
+        // duplicate must not create a second entry.
+        Assert.False(vm.AddExtension(".COMMAND"));
+        Assert.False(vm.AddExtension("Command")); // normalises to ".Command", still a dup
+        Assert.Single(vm.Extensions);
+    }
+
+    [Fact]
     public void AddIgnorePattern_RejectsInvalidRegex_AndReportsIt()
     {
         var vm = new SettingsDialogViewModel(Seed());

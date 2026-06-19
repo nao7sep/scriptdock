@@ -96,7 +96,10 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         if (!trimmed.StartsWith('.'))
             trimmed = "." + trimmed;
 
-        if (Extensions.Contains(trimmed))
+        // Dedup case-insensitively to match how the scanner compares extensions
+        // (OrdinalIgnoreCase, mirroring the case-insensitive filesystems it runs on), so
+        // ".command" and ".Command" are one entry rather than two that match the same files.
+        if (Extensions.Any(e => string.Equals(e, trimmed, StringComparison.OrdinalIgnoreCase)))
             return false;
 
         Extensions.Add(trimmed);
