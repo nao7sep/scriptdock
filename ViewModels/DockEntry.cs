@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using Avalonia.Media;
 using ScriptDock.Models;
 using ScriptDock.Services;
 
@@ -36,18 +37,31 @@ public sealed class DockEntry
     public string LastRanDisplay =>
         TimeZoneInfo.ConvertTime(LastRanAt, DisplayZone).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
 
-    /// <summary>Compact status for the row: <c>running</c>, <c>exited (0)</c>, etc., or
-    /// <c>—</c> when there is no live process (a recent carried over from a past session).</summary>
-    public string StateText => Process is null
-        ? "—"
+    /// <summary>Short label for the state pill. No live process (a recent carried over from a
+    /// past session) reads <c>Idle</c> rather than a bare dash.</summary>
+    public string StatePillText => Process is null
+        ? "Idle"
         : Process.State switch
         {
-            RunState.Running => "running",
-            RunState.Exited => $"exited ({Process.ExitCode})",
-            RunState.Terminated => "terminated",
-            RunState.Failed => "failed",
-            _ => Process.State.ToString().ToLowerInvariant(),
+            RunState.Running => "Running",
+            RunState.Exited => Process.ExitCode is 0 or null ? "Exited" : $"Exited {Process.ExitCode}",
+            RunState.Terminated => "Stopped",
+            RunState.Failed => "Failed",
+            _ => Process.State.ToString(),
         };
+
+    /// <summary>Background brush for the state pill, resolved from the shared palette: green when
+    /// running, red on a failure or non-zero exit, muted gray for done/idle. Distinguishes states
+    /// at a glance without relying on the text alone.</summary>
+    public IBrush StatePillBrush => Palette.Brush(
+        Process is null ? "TextSecondaryBrush"
+        : Process.State switch
+        {
+            RunState.Running => "RunningBrush",
+            RunState.Failed => "DangerTextBrush",
+            RunState.Exited when Process.ExitCode is not (0 or null) => "DangerTextBrush",
+            _ => "TextSecondaryBrush",
+        });
 
     private static TimeZoneInfo ResolveDisplayZone()
     {

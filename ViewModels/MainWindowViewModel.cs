@@ -67,23 +67,43 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _runner.ProcessesChanged += (_, _) => Dispatcher.UIThread.Post(RebuildFromProcesses);
     }
 
-    public WindowBounds? SavedBounds => _state.Window;
     public double? SavedRecentWidth => _state.RecentPaneWidth;
     public double? SavedConsoleHeight => _state.ConsoleHeight;
+
+    /// <summary>Drive the lists' empty-state messages. Refreshed after each rebuild.</summary>
+    public bool NoScripts => Scripts.Count == 0;
+    public bool NoRecent => Recent.Count == 0;
 
     /// <summary>Starts the console poll, builds the Recent list, and runs the first scan.</summary>
     public async Task InitializeAsync()
     {
+        if (_config.RecaptureProcessesOnLaunch)
+            _runner.Recapture(_state.RunningProcesses);
+
         StartOutputTimer();
         RebuildRecent();
         await RescanAsync();
+        SeedTestNewFlags();
     }
 
-    public void PersistWindowBounds(double x, double y, double width, double height) => Guard("save window bounds", () =>
+    // ─────────────────────────────────────────────────────────────────────────────
+    // TEMPORARY TEST SCAFFOLD — MUST BE REMOVED BEFORE RELEASE.
+    // Randomly marks ~1/5 of the scanned scripts as "just detected" (New) on launch so the
+    // amber just-scanned styling is always visible during human testing. Tracked in the
+    // refinement plan ("Remove the just-scanned test scaffold before release"). The fake flags
+    // clear on the next real Rescan, which recomputes _newPaths from the actual scan diff.
+    private void SeedTestNewFlags()
     {
-        _state.Window = new WindowBounds { X = x, Y = y, Width = width, Height = height };
-        _stateStore.Save(_state);
-    });
+        if (_lastFound.Count == 0)
+            return;
+
+        foreach (var path in _lastFound)
+            if (Random.Shared.Next(5) == 0)
+                _newPaths.Add(path);
+
+        RebuildScripts();
+    }
+    // ─────────────────────────────────────────────────────────────────────────────
 
     public void PersistPaneSizes(double recentWidth, double consoleHeight) => Guard("save pane sizes", () =>
     {
@@ -95,9 +115,36 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public void Shutdown() => Guard("shutdown", () =>
     {
         _outputTimer?.Stop();
-        _runner.ShutdownAll();
-        _stateStore.Save(_state);
+        _runner.ShutdownAll(_config.KillProcessesOnClose);
+        PersistRunningSnapshot(); // record what is still running (or none, if killed) for next launch
     });
+
+    // Record the live running set so a relaunch can recapture it (see ProcessRunner.Recapture).
+    // Called whenever the running set changes and on shutdown.
+    private void PersistRunningSnapshot()
+    {
+        _state.RunningProcesses = _runner.Active
+            .Where(p => p.State == RunState.Running)
+            .Select(ToPersisted)
+            .OfType<PersistedProcess>()
+            .ToList();
+        _stateStore.Save(_state);
+    }
+
+    private static PersistedProcess? ToPersisted(ScriptProcess process)
+    {
+        if (process.Pid is not { } pid || process.OsStartedAt is not { } osStartedAt)
+            return null;
+
+        return new PersistedProcess
+        {
+            Pid = pid,
+            OsStartedAt = osStartedAt,
+            LaunchedAt = process.StartedAt,
+            ScriptPath = process.ScriptPath,
+            LogFilePath = process.LogFilePath ?? string.Empty,
+        };
+    }
 
     public SettingsDialogViewModel CreateSettingsDraft() => new(_config);
 
@@ -236,6 +283,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         RebuildRecent();
         RebuildScripts(); // refresh the tiles' running dots
+        PersistRunningSnapshot();
     });
 
     private void OnProcessStateChanged(object? sender, EventArgs e) =>
@@ -262,6 +310,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         SelectedDockEntry = Recent.FirstOrDefault(e => string.Equals(e.Path, selectedPath, StringComparison.Ordinal));
         RunningCount = _runner.Active.Count(p => p.State == RunState.Running);
+        OnPropertyChanged(nameof(NoRecent));
         RefreshOutput();
     }
 
@@ -274,7 +323,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         foreach (var path in _removed) paths.Add(path);
         foreach (var run in _state.RecentlyRun) paths.Add(run.Path);
         foreach (var process in _runner.Active) paths.Add(process.ScriptPath);
-        return ScriptLabels.Build(paths);
+
+        // ScriptLabels joins its minimal-unique segments with '/', but that '/' is not a real
+        // relative path — it is a breadcrumb between dedup segments — so present it as one.
+        return ScriptLabels.Build(paths)
+            .ToDictionary(kv => kv.Key, kv => kv.Value.Replace("/", " › "), StringComparer.Ordinal);
     }
 
     private void RebuildScripts()
@@ -289,6 +342,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         Scripts.Clear();
         foreach (var item in items)
             Scripts.Add(item);
+        OnPropertyChanged(nameof(NoScripts));
     }
 
     private void StartOutputTimer()
@@ -297,8 +351,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
 
         _outputTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
-        _outputTimer.Tick += (_, _) => RefreshOutput();
+        _outputTimer.Tick += (_, _) => OnOutputTick();
         _outputTimer.Start();
+    }
+
+    private void OnOutputTick()
+    {
+        _runner.ReconcileExited(); // backstop for a missed Exited event
+        RefreshOutput();
     }
 
     private void RefreshOutput()

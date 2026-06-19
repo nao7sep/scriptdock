@@ -19,7 +19,7 @@ public sealed class ScriptListBuilderTests
     }
 
     [Fact]
-    public void BuildScripts_FlagsNew_MarksRunning_SortsByDisplayName()
+    public void BuildScripts_FlagsNew_MarksRunning_SortsByPath()
     {
         var bigmouth = "/code/bigmouth/scripts/run-dev.command";
         var daynote = "/code/daynote/scripts/run-dev.command";
@@ -34,7 +34,7 @@ public sealed class ScriptListBuilderTests
             showHidden: false);
 
         Assert.Equal(2, scripts.Count);
-        Assert.Equal("bigmouth/run-dev.command", scripts[0].DisplayName); // sorts first
+        Assert.Equal("bigmouth/run-dev.command", scripts[0].DisplayName); // /code/bigmouth/… sorts before /code/daynote/… by path
         Assert.True(scripts[0].IsRunning);
         Assert.Equal(ScriptFlag.None, scripts[0].Flag);
         Assert.Equal("daynote/run-dev.command", scripts[1].DisplayName);

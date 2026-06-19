@@ -7,8 +7,8 @@ namespace ScriptDock.Models;
 /// state that should not churn the durable preferences in <see cref="AppConfig"/>.
 /// </summary>
 /// <remarks>
-/// Phase 1 adds window geometry and the recently-run list; <see cref="KnownPaths"/> is
-/// used by the Phase 2 scanner to compute the new/removed diff.
+/// Phase 1 adds the recently-run list; <see cref="KnownPaths"/> is used by the Phase 2
+/// scanner to compute the new/removed diff.
 /// </remarks>
 public sealed class AppState
 {
@@ -19,9 +19,6 @@ public sealed class AppState
     /// the next scan computes its new/removed diff.</summary>
     public List<string> KnownPaths { get; set; } = [];
 
-    /// <summary>Main-window geometry from the last session; <c>null</c> until first saved.</summary>
-    public WindowBounds? Window { get; set; }
-
     /// <summary>Recently-run scripts, held newest-first (sorted on <see cref="RecentRun.RanAt"/>).</summary>
     public List<RecentRun> RecentlyRun { get; set; } = [];
 
@@ -30,4 +27,8 @@ public sealed class AppState
 
     /// <summary>Persisted height of the Console pane; null until first saved.</summary>
     public double? ConsoleHeight { get; set; }
+
+    /// <summary>Snapshot of the scripts that were running when this state was last saved, recorded
+    /// so a relaunch can recapture them by PID + start-time. Replaced whenever the running set changes.</summary>
+    public List<PersistedProcess> RunningProcesses { get; set; } = [];
 }

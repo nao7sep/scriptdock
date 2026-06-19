@@ -3,24 +3,41 @@
              x:Class="ScriptDock.App"
              xmlns:local="using:ScriptDock"
              xmlns:conv="using:ScriptDock.Converters"
-             RequestedThemeVariant="Light">
+             RequestedThemeVariant="Dark">
 
     <Application.DataTemplates>
         <local:ViewLocator/>
     </Application.DataTemplates>
 
     <Application.Resources>
-        <!-- Semantic UI palette -->
-        <Color x:Key="AppBackground">#F6F8FA</Color>
-        <Color x:Key="Surface">#FFFFFF</Color>
-        <Color x:Key="Border">#D8DEE8</Color>
-        <Color x:Key="TextPrimary">#1F2430</Color>
-        <Color x:Key="TextSecondary">#586070</Color>
+        <!-- Semantic dark palette. ScriptDock is dark-only by design (no theme switch), so the
+             tokens are a single flat set rather than per-variant dictionaries. This is the one
+             source of truth for the app's colours: code that cannot reach a StaticResource (the
+             script-tile colour converter and the code-built dialogs) resolves these by key via
+             ScriptDock.Palette, so nothing duplicates a hex value. -->
+        <Color x:Key="AppBackground">#15171C</Color>
+        <Color x:Key="Surface">#1E2128</Color>
+        <Color x:Key="Border">#2E323C</Color>
+        <Color x:Key="TextPrimary">#E4E7EC</Color>
+        <Color x:Key="TextSecondary">#98A2B3</Color>
 
-        <Color x:Key="Accent">#1D4ED8</Color>
-        <Color x:Key="AccentHover">#1E40AF</Color>
+        <!-- Accent/Danger drive filled buttons (white text on top), so they stay deep enough to
+             keep that text legible and lighten on hover. -->
+        <Color x:Key="Accent">#2563EB</Color>
+        <Color x:Key="AccentHover">#3B82F6</Color>
         <Color x:Key="Danger">#DC2626</Color>
-        <Color x:Key="DangerHover">#B91C1C</Color>
+        <Color x:Key="DangerHover">#EF4444</Color>
+
+        <!-- State colours. DangerText is danger red as *text* on a dark surface (validation
+             errors, removed scripts) — lighter than the danger button fill for legibility.
+             ScriptNewBackground tints a newly-found tile; ScriptHidden dims hidden scripts;
+             Running is the green run indicator. -->
+        <Color x:Key="DangerText">#F87171</Color>
+        <Color x:Key="ScriptNewBackground">#3A2F15</Color>
+        <Color x:Key="ScriptHidden">#667085</Color>
+        <Color x:Key="Running">#22C55E</Color>
+        <!-- Script chips sit on the card surface; a touch lighter so they read as chips without a hard border. -->
+        <Color x:Key="ChipBackground">#262A33</Color>
 
         <SolidColorBrush x:Key="AppBackgroundBrush" Color="{StaticResource AppBackground}"/>
         <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource Surface}"/>
@@ -32,6 +49,12 @@
         <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHover}"/>
         <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource Danger}"/>
         <SolidColorBrush x:Key="DangerHoverBrush" Color="{StaticResource DangerHover}"/>
+
+        <SolidColorBrush x:Key="DangerTextBrush" Color="{StaticResource DangerText}"/>
+        <SolidColorBrush x:Key="ScriptNewBackgroundBrush" Color="{StaticResource ScriptNewBackground}"/>
+        <SolidColorBrush x:Key="ScriptHiddenBrush" Color="{StaticResource ScriptHidden}"/>
+        <SolidColorBrush x:Key="RunningBrush" Color="{StaticResource Running}"/>
+        <SolidColorBrush x:Key="ChipBackgroundBrush" Color="{StaticResource ChipBackground}"/>
 
         <conv:ScriptItemColorConverter x:Key="ScriptColor"/>
     </Application.Resources>

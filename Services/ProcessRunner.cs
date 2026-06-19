@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using ScriptDock.Models;
 
 namespace ScriptDock.Services;
 
@@ -12,8 +13,9 @@ namespace ScriptDock.Services;
 /// shell that writes the script's output to a per-run log file and reads stdin from
 /// <c>/dev/null</c> — so ScriptDock holds no pipe to the child, and its own crash leaves the
 /// child no broken pipe to die on. Termination kills the whole process tree (npm/dotnet
-/// spawn children) so restart is reliable and ports are freed. The active list is
-/// runtime-only and never persisted; quitting the app ends these children.
+/// spawn children) so restart is reliable and ports are freed. The running set is persisted by
+/// the view model (PID + OS start-time) so a relaunch can <see cref="Recapture"/> still-running
+/// children; whether quitting kills them is configurable (default: leave them running).
 /// </summary>
 public sealed class ProcessRunner
 {
@@ -122,10 +124,111 @@ public sealed class ProcessRunner
             ProcessesChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Terminates everything still running — called on app shutdown.</summary>
-    public void ShutdownAll()
+    /// <summary>On app shutdown: terminate everything still running when <paramref name="kill"/> is
+    /// set; otherwise leave the children running (they detach and can be recaptured next launch).</summary>
+    public void ShutdownAll(bool kill)
     {
+        if (!kill)
+        {
+            Log.Info("run: leaving children running on close", new { running = Active.Count(p => p.State == RunState.Running) });
+            return;
+        }
+
         foreach (var handle in Active)
             Terminate(handle);
     }
+
+    /// <summary>
+    /// Re-attaches to scripts a previous session left running, matched by PID and OS start-time.
+    /// A persisted PID that is gone, has exited, or whose start-time no longer matches (a reused
+    /// PID) is treated as no longer running and skipped. Re-attached handles raise <c>Exited</c>
+    /// and can be tree-killed exactly like ones this session started; the console reads their
+    /// existing run-log.
+    /// </summary>
+    public void Recapture(IReadOnlyList<PersistedProcess> records)
+    {
+        var recaptured = 0;
+        foreach (var record in records)
+        {
+            var process = TryReattach(record);
+            if (process is null)
+                continue;
+
+            var id = Interlocked.Increment(ref _nextId);
+            var handle = new ScriptProcess(id, record.ScriptPath, record.LaunchedAt) { LogFilePath = record.LogFilePath };
+            process.EnableRaisingEvents = true;
+            process.Exited += (_, _) => handle.Complete();
+            handle.Process = process;
+
+            // Close the gap between the probe and the subscribe: if it exited just now, finalise.
+            if (process.HasExited)
+                handle.Complete();
+
+            lock (_gate)
+                _processes.Add(handle);
+            recaptured++;
+            Log.Info("run: recaptured", new { id, pid = record.Pid, script = record.ScriptPath });
+        }
+
+        if (recaptured > 0)
+            ProcessesChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Backstop for a missed <c>Exited</c> event: finalise any process the OS has ended
+    /// whose state still reads Running. Read-only on the handles; cheap to call on a timer.</summary>
+    public void ReconcileExited()
+    {
+        foreach (var handle in Active)
+        {
+            try
+            {
+                if (handle.State == RunState.Running && handle.Process is { HasExited: true })
+                    handle.Complete();
+            }
+            catch { /* handle unavailable; nothing to reconcile */ }
+        }
+    }
+
+    // Probe a persisted record: return the live process only if its PID exists, has not exited,
+    // and its start-time still matches (so a reused PID can't be mistaken for the original).
+    private static Process? TryReattach(PersistedProcess record)
+    {
+        Process process;
+        try
+        {
+            process = Process.GetProcessById(record.Pid);
+        }
+        catch
+        {
+            return null; // no live process with that PID
+        }
+
+        try
+        {
+            if (process.HasExited)
+            {
+                process.Dispose();
+                return null;
+            }
+
+            var actualStart = new DateTimeOffset(process.StartTime).ToUniversalTime();
+            if (!StartTimesMatch(record.OsStartedAt, actualStart))
+            {
+                process.Dispose(); // PID was reused by an unrelated process
+                return null;
+            }
+
+            return process;
+        }
+        catch
+        {
+            try { process.Dispose(); } catch { /* best effort */ }
+            return null;
+        }
+    }
+
+    // Two records identify the same OS process when their start-times agree within a small
+    // tolerance (clock/precision slack); a reused PID will differ by far more.
+    internal static bool StartTimesMatch(DateTimeOffset persisted, DateTimeOffset actual) =>
+        (actual - persisted).Duration() <= TimeSpan.FromSeconds(2);
 }

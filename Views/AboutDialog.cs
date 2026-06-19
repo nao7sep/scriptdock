@@ -31,7 +31,7 @@ public sealed class AboutDialog : DialogBase
             Children =
             {
                 new TextBlock { Text = "ScriptDock", FontSize = 20, FontWeight = FontWeight.Bold, Margin = new Thickness(0, 0, 0, 4) },
-                new TextBlock { Text = $"Version {version}", FontSize = 13, Foreground = Brushes.Gray, Margin = new Thickness(0, 0, 0, 12) },
+                new TextBlock { Text = $"Version {version}", FontSize = 13, Foreground = Palette.Brush("TextSecondaryBrush"), Margin = new Thickness(0, 0, 0, 12) },
                 new TextBlock
                 {
                     Text = "Finds the launcher scripts across your repos and runs and reliably restarts them as processes it owns.",
@@ -46,7 +46,7 @@ public sealed class AboutDialog : DialogBase
                     Margin = new Thickness(0, 0, 0, 16),
                     Children = { githubButton, issuesButton },
                 },
-                new TextBlock { Text = "© 2026 Yoshinao Inoguchi — MIT License", FontSize = 12, Foreground = Brushes.Gray },
+                new TextBlock { Text = "© 2026 Yoshinao Inoguchi — MIT License", FontSize = 12, Foreground = Palette.Brush("TextSecondaryBrush") },
             },
         };
 

@@ -35,6 +35,29 @@ public sealed class ScriptProcess
     /// <summary>Path of the file the child shell writes stdout+stderr to; null if the run never started.</summary>
     public string? LogFilePath { get; internal set; }
 
+    /// <summary>OS process id while running, or null if it never started or is already gone.
+    /// Persisted with <see cref="OsStartedAt"/> so a relaunch can recapture this exact run.</summary>
+    public int? Pid
+    {
+        get { try { return Process?.Id; } catch { return null; } }
+    }
+
+    /// <summary>OS process start time in UTC, or null if unavailable. Paired with <see cref="Pid"/>
+    /// to recognise this process after a restart — a reused PID has a different start time.</summary>
+    public DateTimeOffset? OsStartedAt
+    {
+        get
+        {
+            try
+            {
+                return Process is { } process && !process.HasExited
+                    ? new DateTimeOffset(process.StartTime).ToUniversalTime()
+                    : null;
+            }
+            catch { return null; }
+        }
+    }
+
     /// <summary>Raised when <see cref="State"/> changes. May fire on a background thread;
     /// the UI marshals to its dispatcher.</summary>
     public event EventHandler? StateChanged;

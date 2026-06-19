@@ -7,16 +7,16 @@
              Width="480">
     <StackPanel Spacing="14">
 
-        <!-- Root directories -->
+        <!-- Root directories: chosen with the native folder picker, not typed — they are
+             directories that exist on disk, so picking beats hand-entering a path. -->
         <StackPanel Spacing="6">
             <TextBlock Text="Root directories" Classes="cardHeader"/>
             <ListBox x:Name="RootList" ItemsSource="{Binding RootDirs}" Height="96"
                      BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
-            <DockPanel>
-                <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemoveRootClick"/>
-                <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddRootClick"/>
-                <TextBox x:Name="RootEntry" PlaceholderText="/path/to/scan" KeyDown="OnRootKeyDown"/>
-            </DockPanel>
+            <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+                <Button Content="Add…" Classes="tool" Click="OnAddRootClick"/>
+                <Button Content="Remove" Classes="tool" Click="OnRemoveRootClick"/>
+            </StackPanel>
         </StackPanel>
 
         <!-- Extensions -->
@@ -41,7 +41,7 @@
                 <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddPatternClick"/>
                 <TextBox x:Name="PatternEntry" PlaceholderText="/node_modules/" KeyDown="OnPatternKeyDown"/>
             </DockPanel>
-            <TextBlock Text="{Binding PatternError}" Foreground="#DC2626" FontSize="12" TextWrapping="Wrap"
+            <TextBlock Text="{Binding PatternError}" Foreground="{StaticResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"
                        IsVisible="{Binding PatternError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
         </StackPanel>
 

@@ -6,8 +6,9 @@ using ScriptDock.Models;
 namespace ScriptDock.Services;
 
 /// <summary>
-/// Turns a scan result and the user's preferences into the Scripts list: sorted by display
-/// name, flagged new/removed for the colour cue and running for the tile dot, with hidden
+/// Turns a scan result and the user's preferences into the Scripts list: sorted by absolute
+/// path (so a repo's scripts group together) while showing the dedup label, flagged
+/// new/removed for the colour cue and running for the tile dot, with hidden
 /// scripts filtered out unless the user is showing them. Removed scripts are surfaced
 /// regardless of the hidden filter so a disappearance is noticed. Display names come from the
 /// caller-supplied label map (<see cref="ScriptLabels"/>). Pure — no I/O, no UI.
@@ -51,8 +52,11 @@ public static class ScriptListBuilder
             });
         }
 
+        // Sort by the absolute path, not the dedup label: the label is a minimal-unique suffix
+        // that doesn't sort intuitively, whereas the path groups a repo's scripts together. The
+        // row still shows the label.
         return items
-            .OrderBy(i => i.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase)
             .ThenBy(i => i.Path, StringComparer.Ordinal)
             .ToList();
     }

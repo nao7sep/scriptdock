@@ -38,18 +38,18 @@ public partial class MainWindow : Window
             if (vm is null)
                 return;
 
-            if (vm.SavedBounds is { } bounds && bounds.Width > 0 && bounds.Height > 0)
+            // Clamp restored pane sizes to the current window so a size saved on a larger screen
+            // can't squeeze a pane to nothing here: keep room for the Scripts pane and the lists row.
+            if (vm.SavedRecentWidth is { } recentWidth)
             {
-                Width = bounds.Width;
-                Height = bounds.Height;
-                WindowStartupLocation = WindowStartupLocation.Manual;
-                Position = ClampToVisible(bounds);
+                var maxRecent = Math.Max(240, Width - 360);
+                ListsGrid.ColumnDefinitions[2].Width = new GridLength(Math.Clamp(recentWidth, 240, maxRecent), GridUnitType.Pixel);
             }
-
-            if (vm.SavedRecentWidth is { } recentWidth && recentWidth > 80)
-                ListsGrid.ColumnDefinitions[2].Width = new GridLength(recentWidth, GridUnitType.Pixel);
-            if (vm.SavedConsoleHeight is { } consoleHeight && consoleHeight > 60)
-                BodyGrid.RowDefinitions[2].Height = new GridLength(consoleHeight, GridUnitType.Pixel);
+            if (vm.SavedConsoleHeight is { } consoleHeight)
+            {
+                var maxConsole = Math.Max(120, Height - 260);
+                BodyGrid.RowDefinitions[2].Height = new GridLength(Math.Clamp(consoleHeight, 120, maxConsole), GridUnitType.Pixel);
+            }
 
             // Catalog drives the live accelerators (the help modal renders the same source); the
             // command key (Cmd on macOS, Ctrl on Windows) is resolved by the framework.
@@ -73,7 +73,6 @@ public partial class MainWindow : Window
             if (vm is null)
                 return;
 
-            vm.PersistWindowBounds(Position.X, Position.Y, Width, Height);
             vm.PersistPaneSizes(ListsGrid.ColumnDefinitions[2].ActualWidth, BodyGrid.RowDefinitions[2].ActualHeight);
             vm.Shutdown();
         }
@@ -214,28 +213,5 @@ public partial class MainWindow : Window
             else
                 ViewModel?.DismissEntryCommand.Execute(item);
         }
-    }
-
-    // Keep a saved position usable if the display layout changed: fall back to a small offset when
-    // the saved point sits off every screen's working area.
-    private PixelPoint ClampToVisible(WindowBounds bounds)
-    {
-        var point = new PixelPoint((int)bounds.X, (int)bounds.Y);
-
-        var screens = Screens;
-        if (screens is null || screens.All.Count == 0)
-            return point;
-
-        foreach (var screen in screens.All)
-        {
-            var area = screen.WorkingArea;
-            if (point.X >= area.X - 50 && point.X <= area.X + area.Width - 50 &&
-                point.Y >= area.Y && point.Y <= area.Y + area.Height - 20)
-            {
-                return point;
-            }
-        }
-
-        return new PixelPoint(60, 60);
     }
 }

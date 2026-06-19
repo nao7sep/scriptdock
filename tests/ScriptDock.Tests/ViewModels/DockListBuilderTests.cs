@@ -43,7 +43,7 @@ public sealed class DockListBuilderTests
 
         Assert.True(entry.IsRunning);
         Assert.Same(running, entry.Process);
-        Assert.Equal("running", entry.StateText);
+        Assert.Equal("Running", entry.StatePillText);
     }
 
     [Fact]

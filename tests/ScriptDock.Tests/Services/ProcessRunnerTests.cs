@@ -80,4 +80,69 @@ public sealed class ProcessRunnerTests : IDisposable
         Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
         Assert.Equal(RunState.Terminated, handle.State);
     }
+
+    [Fact]
+    public void StartTimesMatch_TrueWithinTolerance_FalseBeyond()
+    {
+        var t = new DateTimeOffset(2026, 6, 19, 1, 2, 3, TimeSpan.Zero);
+
+        Assert.True(ProcessRunner.StartTimesMatch(t, t));
+        Assert.True(ProcessRunner.StartTimesMatch(t, t.AddSeconds(1)));
+        Assert.True(ProcessRunner.StartTimesMatch(t, t.AddSeconds(-2)));
+        Assert.False(ProcessRunner.StartTimesMatch(t, t.AddSeconds(5)));
+        Assert.False(ProcessRunner.StartTimesMatch(t, t.AddMinutes(1)));
+    }
+
+    [MacOnlyFact]
+    public void Recapture_ReattachesRunningProcess_ByPidAndStartTime()
+    {
+        var script = WriteExecutableScript("sleeper.command", "echo started\nsleep 60\n");
+        var runner = new ProcessRunner(_runsDir);
+        var handle = runner.Start(script);
+
+        try
+        {
+            // Wait until it is genuinely running with a known PID + start-time.
+            var deadline = DateTime.UtcNow.AddSeconds(20);
+            while ((handle.Pid is null || handle.OsStartedAt is null) && DateTime.UtcNow < deadline)
+                Thread.Sleep(50);
+            Assert.NotNull(handle.Pid);
+            Assert.NotNull(handle.OsStartedAt);
+
+            var record = new PersistedProcess
+            {
+                Pid = handle.Pid!.Value,
+                OsStartedAt = handle.OsStartedAt!.Value,
+                LaunchedAt = handle.StartedAt,
+                ScriptPath = handle.ScriptPath,
+                LogFilePath = handle.LogFilePath ?? "",
+            };
+
+            // A fresh runner — as if the app restarted — re-attaches by PID + start-time.
+            var relaunched = new ProcessRunner(_runsDir);
+            relaunched.Recapture([record]);
+
+            var recaptured = Assert.Single(relaunched.Active);
+            Assert.Equal(RunState.Running, recaptured.State);
+            Assert.Equal(script, recaptured.ScriptPath);
+
+            // Reused-PID guard: same PID but a different start-time must NOT re-attach.
+            var mismatched = new PersistedProcess
+            {
+                Pid = handle.Pid!.Value,
+                OsStartedAt = handle.OsStartedAt!.Value.AddMinutes(5),
+                LaunchedAt = handle.StartedAt,
+                ScriptPath = handle.ScriptPath,
+                LogFilePath = handle.LogFilePath ?? "",
+            };
+            var picky = new ProcessRunner(_runsDir);
+            picky.Recapture([mismatched]);
+            Assert.Empty(picky.Active);
+        }
+        finally
+        {
+            runner.Terminate(handle);
+            handle.WaitForExit(TimeSpan.FromSeconds(20));
+        }
+    }
 }

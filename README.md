@@ -2,7 +2,7 @@
 
 ScriptDock is a local macOS desktop launcher for the `.command`/`.ps1` scripts scattered across your project repos. It scans the root directories you configure for scripts matching the extensions you choose, and presents them in a sorted Scripts pane of tiles alongside a Recent pane that merges what's currently running with what you ran recently — so you stop digging through Finder for the one you want. It runs a script as a child process it owns: double-click to run, double-click again to restart (it kills the whole process tree first, so dev servers free their ports cleanly), with each run's output kept in an in-app console you can read after it finishes and then dismiss. That last part is the point — instead of a coding session buried under a hundred Terminal tabs you can't tell apart, every run lives in one window you can clear when you're done.
 
-It's for a developer who juggles many repos and restarts dev servers constantly, and who wants reliable restarts without the terminal clutter. Newly-found and vanished scripts are flagged after each scan; hidden items, recent runs, and window geometry persist between sessions; root directories, extensions, and regex ignore patterns are editable from a settings dialog. Scripts launch through a login shell so their `PATH` matches your terminal. ScriptDock is pre-release (0.x) and macOS-first; the Windows launchers exist but are less exercised.
+It's for a developer who juggles many repos and restarts dev servers constantly, and who wants reliable restarts without the terminal clutter. Newly-found and vanished scripts are flagged after each scan; hidden items, recent runs, and pane sizes persist between sessions; root directories, extensions, and regex ignore patterns are editable from a settings dialog. Scripts launch through a login shell so their `PATH` matches your terminal. ScriptDock is pre-release (0.x) and macOS-first; the Windows launchers exist but are less exercised.
 
 <!-- TODO (dog-fooding): add a screenshot of the main window here. -->
 
@@ -10,7 +10,7 @@ It's for a developer who juggles many repos and restarts dev servers constantly,
 
 - **macOS** (Apple Silicon or Intel).
 - **.NET 10 SDK** to build and run — there is no packaged installer yet.
-- The scripts ScriptDock launches run as **child processes it owns**, so quitting ScriptDock terminates anything still running. This is deliberate — it is what keeps restarts reliable and your terminals empty — but it means ScriptDock is for things you start and stop within a session, not long-lived background daemons.
+- The scripts ScriptDock launches run as **child processes it owns**. By default, quitting ScriptDock **leaves running scripts alive** and recaptures them on the next launch (matched by PID and start-time), so an accidental quit won't kill your in-progress work; you can configure it to terminate everything on quit instead. Either way, a restart-while-running cleanly kills the whole process tree so dev servers free their ports.
 
 ## Getting started
 

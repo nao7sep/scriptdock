@@ -6,17 +6,21 @@
         x:DataType="vm:MainWindowViewModel"
         Title="ScriptDock"
         Width="1100" Height="720" MinWidth="860" MinHeight="540"
+        WindowStartupLocation="CenterScreen"
         KeyDown="OnWindowKeyDown"
         Background="{StaticResource AppBackgroundBrush}">
 
     <Window.Resources>
-        <!-- Content-sized script tile: bordered + rounded; new → amber bg, removed → red text, hidden → gray; green dot when running. -->
+        <!-- Content-sized script chip: filled + rounded (no hard border); new → amber bg, removed → red text,
+             hidden → gray; green dot when running. A transparent border reserves space for the accent ring
+             the selected-chip style draws, so selection never shifts the layout. -->
         <DataTemplate x:Key="ScriptTile" x:DataType="models:ScriptItem">
-            <Border Background="{Binding Converter={StaticResource ScriptColor}, ConverterParameter=bg}"
-                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                    CornerRadius="5" Padding="8,5" Margin="2">
+            <Border Classes="chip"
+                    Background="{Binding Converter={StaticResource ScriptColor}, ConverterParameter=bg}"
+                    BorderBrush="Transparent" BorderThickness="1"
+                    CornerRadius="6" Padding="12,7" Margin="3">
                 <StackPanel Orientation="Horizontal" Spacing="6">
-                    <Ellipse Width="7" Height="7" Fill="#16A34A" VerticalAlignment="Center" IsVisible="{Binding IsRunning}"/>
+                    <Ellipse Width="7" Height="7" Fill="{StaticResource RunningBrush}" VerticalAlignment="Center" IsVisible="{Binding IsRunning}"/>
                     <TextBlock Text="{Binding DisplayName}"
                                Foreground="{Binding Converter={StaticResource ScriptColor}, ConverterParameter=fg}"/>
                 </StackPanel>
@@ -24,13 +28,29 @@
         </DataTemplate>
     </Window.Resources>
 
+    <Window.Styles>
+        <!-- Scripts list renders content-sized chips in a WrapPanel: strip the Fluent item
+             chrome (large default padding and min height) so the tiles pack tightly and each
+             tile's own padding and margin control the look. -->
+        <Style Selector="ListBox#ScriptsList ListBoxItem">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="CornerRadius" Value="6"/>
+        </Style>
+        <!-- Selected chip gets an accent ring (the chip reserves a transparent 1px border for this). -->
+        <Style Selector="ListBox#ScriptsList ListBoxItem:selected Border.chip">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+        </Style>
+    </Window.Styles>
+
     <DockPanel>
 
         <!-- Flat header: wordmark + hamburger, with a single bottom border. -->
         <Border DockPanel.Dock="Top" Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="14,10">
             <DockPanel>
-                <TextBlock Text="ScriptDock" FontWeight="Bold" FontSize="15" VerticalAlignment="Center"/>
+                <!-- Hamburger docked right; the wordmark is the last (fill) child so it stays left. -->
                 <Button Classes="tool" DockPanel.Dock="Right" Padding="8,4">
                     <Path Width="18" Height="18" Stretch="None" Fill="{StaticResource TextPrimaryBrush}"
                           Data="M1,3 H17 V5 H1 Z M1,8 H17 V10 H1 Z M1,13 H17 V15 H1 Z"/>
@@ -43,6 +63,7 @@
                         </MenuFlyout>
                     </Button.Flyout>
                 </Button>
+                <TextBlock Text="ScriptDock" FontWeight="Bold" FontSize="15" VerticalAlignment="Center"/>
             </DockPanel>
         </Border>
 
@@ -67,21 +88,32 @@
                         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
                             <TextBlock Text="Scripts" Classes="cardHeader" VerticalAlignment="Center"/>
                             <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                <Button Content="Rescan" Classes="tool" Command="{Binding RescanCommand}"/>
-                                <CheckBox Content="Show hidden" IsChecked="{Binding ShowHidden}" VerticalAlignment="Center"/>
+                                <!-- Selection actions (act on the selected chip). -->
                                 <Button Content="Run" Classes="tool" Command="{Binding RunScriptCommand}" CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
                                 <Button Content="Hide" Classes="tool" Command="{Binding ToggleHiddenCommand}" CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
+                                <!-- Divider: selection actions | list-level controls. -->
+                                <Border Width="1" Height="16" Margin="4,0" VerticalAlignment="Center" Background="{StaticResource BorderBrush}"/>
+                                <!-- List-level controls (act on the whole Scripts list). -->
+                                <CheckBox Content="Show hidden" IsChecked="{Binding ShowHidden}" VerticalAlignment="Center"/>
+                                <Button Content="Rescan" Classes="tool" Command="{Binding RescanCommand}"/>
                             </StackPanel>
                         </DockPanel>
-                        <ListBox x:Name="ScriptsList" ItemsSource="{Binding Scripts}"
-                                 ItemTemplate="{StaticResource ScriptTile}"
-                                 DoubleTapped="OnScriptDoubleTapped" KeyDown="OnScriptKeyDown">
-                            <ListBox.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel/>
-                                </ItemsPanelTemplate>
-                            </ListBox.ItemsPanel>
-                        </ListBox>
+                        <Grid>
+                            <ListBox x:Name="ScriptsList" ItemsSource="{Binding Scripts}"
+                                     ItemTemplate="{StaticResource ScriptTile}"
+                                     DoubleTapped="OnScriptDoubleTapped" KeyDown="OnScriptKeyDown">
+                                <ListBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ListBox.ItemsPanel>
+                            </ListBox>
+                            <TextBlock Text="No scripts found. Add a root directory in Settings, then Rescan."
+                                       IsVisible="{Binding NoScripts}" IsHitTestVisible="False"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       TextAlignment="Center" TextWrapping="Wrap" MaxWidth="260"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                        </Grid>
                     </DockPanel>
                 </Border>
 
@@ -98,22 +130,34 @@
                                 <Button Content="Dismiss" Classes="tool" Command="{Binding DismissEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
                             </StackPanel>
                         </DockPanel>
-                        <ListBox x:Name="RecentList" ItemsSource="{Binding Recent}"
-                                 SelectedItem="{Binding SelectedDockEntry, Mode=TwoWay}"
-                                 DoubleTapped="OnRecentDoubleTapped" KeyDown="OnRecentKeyDown">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="vm:DockEntry">
-                                    <DockPanel>
-                                        <TextBlock Text="{Binding StateText}" DockPanel.Dock="Right" Margin="8,0,0,0"
-                                                   VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock Text="{Binding LastRanDisplay}" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
-                                        </StackPanel>
-                                    </DockPanel>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                        <Grid>
+                            <ListBox x:Name="RecentList" ItemsSource="{Binding Recent}"
+                                     SelectedItem="{Binding SelectedDockEntry, Mode=TwoWay}"
+                                     DoubleTapped="OnRecentDoubleTapped" KeyDown="OnRecentKeyDown">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:DockEntry">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding LastRanDisplay}" FontSize="11"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                                            </StackPanel>
+                                            <!-- State pill: colour distinguishes running / done / failed / idle at a glance. -->
+                                            <Border Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0"
+                                                    Background="{Binding StatePillBrush}" CornerRadius="10" Padding="9,2">
+                                                <TextBlock Text="{Binding StatePillText}" FontSize="11" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource AppBackgroundBrush}"/>
+                                            </Border>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <TextBlock Text="No recent runs. Double-click a script to run it."
+                                       IsVisible="{Binding NoRecent}" IsHitTestVisible="False"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       TextAlignment="Center" TextWrapping="Wrap" MaxWidth="240"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                        </Grid>
                     </DockPanel>
                 </Border>
             </Grid>
@@ -123,11 +167,13 @@
             <!-- Console: the selected Recent item's output (auto-scrolls when pinned to the bottom). -->
             <Border Grid.Row="2" Classes="card">
                 <DockPanel>
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="0,0,0,6">
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                        <!-- Command name floats to the top-right of the output field. -->
+                        <TextBlock Text="{Binding SelectedDockEntry.DisplayName}" DockPanel.Dock="Right"
+                                   Classes="cardHeader" Foreground="{StaticResource TextSecondaryBrush}"
+                                   TextTrimming="CharacterEllipsis" Margin="8,0,0,0"/>
                         <TextBlock Text="Output" Classes="cardHeader"/>
-                        <TextBlock Text="{Binding SelectedDockEntry.DisplayName}" Classes="cardHeader"
-                                   Foreground="{StaticResource TextSecondaryBrush}"/>
-                    </StackPanel>
+                    </DockPanel>
                     <ScrollViewer x:Name="ConsoleScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
                         <SelectableTextBlock Text="{Binding SelectedOutput}" TextWrapping="NoWrap"
                                              FontFamily="Menlo,Consolas,monospace" FontSize="12"/>
