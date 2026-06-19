@@ -35,6 +35,10 @@ public sealed class ScriptProcess
     /// <summary>Path of the file the child shell writes stdout+stderr to; null if the run never started.</summary>
     public string? LogFilePath { get; internal set; }
 
+    /// <summary>Whether this run accepts stdin input from the app. True only for runs this session
+    /// started (which own a redirected stdin pipe); a recaptured run has no input channel.</summary>
+    public bool AcceptsInput { get; internal set; }
+
     /// <summary>OS process id while running, or null if it never started or is already gone.
     /// Persisted with <see cref="OsStartedAt"/> so a relaunch can recapture this exact run.</summary>
     public int? Pid
@@ -71,6 +75,28 @@ public sealed class ScriptProcess
             return [_failureMessage];
 
         return LogFilePath is null ? Array.Empty<string>() : RunLog.ReadTail(LogFilePath);
+    }
+
+    /// <summary>Sends a line to the running script's stdin. No-op unless this run accepts input
+    /// (see <see cref="AcceptsInput"/>) and is still alive. Never throws.</summary>
+    public void SendInput(string line)
+    {
+        var process = Process;
+        if (process is null || !AcceptsInput)
+            return;
+
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.StandardInput.WriteLine(line);
+                process.StandardInput.Flush();
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("run: send input failed", ex, new { id = Id });
+        }
     }
 
     /// <summary>Blocks until the process exits or the timeout elapses; returns whether it

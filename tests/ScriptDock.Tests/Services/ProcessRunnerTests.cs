@@ -64,6 +64,27 @@ public sealed class ProcessRunnerTests : IDisposable
     }
 
     [MacOnlyFact]
+    public void Start_AcceptsStdinInput_AndScriptReadsIt()
+    {
+        var script = WriteExecutableScript("echoer.command", "read line\necho \"got:$line\"\nexit 0\n");
+        var runner = new ProcessRunner(_runsDir);
+
+        var handle = runner.Start(script);
+        try
+        {
+            Assert.True(handle.AcceptsInput);
+            handle.SendInput("hello-stdin");
+
+            Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+            Assert.Contains(handle.ReadOutput(), line => line.Contains("got:hello-stdin"));
+        }
+        finally
+        {
+            runner.Terminate(handle);
+        }
+    }
+
+    [MacOnlyFact]
     public void Terminate_StopsALongRunningScript()
     {
         var script = WriteExecutableScript("sleeper.command", "echo started\nsleep 60\n");

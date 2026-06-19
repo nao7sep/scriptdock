@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private MainWindowViewModel? ViewModel => DataContext as MainWindowViewModel;
     private IReadOnlyList<ShortcutItem> _shortcuts = [];
     private bool _consolePinnedToBottom = true;
+    private bool _scrollConsolePending = true; // follow the console on the next layout after output/selection changes
 
     public MainWindow()
     {
@@ -28,6 +29,7 @@ public partial class MainWindow : Window
         Loaded += OnLoaded;
         Closing += OnClosing;
         ConsoleScroll.ScrollChanged += OnConsoleScrollChanged;
+        ConsoleScroll.LayoutUpdated += OnConsoleLayoutUpdated;
     }
 
     private async void OnLoaded(object? sender, RoutedEventArgs e)
@@ -86,22 +88,38 @@ public partial class MainWindow : Window
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(MainWindowViewModel.SelectedDockEntry))
+        {
             _consolePinnedToBottom = true; // a freshly-selected run starts pinned to its latest line
-        else if (e.PropertyName == nameof(MainWindowViewModel.SelectedOutput))
-            Dispatcher.UIThread.Post(ScrollConsoleIfPinned);
+            _scrollConsolePending = true;
+        }
+        else if (e.PropertyName == nameof(MainWindowViewModel.SelectedOutput) && _consolePinnedToBottom)
+        {
+            _scrollConsolePending = true; // follow new output — but only after it has been laid out
+        }
     }
 
     private void OnConsoleScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
+        // Only a genuine user scroll flips the pinned state — an offset change while the extent is
+        // unchanged. Content growth (ExtentDelta != 0) is new output arriving, not the user, and
+        // following it is handled in OnConsoleLayoutUpdated — so growth must never unpin.
+        if (e.ExtentDelta.Y != 0)
+            return;
+
         var distanceFromBottom = ConsoleScroll.Extent.Height - ConsoleScroll.Viewport.Height - ConsoleScroll.Offset.Y;
         _consolePinnedToBottom = distanceFromBottom <= ConsolePinThreshold;
     }
 
-    private void ScrollConsoleIfPinned()
+    // Runs after each layout pass, so the console's Extent reflects the latest output by now. A
+    // pending follow then scrolls to the true bottom — fixing the race where the scroll ran before
+    // the new content had grown the extent, leaving the view stuck at the top (notably while the log
+    // was still shorter than the field).
+    private void OnConsoleLayoutUpdated(object? sender, EventArgs e)
     {
-        if (!_consolePinnedToBottom)
+        if (!_scrollConsolePending || !_consolePinnedToBottom)
             return;
 
+        _scrollConsolePending = false;
         var maxY = Math.Max(0, ConsoleScroll.Extent.Height - ConsoleScroll.Viewport.Height);
         ConsoleScroll.Offset = new Vector(ConsoleScroll.Offset.X, maxY);
     }
@@ -205,13 +223,29 @@ public partial class MainWindow : Window
 
     private void OnRecentKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Delete && sender is ListBox { SelectedItem: DockEntry item })
+        // Delete and Backspace (with or without Cmd/Ctrl) all remove the selected entry.
+        if (e.Key is Key.Delete or Key.Back && sender is ListBox { SelectedItem: DockEntry item })
         {
             e.Handled = true;
             if (item.IsRunning)
                 ViewModel?.StopEntryCommand.Execute(item);
             else
                 ViewModel?.DismissEntryCommand.Execute(item);
+        }
+    }
+
+    // Send the typed line to the selected running script's stdin on Enter. IME guard: only a real
+    // Enter (never the IME's Key.ImeProcessed) sends, per the text-input-ime-conventions.
+    private void OnConsoleInputKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+            return;
+
+        e.Handled = true;
+        if (sender is TextBox box)
+        {
+            ViewModel?.SendInput(box.Text ?? string.Empty);
+            box.Text = string.Empty;
         }
     }
 }

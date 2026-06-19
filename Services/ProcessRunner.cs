@@ -10,9 +10,9 @@ namespace ScriptDock.Services;
 
 /// <summary>
 /// Owns the scripts ScriptDock launches as child processes. Each run goes through a login
-/// shell that writes the script's output to a per-run log file and reads stdin from
-/// <c>/dev/null</c> — so ScriptDock holds no pipe to the child, and its own crash leaves the
-/// child no broken pipe to die on. Termination kills the whole process tree (npm/dotnet
+/// shell that writes the script's output to a per-run log file (so ScriptDock holds no pipe to
+/// the child's output — its own crash can't break the child's writes); the child's stdin is a
+/// pipe ScriptDock owns for interactive input, and a crash merely EOFs it. Termination kills the whole process tree (npm/dotnet
 /// spawn children) so restart is reliable and ports are freed. The running set is persisted by
 /// the view model (PID + OS start-time) so a relaunch can <see cref="Recapture"/> still-running
 /// children; whether quitting kills them is configurable (default: leave them running).
@@ -56,8 +56,10 @@ public sealed class ProcessRunner
                 WorkingDirectory = Path.GetDirectoryName(scriptPath) ?? string.Empty,
                 UseShellExecute = false,
                 CreateNoWindow = true,
-                // No stdout/stderr/stdin redirection: the child shell sends output to the run
-                // log and reads stdin from /dev/null, so we hold no pipe that a crash could break.
+                // stdout/stderr are NOT redirected — the child shell writes them to the run log, so a
+                // crash can't break the child's output. stdin IS redirected so the user can type into an
+                // interactive script; a crash merely EOFs it, which the child handles like a closed terminal.
+                RedirectStandardInput = true,
             };
             foreach (var arg in command.Arguments)
                 startInfo.ArgumentList.Add(arg);
@@ -67,6 +69,7 @@ public sealed class ProcessRunner
             handle.Process = process;
 
             process.Start();
+            handle.AcceptsInput = true; // we own this run's stdin pipe (a recaptured run does not)
             Log.Info("run: started", new { id, script = scriptPath, log = logPath });
         }
         catch (Exception ex)

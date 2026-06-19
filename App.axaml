@@ -15,11 +15,11 @@
              source of truth for the app's colours: code that cannot reach a StaticResource (the
              script-tile colour converter and the code-built dialogs) resolves these by key via
              ScriptDock.Palette, so nothing duplicates a hex value. -->
-        <Color x:Key="AppBackground">#15171C</Color>
-        <Color x:Key="Surface">#1E2128</Color>
-        <Color x:Key="Border">#2E323C</Color>
-        <Color x:Key="TextPrimary">#E4E7EC</Color>
-        <Color x:Key="TextSecondary">#98A2B3</Color>
+        <Color x:Key="AppBackground">#181818</Color>
+        <Color x:Key="Surface">#222222</Color>
+        <Color x:Key="Border">#353535</Color>
+        <Color x:Key="TextPrimary">#E6E6E6</Color>
+        <Color x:Key="TextSecondary">#9E9E9E</Color>
 
         <!-- Accent/Danger drive filled buttons (white text on top), so they stay deep enough to
              keep that text legible and lighten on hover. -->
@@ -31,14 +31,15 @@
         <!-- State colours. DangerText is danger red as *text* on a dark surface (validation
              errors, removed scripts) — lighter than the danger button fill for legibility.
              ScriptNew is the orange dot flagging a newly-found script — an accent, not a
-             background tint (a warm fill reads as mud on this cool blue palette); ScriptHidden
+             background tint (a warm fill reads as mud on this neutral dark palette); ScriptHidden
              dims hidden scripts; Running is the green run indicator. -->
         <Color x:Key="DangerText">#F87171</Color>
         <Color x:Key="ScriptNew">#FB923C</Color>
         <Color x:Key="ScriptHidden">#667085</Color>
         <Color x:Key="Running">#22C55E</Color>
-        <!-- Script chips sit on the card surface; a touch lighter so they read as chips without a hard border. -->
-        <Color x:Key="ChipBackground">#262A33</Color>
+        <!-- Script chips sit on the card surface as recessed wells — a neutral charcoal darker than the
+             surface so they read as chips without a hard border. Neutral (R=G=B): no blue or warm cast. -->
+        <Color x:Key="ChipBackground">#1A1A1A</Color>
 
         <SolidColorBrush x:Key="AppBackgroundBrush" Color="{StaticResource AppBackground}"/>
         <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource Surface}"/>
@@ -113,6 +114,13 @@
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="8"/>
             <Setter Property="Padding" Value="10"/>
+        </Style>
+        <!-- A card's header strip: the title/toolbar row set off from the content by a single bottom
+             border line. Used by a card with Padding=0 so the line spans the full width. -->
+        <Style Selector="Border.sectionHeader">
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="Padding" Value="10,7"/>
         </Style>
         <Style Selector="TextBlock.cardHeader">
             <Setter Property="FontWeight" Value="SemiBold"/>

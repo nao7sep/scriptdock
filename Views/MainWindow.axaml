@@ -85,22 +85,24 @@
             <Grid x:Name="ListsGrid" Grid.Row="0" ColumnDefinitions="*,6,340">
 
                 <!-- Scripts (content-sized tiles); Rescan + Show-hidden act on this list. -->
-                <Border Grid.Column="0" Classes="card">
+                <Border Grid.Column="0" Classes="card" Padding="0">
                     <DockPanel>
-                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
-                            <TextBlock Text="Scripts" Classes="cardHeader" VerticalAlignment="Center"/>
-                            <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                <!-- Selection actions (act on the selected chip). -->
-                                <Button Content="Run" Classes="tool" Command="{Binding RunScriptCommand}" CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
-                                <Button Content="Hide" Classes="tool" Command="{Binding ToggleHiddenCommand}" CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
-                                <!-- Divider: selection actions | list-level controls. -->
-                                <Border Width="1" Height="16" Margin="4,0" VerticalAlignment="Center" Background="{StaticResource BorderBrush}"/>
-                                <!-- List-level controls (act on the whole Scripts list). -->
-                                <CheckBox Content="Show hidden" IsChecked="{Binding ShowHidden}" VerticalAlignment="Center"/>
-                                <Button Content="Rescan" Classes="tool" Command="{Binding RescanCommand}"/>
-                            </StackPanel>
-                        </DockPanel>
-                        <Grid>
+                        <Border DockPanel.Dock="Top" Classes="sectionHeader">
+                            <DockPanel>
+                                <TextBlock Text="Scripts" Classes="cardHeader" VerticalAlignment="Center"/>
+                                <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <!-- Selection actions (act on the selected chip). -->
+                                    <Button Content="Run" Classes="tool" Command="{Binding RunScriptCommand}" CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
+                                    <Button Content="Hide" Classes="tool" Command="{Binding ToggleHiddenCommand}" CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
+                                    <!-- Divider: selection actions | list-level controls. -->
+                                    <Border Width="1" Height="16" Margin="4,0" VerticalAlignment="Center" Background="{StaticResource BorderBrush}"/>
+                                    <!-- List-level controls (act on the whole Scripts list). -->
+                                    <CheckBox Content="Show hidden" IsChecked="{Binding ShowHidden}" VerticalAlignment="Center"/>
+                                    <Button Content="Rescan" Classes="tool" Command="{Binding RescanCommand}"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Grid Margin="10">
                             <ListBox x:Name="ScriptsList" ItemsSource="{Binding Scripts}"
                                      ItemTemplate="{StaticResource ScriptTile}"
                                      DoubleTapped="OnScriptDoubleTapped" KeyDown="OnScriptKeyDown">
@@ -122,17 +124,19 @@
                 <GridSplitter Grid.Column="1" Width="6" Background="Transparent" ResizeDirection="Columns"/>
 
                 <!-- Recent (running + recently-run, dismissible). -->
-                <Border Grid.Column="2" Classes="card">
+                <Border Grid.Column="2" Classes="card" Padding="0">
                     <DockPanel>
-                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
-                            <TextBlock Text="Recent" Classes="cardHeader" VerticalAlignment="Center"/>
-                            <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
-                                <Button Content="Run" Classes="tool" Command="{Binding RunOrRestartCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
-                                <Button Content="Stop" Classes="tool" Command="{Binding StopEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
-                                <Button Content="Dismiss" Classes="tool" Command="{Binding DismissEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
-                            </StackPanel>
-                        </DockPanel>
-                        <Grid>
+                        <Border DockPanel.Dock="Top" Classes="sectionHeader">
+                            <DockPanel>
+                                <TextBlock Text="Recent" Classes="cardHeader" VerticalAlignment="Center"/>
+                                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Button Content="Run" Classes="tool" Command="{Binding RunOrRestartCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
+                                    <Button Content="Stop" Classes="tool" Command="{Binding StopEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
+                                    <Button Content="Dismiss" Classes="tool" Command="{Binding DismissEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Grid Margin="10">
                             <ListBox x:Name="RecentList" ItemsSource="{Binding Recent}"
                                      SelectedItem="{Binding SelectedDockEntry, Mode=TwoWay}"
                                      DoubleTapped="OnRecentDoubleTapped" KeyDown="OnRecentKeyDown">
@@ -167,19 +171,31 @@
             <GridSplitter Grid.Row="1" Height="6" Background="Transparent" ResizeDirection="Rows" HorizontalAlignment="Stretch"/>
 
             <!-- Console: the selected Recent item's output (auto-scrolls when pinned to the bottom). -->
-            <Border Grid.Row="2" Classes="card">
+            <Border Grid.Row="2" Classes="card" Padding="0">
                 <DockPanel>
-                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
-                        <!-- Command name floats to the top-right of the output field. -->
-                        <TextBlock Text="{Binding SelectedDockEntry.DisplayName}" DockPanel.Dock="Right"
-                                   Classes="cardHeader" Foreground="{StaticResource TextSecondaryBrush}"
-                                   TextTrimming="CharacterEllipsis" Margin="8,0,0,0"/>
-                        <TextBlock Text="Output" Classes="cardHeader"/>
-                    </DockPanel>
-                    <ScrollViewer x:Name="ConsoleScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                        <SelectableTextBlock Text="{Binding SelectedOutput}" TextWrapping="NoWrap"
-                                             FontFamily="Menlo,Consolas,monospace" FontSize="12"/>
-                    </ScrollViewer>
+                    <Border DockPanel.Dock="Top" Classes="sectionHeader">
+                        <DockPanel>
+                            <!-- Command name floats to the top-right of the header. -->
+                            <TextBlock Text="{Binding SelectedDockEntry.DisplayName}" DockPanel.Dock="Right"
+                                       Classes="cardHeader" Foreground="{StaticResource TextSecondaryBrush}"
+                                       TextTrimming="CharacterEllipsis" Margin="8,0,0,0"/>
+                            <TextBlock Text="Output" Classes="cardHeader"/>
+                        </DockPanel>
+                    </Border>
+                    <!-- Interactive input: a line typed here is sent to the selected running script's stdin
+                         on Enter. Enabled only while that run is running and accepts input. -->
+                    <TextBox x:Name="ConsoleInput" DockPanel.Dock="Bottom" Margin="10,0,10,10"
+                             IsEnabled="{Binding CanSendInput}"
+                             PlaceholderText="Type input and press Enter to send to the running script…"
+                             KeyDown="OnConsoleInputKeyDown"/>
+                    <!-- Recessed terminal-like field so the log reads as its own surface, not part of the header. -->
+                    <Border Margin="10" Background="{StaticResource AppBackgroundBrush}"
+                            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="8">
+                        <ScrollViewer x:Name="ConsoleScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                            <SelectableTextBlock Text="{Binding SelectedOutput}" TextWrapping="NoWrap"
+                                                 FontFamily="Menlo,Consolas,monospace" FontSize="12"/>
+                        </ScrollViewer>
+                    </Border>
                 </DockPanel>
             </Border>
         </Grid>

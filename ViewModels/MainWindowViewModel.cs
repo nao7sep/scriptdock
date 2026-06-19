@@ -74,6 +74,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public bool NoScripts => Scripts.Count == 0;
     public bool NoRecent => Recent.Count == 0;
 
+    /// <summary>Whether the console input field can send: the selected run is running and accepts input
+    /// (a recaptured run does not). Re-evaluated whenever the selected entry changes.</summary>
+    public bool CanSendInput => SelectedDockEntry?.Process is { State: RunState.Running, AcceptsInput: true };
+
     /// <summary>Starts the console poll, builds the Recent list, and runs the first scan.</summary>
     public async Task InitializeAsync()
     {
@@ -157,6 +161,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _config.RecaptureProcessesOnLaunch = draft.RecaptureProcessesOnLaunch;
         _configStore.Save(_config);
         Status = "Configuration changed — Rescan to apply.";
+    });
+
+    /// <summary>Sends a line to the selected running script's stdin (from the console input field).</summary>
+    public void SendInput(string text) => Guard("send input", () =>
+    {
+        SelectedDockEntry?.Process?.SendInput(text);
     });
 
     [RelayCommand]
@@ -260,7 +270,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         RebuildScripts();
     });
 
-    partial void OnSelectedDockEntryChanged(DockEntry? value) => RefreshOutput();
+    partial void OnSelectedDockEntryChanged(DockEntry? value)
+    {
+        OnPropertyChanged(nameof(CanSendInput));
+        RefreshOutput();
+    }
 
     private void RunByPath(string path)
     {
