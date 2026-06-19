@@ -15,31 +15,40 @@
              source of truth for the app's colours: code that cannot reach a StaticResource (the
              script-tile colour converter and the code-built dialogs) resolves these by key via
              ScriptDock.Palette, so nothing duplicates a hex value. -->
-        <Color x:Key="AppBackground">#181818</Color>
-        <Color x:Key="Surface">#222222</Color>
-        <Color x:Key="Border">#353535</Color>
-        <Color x:Key="TextPrimary">#E6E6E6</Color>
-        <Color x:Key="TextSecondary">#9E9E9E</Color>
+        <Color x:Key="AppBackground">#0F181D</Color>
+        <Color x:Key="Surface">#16252B</Color>
+        <Color x:Key="Border">#2B414A</Color>
+        <Color x:Key="TextPrimary">#E8F2F4</Color>
+        <Color x:Key="TextSecondary">#93A9B0</Color>
 
-        <!-- Accent/Danger drive filled buttons (white text on top), so they stay deep enough to
-             keep that text legible and lighten on hover. -->
-        <Color x:Key="Accent">#2563EB</Color>
-        <Color x:Key="AccentHover">#3B82F6</Color>
-        <Color x:Key="Danger">#DC2626</Color>
-        <Color x:Key="DangerHover">#EF4444</Color>
+        <!-- Electric console: cyan actions use dark ink; danger remains a separate semantic red. -->
+        <Color x:Key="Accent">#22D3EE</Color>
+        <Color x:Key="AccentHover">#67E8F9</Color>
+        <Color x:Key="AccentForeground">#062126</Color>
+        <Color x:Key="AccentDisabled">#174650</Color>
+        <Color x:Key="AccentForegroundDisabled">#B4C4C8</Color>
+        <Color x:Key="Danger">#BE3455</Color>
+        <Color x:Key="DangerHover">#C83A58</Color>
 
         <!-- State colours. DangerText is danger red as *text* on a dark surface (validation
              errors, removed scripts) — lighter than the danger button fill for legibility.
              ScriptNew is the orange dot flagging a newly-found script — an accent, not a
-             background tint (a warm fill reads as mud on this neutral dark palette); ScriptHidden
+             background tint; ScriptHidden
              dims hidden scripts; Running is the green run indicator. -->
-        <Color x:Key="DangerText">#F87171</Color>
+        <Color x:Key="DangerText">#FB7185</Color>
         <Color x:Key="ScriptNew">#FB923C</Color>
-        <Color x:Key="ScriptHidden">#667085</Color>
-        <Color x:Key="Running">#22C55E</Color>
-        <!-- Script chips sit on the card surface as recessed wells — a neutral charcoal darker than the
-             surface so they read as chips without a hard border. Neutral (R=G=B): no blue or warm cast. -->
-        <Color x:Key="ChipBackground">#1A1A1A</Color>
+        <Color x:Key="ScriptHidden">#718991</Color>
+        <Color x:Key="Running">#4ADE80</Color>
+        <Color x:Key="ContentWell">#081216</Color>
+        <Color x:Key="Selection">#153843</Color>
+        <Color x:Key="SelectionHover">#1B4653</Color>
+        <Color x:Key="SelectionSecondary">#B4C4C8</Color>
+        <Color x:Key="ChipBackground">#14242B</Color>
+        <Color x:Key="ChipHover">#1B3139</Color>
+        <Color x:Key="ChipSelected">#193640</Color>
+        <Color x:Key="DisabledInput">#081115</Color>
+        <Color x:Key="DisabledInputBorder">#182A31</Color>
+        <Color x:Key="DisabledText">#5F747B</Color>
 
         <SolidColorBrush x:Key="AppBackgroundBrush" Color="{StaticResource AppBackground}"/>
         <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource Surface}"/>
@@ -49,6 +58,9 @@
 
         <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource Accent}"/>
         <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHover}"/>
+        <SolidColorBrush x:Key="AccentForegroundBrush" Color="{StaticResource AccentForeground}"/>
+        <SolidColorBrush x:Key="AccentDisabledBrush" Color="{StaticResource AccentDisabled}"/>
+        <SolidColorBrush x:Key="AccentForegroundDisabledBrush" Color="{StaticResource AccentForegroundDisabled}"/>
         <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource Danger}"/>
         <SolidColorBrush x:Key="DangerHoverBrush" Color="{StaticResource DangerHover}"/>
 
@@ -56,13 +68,29 @@
         <SolidColorBrush x:Key="ScriptNewBrush" Color="{StaticResource ScriptNew}"/>
         <SolidColorBrush x:Key="ScriptHiddenBrush" Color="{StaticResource ScriptHidden}"/>
         <SolidColorBrush x:Key="RunningBrush" Color="{StaticResource Running}"/>
+        <SolidColorBrush x:Key="ContentWellBrush" Color="{StaticResource ContentWell}"/>
+        <SolidColorBrush x:Key="SelectionBrush" Color="{StaticResource Selection}"/>
+        <SolidColorBrush x:Key="SelectionHoverBrush" Color="{StaticResource SelectionHover}"/>
+        <SolidColorBrush x:Key="SelectionSecondaryBrush" Color="{StaticResource SelectionSecondary}"/>
         <SolidColorBrush x:Key="ChipBackgroundBrush" Color="{StaticResource ChipBackground}"/>
+        <SolidColorBrush x:Key="ChipHoverBrush" Color="{StaticResource ChipHover}"/>
+        <SolidColorBrush x:Key="ChipSelectedBrush" Color="{StaticResource ChipSelected}"/>
+        <SolidColorBrush x:Key="DisabledInputBrush" Color="{StaticResource DisabledInput}"/>
+        <SolidColorBrush x:Key="DisabledInputBorderBrush" Color="{StaticResource DisabledInputBorder}"/>
+        <SolidColorBrush x:Key="DisabledTextBrush" Color="{StaticResource DisabledText}"/>
 
         <conv:ScriptItemColorConverter x:Key="ScriptColor"/>
     </Application.Resources>
 
     <Application.Styles>
-        <FluentTheme />
+        <FluentTheme>
+            <FluentTheme.Palettes>
+                <ColorPaletteResources x:Key="Dark"
+                                       Accent="{StaticResource Accent}"
+                                       RegionColor="{StaticResource AppBackground}"
+                                       ErrorText="{StaticResource Danger}"/>
+            </FluentTheme.Palettes>
+        </FluentTheme>
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml"/>
 
         <!-- Keep DataGrid cell navigation active without drawing a harsh current-cell box. -->
@@ -79,19 +107,28 @@
         <!-- Dialog accent (commit) button -->
         <Style Selector="Button.accent">
             <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentForegroundBrush}"/>
             <Setter Property="CornerRadius" Value="6"/>
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
+        <Style Selector="Button.accent /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentForegroundBrush}"/>
+        </Style>
         <Style Selector="Button.accent:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="{StaticResource AccentHoverBrush}"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentForegroundBrush}"/>
         </Style>
-        <!-- The accent commit button carries an explicit background, so dim it when disabled
-             to read as unavailable — e.g. Save before a field is changed. -->
+        <!-- Disabled commit remains readable while clearly receding from the live cyan action. -->
         <Style Selector="Button.accent:disabled">
-            <Setter Property="Opacity" Value="0.45"/>
+            <Setter Property="Opacity" Value="1"/>
+            <Setter Property="Background" Value="{StaticResource AccentDisabledBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentForegroundDisabledBrush}"/>
+        </Style>
+        <Style Selector="Button.accent:disabled /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource AccentDisabledBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentForegroundDisabledBrush}"/>
         </Style>
 
         <!-- Dialog destructive button -->
@@ -132,9 +169,33 @@
             <Setter Property="FontSize" Value="12"/>
         </Style>
 
+        <!-- Lists are recessed content wells; selected rows use a quiet cyan tint, not a solid accent. -->
+        <Style Selector="ListBox">
+            <Setter Property="Background" Value="{StaticResource ContentWellBrush}"/>
+        </Style>
+        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource ChipHoverBrush}"/>
+        </Style>
+        <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource SelectionBrush}"/>
+        </Style>
+        <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource SelectionHoverBrush}"/>
+        </Style>
+
         <!-- Consistent text-input border colour (the Fluent default reads near-black). -->
         <Style Selector="TextBox">
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        </Style>
+        <Style Selector="TextBox.stdin:disabled">
+            <Setter Property="Background" Value="{StaticResource DisabledInputBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource DisabledTextBrush}"/>
+            <Setter Property="PlaceholderForeground" Value="{StaticResource DisabledTextBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource DisabledInputBorderBrush}"/>
+        </Style>
+        <Style Selector="TextBox.stdin:disabled /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="{StaticResource DisabledInputBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource DisabledInputBorderBrush}"/>
         </Style>
     </Application.Styles>
 </Application>

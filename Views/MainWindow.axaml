@@ -11,8 +11,8 @@
         Background="{StaticResource AppBackgroundBrush}">
 
     <Window.Resources>
-        <!-- Content-sized script chip: a single neutral fill for every state. A newly-found script is
-             flagged by an orange dot (an accent — a warm background tint reads as mud on this blue palette);
+        <!-- Content-sized script chip: slightly raised from the dark list well. A newly-found script is
+             flagged by an orange dot;
              removed → red text, hidden → gray text; green dot when running. The 1px border is transparent
              by default (the selected-chip style colours it, so selection never shifts the layout). -->
         <DataTemplate x:Key="ScriptTile" x:DataType="models:ScriptItem">
@@ -31,6 +31,11 @@
     </Window.Resources>
 
     <Window.Styles>
+        <!-- A 3px list inset plus each chip's 3px margin makes the outer inset and the
+             6px gaps between neighbouring chips visually equal. -->
+        <Style Selector="ListBox#ScriptsList">
+            <Setter Property="Padding" Value="3"/>
+        </Style>
         <!-- Scripts list renders content-sized chips in a WrapPanel: strip the Fluent item
              chrome (large default padding and min height) so the tiles pack tightly and each
              tile's own padding and margin control the look. -->
@@ -40,9 +45,24 @@
             <Setter Property="MinHeight" Value="0"/>
             <Setter Property="CornerRadius" Value="6"/>
         </Style>
+        <!-- The chip owns hover/selection emphasis through its reserved 1px border. Do not let the
+             ListBoxItem background show through the chip's 3px margin as a thicker outer ring. -->
+        <Style Selector="ListBox#ScriptsList ListBoxItem:pointerover /template/ ContentPresenter,
+                         ListBox#ScriptsList ListBoxItem:selected /template/ ContentPresenter,
+                         ListBox#ScriptsList ListBoxItem:selected:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="ListBox#ScriptsList ListBoxItem:pointerover Border.chip">
+            <Setter Property="Background" Value="{StaticResource ChipHoverBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        </Style>
         <!-- Selected chip gets an accent ring (the chip reserves a transparent 1px border for this). -->
         <Style Selector="ListBox#ScriptsList ListBoxItem:selected Border.chip">
+            <Setter Property="Background" Value="{StaticResource ChipSelectedBrush}"/>
             <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+        </Style>
+        <Style Selector="ListBox#RecentList ListBoxItem:selected TextBlock.recentMeta">
+            <Setter Property="Foreground" Value="{StaticResource SelectionSecondaryBrush}"/>
         </Style>
     </Window.Styles>
 
@@ -145,7 +165,7 @@
                                         <Grid ColumnDefinitions="*,Auto">
                                             <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"/>
-                                                <TextBlock Text="{Binding LastRanDisplay}" FontSize="11"
+                                                <TextBlock Text="{Binding LastRanDisplay}" Classes="recentMeta" FontSize="11"
                                                            Foreground="{StaticResource TextSecondaryBrush}"/>
                                             </StackPanel>
                                             <!-- State pill: colour distinguishes running / done / failed / idle at a glance. -->
@@ -184,12 +204,12 @@
                     </Border>
                     <!-- Interactive input: a line typed here is sent to the selected running script's stdin
                          on Enter. Enabled only while that run is running and accepts input. -->
-                    <TextBox x:Name="ConsoleInput" DockPanel.Dock="Bottom" Margin="10,0,10,10"
+                    <TextBox x:Name="ConsoleInput" Classes="stdin" DockPanel.Dock="Bottom" Margin="10,0,10,10"
                              IsEnabled="{Binding CanSendInput}"
                              PlaceholderText="Type input and press Enter to send to the running script…"
                              KeyDown="OnConsoleInputKeyDown"/>
                     <!-- Recessed terminal-like field so the log reads as its own surface, not part of the header. -->
-                    <Border Margin="10" Background="{StaticResource AppBackgroundBrush}"
+                    <Border Margin="10" Background="{StaticResource ContentWellBrush}"
                             BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="8">
                         <ScrollViewer x:Name="ConsoleScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
                             <SelectableTextBlock Text="{Binding SelectedOutput}" TextWrapping="NoWrap"
