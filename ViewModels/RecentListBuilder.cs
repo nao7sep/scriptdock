@@ -10,7 +10,9 @@ namespace ScriptDock.ViewModels;
 /// Merges the persisted recently-run list with the live process list into the Recent list —
 /// one <see cref="RecentEntry"/> per script path, newest first. A path's live process (a running
 /// one preferred, else the newest) is attached so the entry shows running state and output; a
-/// recent with no live process shows idle. Display names come from the caller-supplied label
+/// recent with no live process shows idle. A live run whose path is <em>not</em> in the recent
+/// list (e.g. a recaptured process whose recent entry was evicted) is still surfaced, so a running
+/// script is never invisible or uncontrollable. Display names come from the caller-supplied label
 /// map so a script reads the same here and in the Scripts list. Pure — no I/O, no UI.
 /// </summary>
 public static class RecentListBuilder
@@ -28,11 +30,22 @@ public static class RecentListBuilder
                 StringComparer.Ordinal);
 
         var entries = new List<RecentEntry>(recents.Count);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var run in recents) // RecentRuns keeps this newest-first
         {
+            seen.Add(run.Path);
             byPath.TryGetValue(run.Path, out var process);
-            var name = labels.TryGetValue(run.Path, out var label) ? label : System.IO.Path.GetFileName(run.Path);
-            entries.Add(new RecentEntry(run.Path, name, run.RanAt, process));
+            entries.Add(new RecentEntry(run.Path, ScriptLabels.LabelFor(labels, run.Path), run.RanAt, process));
+        }
+
+        // Append any live process the recent list didn't account for, newest run first, so a
+        // recaptured (or otherwise un-listed) running script is still shown and controllable.
+        foreach (var process in byPath.Values
+                     .Where(p => !seen.Contains(p.ScriptPath))
+                     .OrderByDescending(p => p.StartedAt))
+        {
+            entries.Add(new RecentEntry(
+                process.ScriptPath, ScriptLabels.LabelFor(labels, process.ScriptPath), process.StartedAt, process));
         }
 
         return entries;

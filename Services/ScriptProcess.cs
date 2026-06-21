@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using ScriptDock.Models;
 
 namespace ScriptDock.Services;
@@ -11,10 +12,10 @@ namespace ScriptDock.Services;
 /// One launched script as ScriptDock owns it: its state, exit code, and the path to the
 /// run-log file the child writes (read on demand for the console — ScriptDock holds no pipe
 /// to the child). Created and driven by <see cref="ProcessRunner"/>; exposed to the UI as a
-/// bindable handle. Exit is finalised exactly once, whether via the process's Exited event
-/// or an explicit <see cref="WaitForExit"/>.
+/// bindable handle. Exit is finalised exactly once, whether via the process's Exited event,
+/// an explicit <see cref="WaitForExit"/>, or <see cref="WaitForExitAsync"/>.
 /// </summary>
-public sealed class ScriptProcess
+public sealed class ScriptProcess : IDisposable
 {
     private int _finalized;
     private bool _terminating;
@@ -123,7 +124,8 @@ public sealed class ScriptProcess
     }
 
     /// <summary>Blocks until the process exits or the timeout elapses; returns whether it
-    /// exited. On exit, the state is finalised.</summary>
+    /// exited. On exit, the state is finalised. For UI-thread callers prefer
+    /// <see cref="WaitForExitAsync"/>, which does not block.</summary>
     public bool WaitForExit(TimeSpan timeout)
     {
         var process = Process;
@@ -132,6 +134,29 @@ public sealed class ScriptProcess
 
         if (!process.WaitForExit((int)timeout.TotalMilliseconds))
             return false;
+
+        Complete();
+        return true;
+    }
+
+    /// <summary>Asynchronously waits until the process exits or the timeout elapses; returns whether
+    /// it exited. On exit, the state is finalised. Never blocks the calling thread, so the restart
+    /// path stays off the UI thread even when a process tree is slow to die.</summary>
+    public async Task<bool> WaitForExitAsync(TimeSpan timeout)
+    {
+        var process = Process;
+        if (process is null)
+            return true;
+
+        using var cts = new CancellationTokenSource(timeout);
+        try
+        {
+            await process.WaitForExitAsync(cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return false; // still alive when the grace elapsed
+        }
 
         Complete();
         return true;
@@ -152,8 +177,13 @@ public sealed class ScriptProcess
 
     internal void Fail(string message)
     {
+        // Honour the once-only finalisation latch, exactly as Complete does: a run is finalised
+        // once, so a Fail after the process has already Exited (or vice versa) cannot overwrite the
+        // real terminal state or re-raise StateChanged.
+        if (Interlocked.Exchange(ref _finalized, 1) == 1)
+            return;
+
         _failureMessage = message;
-        Interlocked.Exchange(ref _finalized, 1);
         SetState(RunState.Failed);
     }
 
@@ -162,4 +192,10 @@ public sealed class ScriptProcess
         State = state;
         StateChanged?.Invoke(this, EventArgs.Empty);
     }
+
+    /// <summary>Releases the underlying OS process handle and its redirected stdin pipe. Called when
+    /// the run leaves ScriptDock's active set (dismiss/restart). The cached <see cref="State"/> and
+    /// <see cref="ExitCode"/> and the on-disk run log remain valid afterwards, so a finished run that
+    /// is still shown reads correctly; disposing does not terminate the OS process.</summary>
+    public void Dispose() => Process?.Dispose();
 }

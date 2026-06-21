@@ -16,10 +16,12 @@ internal enum LogRevealTargetKind
 internal readonly record struct LogRevealTarget(string Path, LogRevealTargetKind Kind);
 
 /// <summary>
-/// Best-effort "show me the log" helper. Locates the most recently written
-/// per-launch log file under <see cref="StorageRoot.LogsDirectory"/> and reveals it
-/// in the host platform's file manager (Finder on macOS, Explorer on Windows).
-/// Falls back to opening the logs directory if no log file is present.
+/// Best-effort "show me the log" helper. Reveals this session's log file under
+/// <see cref="StorageRoot.LogsDirectory"/> in the host platform's file manager (Finder on macOS,
+/// Explorer on Windows). The logs directory also holds scan reports (<c>scan-*.log</c>) and the
+/// per-run output logs, so it targets the known session-log path rather than the newest file;
+/// when that path is unavailable (logging fell back to the console) it reveals the newest log, and
+/// failing that opens the directory.
 /// </summary>
 public static class LogReveal
 {
@@ -27,7 +29,7 @@ public static class LogReveal
     {
         try
         {
-            var target = SelectTarget(StorageRoot.LogsDirectory, Log.Flush);
+            var target = SelectTarget(StorageRoot.LogsDirectory, Log.SessionLogPath, Log.Flush);
             if (target.Kind == LogRevealTargetKind.File)
                 RevealInFileManager(target.Path);
             else
@@ -39,10 +41,15 @@ public static class LogReveal
         }
     }
 
-    internal static LogRevealTarget SelectTarget(string logsDirectory, Action flush)
+    internal static LogRevealTarget SelectTarget(string logsDirectory, string? sessionLogPath, Action flush)
     {
         flush();
         Directory.CreateDirectory(logsDirectory);
+
+        // Prefer this session's actual log file; it is the one the user means by "the log", and the
+        // newest-file heuristic would otherwise surface a scan report written after it.
+        if (sessionLogPath is not null && File.Exists(sessionLogPath))
+            return new LogRevealTarget(sessionLogPath, LogRevealTargetKind.File);
 
         var current = TryFindMostRecentLog(logsDirectory);
         return current is not null

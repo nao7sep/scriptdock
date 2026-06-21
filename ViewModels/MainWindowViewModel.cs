@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -38,6 +39,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private readonly List<ScriptProcess> _subscribed = [];
     private DispatcherTimer? _outputTimer;
+
+    // Cancels the in-flight scan when a newer scan supersedes it or the window closes, so a scan over
+    // a slow/unresponsive root can never strand IsScanning (and thus the Rescan command) forever.
+    private CancellationTokenSource? _scanCts;
 
     public ObservableCollection<ScriptItem> Scripts { get; } = [];
     public ObservableCollection<RecentEntry> Recent { get; } = [];
@@ -153,19 +158,33 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public void Shutdown() => Guard("shutdown", () =>
     {
         _outputTimer?.Stop();
+        _scanCts?.Cancel(); // don't let a slow scan keep the closing window's work alive
         _runner.ShutdownAll(_config.KillProcessesOnClose);
         PersistRunningSnapshot(); // record what is still running (or none, if killed) for next launch
     });
 
+    // The running snapshot last written to disk, as a cheap signature (pid:path per run), so a
+    // process event that doesn't actually change the running set doesn't rewrite state.json. Null
+    // until the first persist; "" means "persisted, nothing running".
+    private string? _persistedRunningSignature;
+
     // Record the live running set so a relaunch can recapture it (see ProcessRunner.Recapture).
-    // Called whenever the running set changes and on shutdown.
+    // Called whenever the running set may have changed and on shutdown — but only writes when it
+    // actually did, since this is driven by every process event (RebuildFromProcesses).
     private void PersistRunningSnapshot()
     {
-        _state.RunningProcesses = _runner.Active
+        var running = _runner.Active
             .Where(p => p.State == RunState.Running)
             .Select(ToPersisted)
             .OfType<PersistedProcess>()
             .ToList();
+
+        var signature = string.Join("|", running.Select(p => $"{p.Pid}:{p.ScriptPath}"));
+        if (signature == _persistedRunningSignature)
+            return;
+
+        _persistedRunningSignature = signature;
+        _state.RunningProcesses = running;
         _stateStore.Save(_state);
     }
 
@@ -206,8 +225,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private async Task RescanAsync()
     {
-        if (IsScanning)
-            return;
+        // Supersede any in-flight scan rather than refusing to start: a previous scan stuck on a
+        // slow/unresponsive root must not disable Rescan forever. The latest scan owns IsScanning.
+        _scanCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _scanCts = cts;
 
         IsScanning = true;
         SetStatus("Scanning…", StatusKind.Busy);
@@ -217,7 +239,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             var extensions = _config.Extensions.ToList();
             var patterns = _config.IgnorePatterns.ToList();
 
-            var report = await Task.Run(() => _scanner.Scan(roots, extensions, patterns));
+            var report = await Task.Run(() => _scanner.Scan(roots, extensions, patterns, cts.Token), cts.Token);
+            cts.Token.ThrowIfCancellationRequested(); // a newer scan superseded us between completion and here
             ScanReportLog.Write(report);
 
             var diff = ScanDiff.Compute(report.Found, _state.KnownPaths);
@@ -232,6 +255,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
             SetStatus(ScanResultMessage(diff));
         }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer scan (or cancelled on shutdown); that scan owns the status now.
+        }
         catch (Exception ex)
         {
             Log.Error("ui: rescan failed", ex);
@@ -239,7 +266,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
         finally
         {
-            IsScanning = false;
+            // Only the most recent scan clears IsScanning, so a superseded scan completing late can't
+            // flip the flag out from under the one now running.
+            if (ReferenceEquals(_scanCts, cts))
+            {
+                IsScanning = false;
+                _scanCts = null;
+            }
+            cts.Dispose();
         }
     }
 
@@ -345,7 +379,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             // Running an already-running script restarts it — that kills the live run, so confirm.
             if (!await ConfirmAsync("Restart Script", $"“{displayName}” is already running. Restart it?", "Restart"))
                 return;
-            _runner.Restart(running);
+            await _runner.RestartAsync(running);
         }
         else
         {
@@ -401,6 +435,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         RefreshOutput();
     }
 
+    // Memo for the label map, keyed on the exact set of paths it was built from. The dedup result
+    // depends only on that set, so it is recomputed only when the set changes — not on every refresh,
+    // and not twice per refresh (RebuildRecent and RebuildScripts both ask within one rebuild).
+    private HashSet<string>? _labelPaths;
+    private IReadOnlyDictionary<string, string> _labels = new Dictionary<string, string>(StringComparer.Ordinal);
+
     // The shortest unambiguous label per path, over every path any list could show, so a
     // script reads identically in the Scripts tiles and the Recent list.
     private IReadOnlyDictionary<string, string> BuildLabels()
@@ -411,10 +451,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         foreach (var run in _state.RecentlyRun) paths.Add(run.Path);
         foreach (var process in _runner.Active) paths.Add(process.ScriptPath);
 
+        if (_labelPaths is not null && _labelPaths.SetEquals(paths))
+            return _labels;
+
         // ScriptLabels joins its minimal-unique segments with '/', but that '/' is not a real
         // relative path — it is a breadcrumb between dedup segments — so present it as one.
-        return ScriptLabels.Build(paths)
+        _labels = ScriptLabels.Build(paths)
             .ToDictionary(kv => kv.Key, kv => kv.Value.Replace("/", " › "), StringComparer.Ordinal);
+        _labelPaths = paths;
+        return _labels;
     }
 
     private void RebuildScripts(bool selectNeighbourIfGone = false)
@@ -467,11 +512,25 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         RefreshOutput();
     }
 
+    // The process and the exact line list last rendered into SelectedOutput. ReadOutput returns the
+    // same cached list instance while the run's log hasn't grown, so on a steady tick this lets us
+    // skip re-joining a large tail (up to 256 KB) into a string that would only be discarded as equal.
+    private ScriptProcess? _renderedOutputProcess;
+    private IReadOnlyList<string>? _renderedOutputLines;
+
     private void RefreshOutput()
     {
         try
         {
-            var lines = SelectedRecentEntry?.Process?.ReadOutput();
+            var process = SelectedRecentEntry?.Process;
+            var lines = process?.ReadOutput();
+
+            // Cache hit: same run, same (reference-identical) tail as last render — nothing to redo.
+            if (ReferenceEquals(process, _renderedOutputProcess) && ReferenceEquals(lines, _renderedOutputLines))
+                return;
+
+            _renderedOutputProcess = process;
+            _renderedOutputLines = lines;
             SelectedOutput = lines is null ? string.Empty : string.Join(Environment.NewLine, lines);
         }
         catch (Exception ex)

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -25,9 +24,8 @@ public static class RunLog
     /// <summary>A stable, filesystem-safe log path for a run.</summary>
     public static string PathFor(string directory, int id, string scriptPath, DateTimeOffset startedAt)
     {
-        var stamp = startedAt.UtcDateTime.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
         var name = Sanitize(Path.GetFileNameWithoutExtension(scriptPath));
-        return Path.Combine(directory, $"{stamp}-utc-{name}-{id}.log");
+        return Path.Combine(directory, $"{TimestampConventions.FileStamp(startedAt)}-{name}-{id}.log");
     }
 
     /// <summary>
@@ -67,8 +65,13 @@ public static class RunLog
 
             return lines;
         }
-        catch (IOException)
+        catch (Exception)
         {
+            // "Cannot be read" covers more than IOException: a permission-denied or otherwise
+            // unopenable log throws UnauthorizedAccessException/SecurityException, and a malformed
+            // path throws ArgumentException/NotSupportedException. The console poll calls this every
+            // tick, so any of these must degrade to empty here rather than escaping and flooding the
+            // log with a warn on every tick.
             return Array.Empty<string>();
         }
     }

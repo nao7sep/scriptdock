@@ -8,9 +8,16 @@ namespace ScriptDock.Services;
 /// </summary>
 public static partial class AnsiStripper
 {
-    // ESC, then either a two-character escape (ESC + one Fe byte) or a CSI sequence
-    // (ESC [ params intermediates final).
-    [GeneratedRegex("\\x1b(?:[@-Z\\-_]|\\[[0-?]*[ -/]*[@-~])")]
+    // Matches an ESC-introduced sequence, longest-specific first:
+    //   • OSC — ESC ] ... terminated by BEL (0x07) or ST (ESC \). Carries the terminal-title
+    //     (ESC]0;…BEL) and hyperlink (ESC]8;;…ST) sequences that oh-my-zsh, git, npm, ls, cargo
+    //     emit; without this branch the literal "]0;title" and control bytes leak into the console.
+    //   • CSI — ESC [ params intermediates final. Colour, cursor moves, erase.
+    //   • Any other ESC sequence — optional intermediates then a final byte: the two-character Fe
+    //     escapes (RI, NEL, …) plus charset designators (ESC ( B), keypad (ESC =/>), save/restore
+    //     cursor (ESC 7/8) and reset (ESC c).
+    // Colour is not yet rendered in-pane (a later refinement); for now every escape is removed.
+    [GeneratedRegex("\\x1b(?:\\][^\\x07\\x1b]*(?:\\x07|\\x1b\\\\)|\\[[0-?]*[ -/]*[@-~]|[ -/]*[0-~])")]
     private static partial Regex EscapeSequence();
 
     public static string Strip(string text) => EscapeSequence().Replace(text, string.Empty);

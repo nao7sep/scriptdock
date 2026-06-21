@@ -1,12 +1,10 @@
-using System.IO;
-
 namespace ScriptDock.Storage;
 
 /// <summary>
-/// Canonical file names and resolved paths for the app's own data under
-/// <c>~/.scriptdock/</c>. Keeps the store file names in one place so callers do not
-/// repeat string literals. Paths resolve against <see cref="StorageRoot.Directory"/>,
-/// so a test that sets <c>SCRIPTDOCK_HOME</c> redirects these too.
+/// Canonical file names for the app's own data under <c>~/.scriptdock/</c>, kept in one place so
+/// callers do not repeat string literals. The store composes these against
+/// <see cref="StorageRoot.Directory"/> (see <see cref="JsonStore{T}"/>), so a test that sets
+/// <c>SCRIPTDOCK_HOME</c> redirects them too.
 /// </summary>
 public static class AppPaths
 {
@@ -15,10 +13,4 @@ public static class AppPaths
 
     /// <summary>Volatile session state (see <see cref="Models.AppState"/>).</summary>
     public const string StateFileName = "state.json";
-
-    public static string ConfigFile => Path.Combine(StorageRoot.Directory, ConfigFileName);
-
-    public static string StateFile => Path.Combine(StorageRoot.Directory, StateFileName);
-
-    public static string LogsDirectory => StorageRoot.LogsDirectory;
 }

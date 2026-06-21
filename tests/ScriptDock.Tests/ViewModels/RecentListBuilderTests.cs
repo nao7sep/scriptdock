@@ -67,4 +67,31 @@ public sealed class RecentListBuilderTests
 
         Assert.Same(running, entry.Process);
     }
+
+    [Fact]
+    public void Build_SurfacesLiveProcess_AbsentFromTheRecentList()
+    {
+        // A recaptured run whose recent entry was evicted: present in active, absent from recents.
+        var orphan = Running("/recaptured");
+
+        var entries = RecentListBuilder.Build([Run("/a", 5)], [orphan], NoLabels);
+
+        // The recent entry comes first; the un-listed live run is still surfaced and controllable.
+        Assert.Equal(["/a", "/recaptured"], entries.Select(e => e.Path));
+        var surfaced = entries[1];
+        Assert.Same(orphan, surfaced.Process);
+        Assert.True(surfaced.IsRunning);
+    }
+
+    [Fact]
+    public void Build_DoesNotDuplicate_WhenLiveProcessIsAlsoInRecents()
+    {
+        var running = Running("/a");
+
+        // /a is both a recent and a live process — it must appear exactly once.
+        var entries = RecentListBuilder.Build([Run("/a", 1)], [running], NoLabels);
+
+        var entry = Assert.Single(entries);
+        Assert.Same(running, entry.Process);
+    }
 }

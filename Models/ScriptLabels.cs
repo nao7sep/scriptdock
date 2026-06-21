@@ -19,6 +19,14 @@ namespace ScriptDock.Models;
 /// </summary>
 public static class ScriptLabels
 {
+    /// <summary>
+    /// The display label for <paramref name="path"/> from a prebuilt <see cref="Build"/> map,
+    /// falling back to the bare file name when the path is absent. The one fallback rule both list
+    /// builders share, so a script absent from the map still reads identically in either list.
+    /// </summary>
+    public static string LabelFor(IReadOnlyDictionary<string, string> labels, string path) =>
+        labels.TryGetValue(path, out var name) ? name : System.IO.Path.GetFileName(path);
+
     public static IReadOnlyDictionary<string, string> Build(IEnumerable<string> paths)
     {
         var segments = paths

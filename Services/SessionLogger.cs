@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Encodings.Web;
@@ -196,7 +195,7 @@ public sealed class SessionLogger : IDisposable
     {
         var root = new JsonObject
         {
-            ["time"] = DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
+            ["time"] = TimestampConventions.IsoMillis(DateTimeOffset.UtcNow),
             ["level"] = LevelName(level),
             ["message"] = message,
         };
@@ -280,7 +279,7 @@ public sealed class SessionLogger : IDisposable
             .Replace("\"", "\\\"")
             .Replace("\n", "\\n")
             .Replace("\r", "\\r");
-        var time = DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
+        var time = TimestampConventions.IsoMillis(DateTimeOffset.UtcNow);
         return $"{{\"time\":\"{time}\",\"level\":\"{LevelName(level)}\",\"message\":\"{safeMessage}\","
              + $"\"logError\":\"{serializeError.GetType().Name}\"}}";
     }

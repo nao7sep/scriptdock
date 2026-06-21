@@ -105,20 +105,9 @@ public static class StorageRoot
                 "Set it to a usable directory, or unset it to use the default.");
         }
 
-        if (value == "~")
-        {
-            value = home;
-        }
-        else if (value.StartsWith("~/", StringComparison.Ordinal) ||
-                 value.StartsWith("~" + Path.DirectorySeparatorChar))
-        {
-            value = Path.Combine(home, value[2..]);
-        }
-
-        // A relative override is resolved against the home directory, not the working directory.
-        return Path.IsPathRooted(value)
-            ? Path.GetFullPath(value)
-            : Path.GetFullPath(Path.Combine(home, value));
+        // Expand a leading ~ and make the value absolute against the home directory (never the
+        // working directory). Shared with the scan-root editor via HomePath so both anchor identically.
+        return HomePath.AnchorToHome(value, home);
     }
 
     private static string HomeDirectory()

@@ -26,31 +26,27 @@ public static class ScriptListBuilder
     {
         var items = new List<ScriptItem>();
 
+        // Build every tile through one factory so a new ScriptItem field can't be set on the found
+        // path and forgotten on the removed one — the only difference between the two is the flag.
+        ScriptItem Tile(string path, ScriptFlag flag) => new(path)
+        {
+            DisplayName = ScriptLabels.LabelFor(labels, path),
+            IsHidden = hidden.Contains(path),
+            IsRunning = runningPaths.Contains(path),
+            Flag = flag,
+        };
+
         foreach (var path in found)
         {
-            var isHidden = hidden.Contains(path);
-            if (isHidden && !showHidden)
+            if (hidden.Contains(path) && !showHidden)
                 continue;
 
-            items.Add(new ScriptItem(path)
-            {
-                DisplayName = Label(labels, path),
-                IsHidden = isHidden,
-                IsRunning = runningPaths.Contains(path),
-                Flag = newPaths.Contains(path) ? ScriptFlag.New : ScriptFlag.None,
-            });
+            items.Add(Tile(path, newPaths.Contains(path) ? ScriptFlag.New : ScriptFlag.None));
         }
 
+        // Removed scripts are surfaced regardless of the hidden filter so a disappearance is noticed.
         foreach (var path in removed)
-        {
-            items.Add(new ScriptItem(path)
-            {
-                DisplayName = Label(labels, path),
-                IsHidden = hidden.Contains(path),
-                IsRunning = runningPaths.Contains(path),
-                Flag = ScriptFlag.Removed,
-            });
-        }
+            items.Add(Tile(path, ScriptFlag.Removed));
 
         // Sort by the absolute path, not the dedup label: the label is a minimal-unique suffix
         // that doesn't sort intuitively, whereas the path groups a repo's scripts together. The
@@ -60,7 +56,4 @@ public static class ScriptListBuilder
             .ThenBy(i => i.Path, StringComparer.Ordinal)
             .ToList();
     }
-
-    private static string Label(IReadOnlyDictionary<string, string> labels, string path) =>
-        labels.TryGetValue(path, out var name) ? name : System.IO.Path.GetFileName(path);
 }

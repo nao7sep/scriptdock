@@ -14,8 +14,6 @@ namespace ScriptDock.Storage;
 /// </summary>
 public sealed class UtcMillisDateTimeOffsetConverter : JsonConverter<DateTimeOffset>
 {
-    private const string Format = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'";
-
     public override DateTimeOffset Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         var text = reader.GetString();
@@ -30,6 +28,6 @@ public sealed class UtcMillisDateTimeOffsetConverter : JsonConverter<DateTimeOff
 
     public override void Write(Utf8JsonWriter writer, DateTimeOffset value, JsonSerializerOptions options)
     {
-        writer.WriteStringValue(value.ToUniversalTime().ToString(Format, CultureInfo.InvariantCulture));
+        writer.WriteStringValue(TimestampConventions.IsoMillis(value));
     }
 }

@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.IO;
 
 namespace ScriptDock.Services;
@@ -14,17 +13,17 @@ namespace ScriptDock.Services;
 /// </summary>
 public static class SessionLog
 {
-    private const string TimestampFormat = "yyyyMMdd-HHmmss";
-
     /// <summary>
     /// The log file name for a launch at <paramref name="timestamp"/>. The instant
-    /// is converted to UTC, so the name does not depend on the local time zone.
+    /// is converted to UTC (via the shared <see cref="TimestampConventions.FileStamp"/>),
+    /// so the name does not depend on the local time zone.
     /// </summary>
-    public static string FileName(DateTimeOffset timestamp)
-    {
-        var utc = timestamp.ToUniversalTime();
-        return utc.ToString(TimestampFormat, CultureInfo.InvariantCulture) + "-utc.log";
-    }
+    public static string FileName(DateTimeOffset timestamp) =>
+        TimestampConventions.FileStamp(timestamp) + ".log";
+
+    /// <summary>The full path of the session log for a launch instant, under <paramref name="logsDirectory"/>.</summary>
+    public static string PathFor(string logsDirectory, DateTimeOffset timestamp) =>
+        Path.Combine(logsDirectory, FileName(timestamp));
 
     /// <summary>
     /// Opens the fresh log file for a real process launch.
@@ -40,8 +39,7 @@ public static class SessionLog
     {
         Directory.CreateDirectory(logsDirectory);
 
-        var path = Path.Combine(logsDirectory, FileName(timestamp));
-        var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+        var stream = new FileStream(PathFor(logsDirectory, timestamp), FileMode.CreateNew, FileAccess.Write, FileShare.Read);
         return new StreamWriter(stream) { AutoFlush = false };
     }
 }

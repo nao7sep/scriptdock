@@ -33,11 +33,17 @@ public static class Log
     // Always non-null: a console-backed logger until Start swaps in the file-backed
     // one, and again after Shutdown, so an event is never silently dropped.
     private static volatile SessionLogger _logger = CreateConsoleLogger();
+    private static volatile string? _sessionLogPath;
     private static bool _started;
     private static bool _hooksInstalled;
 
     /// <summary>Whether developer-only <c>debug</c> events are being written.</summary>
     public static bool DebugEnabled => _logger.DebugEnabled;
+
+    /// <summary>The path of the current session's log file, or null when logging to the console
+    /// (before <see cref="Start"/>, or if the file could not be opened). Lets the UI reveal the
+    /// actual session log rather than guessing the newest file in the logs directory.</summary>
+    public static string? SessionLogPath => _sessionLogPath;
 
     /// <summary>
     /// Opens the per-session log file for this process launch and begins logging. A
@@ -57,7 +63,11 @@ public static class Log
             SessionLogger fileLogger;
             try
             {
-                fileLogger = new SessionLogger(SessionLog.OpenWriter(logsDirectory), IsDebugEnabled(), DeniedKeys);
+                // One timestamp drives both the opened file and the recorded path, so SessionLogPath
+                // names the exact file this session writes to.
+                var timestamp = DateTimeOffset.UtcNow;
+                fileLogger = new SessionLogger(SessionLog.OpenWriter(logsDirectory, timestamp), IsDebugEnabled(), DeniedKeys);
+                _sessionLogPath = SessionLog.PathFor(logsDirectory, timestamp);
             }
             catch (Exception ex)
             {

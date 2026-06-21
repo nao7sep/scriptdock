@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using ScriptDock.Models;
 using ScriptDock.Services;
 
@@ -25,10 +26,12 @@ public sealed class FakeProcessRunner : IProcessRunner
 
     public IReadOnlyList<ScriptProcess> Active => _active;
 
-    /// <summary>Arrange a running process for a path directly (a ScriptProcess is Running on creation).</summary>
-    public ScriptProcess AddRunning(string scriptPath)
+    /// <summary>Arrange a running process for a path directly (a ScriptProcess is Running on creation).
+    /// <paramref name="acceptsInput"/> mirrors the real runner: a run this session started owns a
+    /// stdin pipe (true); a recaptured run does not (false, the default for this arrange helper).</summary>
+    public ScriptProcess AddRunning(string scriptPath, bool acceptsInput = false)
     {
-        var process = new ScriptProcess(_nextId++, scriptPath, DateTimeOffset.UtcNow);
+        var process = new ScriptProcess(_nextId++, scriptPath, DateTimeOffset.UtcNow) { AcceptsInput = acceptsInput };
         _active.Add(process);
         return process;
     }
@@ -36,16 +39,16 @@ public sealed class FakeProcessRunner : IProcessRunner
     public ScriptProcess Start(string scriptPath)
     {
         StartCalls.Add(scriptPath);
-        return AddRunning(scriptPath);
+        return AddRunning(scriptPath, acceptsInput: true); // the real Start owns the run's stdin pipe
     }
 
     public void Terminate(ScriptProcess handle) => TerminateCalls.Add(handle);
 
-    public ScriptProcess Restart(ScriptProcess handle, TimeSpan? grace = null)
+    public Task<ScriptProcess> RestartAsync(ScriptProcess handle)
     {
         RestartCalls.Add(handle);
         _active.Remove(handle);
-        return AddRunning(handle.ScriptPath);
+        return Task.FromResult(AddRunning(handle.ScriptPath, acceptsInput: true));
     }
 
     public void Dismiss(ScriptProcess handle)

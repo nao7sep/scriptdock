@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using ScriptDock.Models;
 
 namespace ScriptDock.Services;
@@ -19,6 +20,11 @@ namespace ScriptDock.Services;
 /// </summary>
 public sealed class ProcessRunner : IProcessRunner
 {
+    // Grace for a restart's old process tree to die after a tree-kill before the replacement is
+    // launched anyway. A tree-kill is reliable, so this only bounds a wedged child; the wait is
+    // asynchronous, so it never blocks the UI thread.
+    private static readonly TimeSpan RestartGrace = TimeSpan.FromSeconds(10);
+
     private readonly List<ScriptProcess> _processes = new();
     private readonly object _gate = new();
     private readonly string _runsDirectory;
@@ -106,18 +112,25 @@ public sealed class ProcessRunner : IProcessRunner
         Log.Info("run: terminated", new { id = handle.Id, script = handle.ScriptPath });
     }
 
-    /// <summary>Stops the process and launches the same script afresh — the restart
-    /// primitive. The old handle is dismissed; the new one is returned.</summary>
-    public ScriptProcess Restart(ScriptProcess handle, TimeSpan? grace = null)
+    /// <summary>Stops the process and launches the same script afresh — the restart primitive. The
+    /// old handle is terminated and dismissed; the new one is returned. The wait for the old tree to
+    /// die is asynchronous, so a restart never blocks the UI thread even when a child is slow to exit.</summary>
+    public async Task<ScriptProcess> RestartAsync(ScriptProcess handle)
     {
-        Log.Info("run: restarted", new { id = handle.Id, script = handle.ScriptPath });
         Terminate(handle);
-        handle.WaitForExit(grace ?? TimeSpan.FromSeconds(10));
+        var exited = await handle.WaitForExitAsync(RestartGrace).ConfigureAwait(false);
+        if (!exited)
+            Log.Warn("run: restart grace elapsed before exit", new { id = handle.Id, script = handle.ScriptPath });
+
         Dismiss(handle);
-        return Start(handle.ScriptPath);
+        var started = Start(handle.ScriptPath);
+        Log.Info("run: restarted", new { oldId = handle.Id, newId = started.Id, script = handle.ScriptPath });
+        return started;
     }
 
-    /// <summary>Removes a (typically finished) process from the active list.</summary>
+    /// <summary>Removes a (typically finished) process from the active list and releases its OS
+    /// handle. The run's cached state/exit code and its on-disk log survive, so a finished run that
+    /// is still being shown elsewhere reads correctly.</summary>
     public void Dismiss(ScriptProcess handle)
     {
         bool removed;
@@ -125,7 +138,10 @@ public sealed class ProcessRunner : IProcessRunner
             removed = _processes.Remove(handle);
 
         if (removed)
+        {
+            handle.Dispose();
             ProcessesChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>On app shutdown: terminate everything still running when <paramref name="kill"/> is

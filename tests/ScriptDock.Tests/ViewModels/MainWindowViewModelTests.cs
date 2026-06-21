@@ -159,6 +159,21 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task RunScript_FreshRun_EnablesInput_AndRequestsConsoleFocus()
+    {
+        var (vm, _) = BuildVm();
+        var focusRequested = false;
+        vm.ConsoleInputFocusRequested += (_, _) => focusRequested = true;
+
+        await vm.RunScriptCommand.ExecuteAsync(new ScriptItem("/x/dev.command") { DisplayName = "dev" });
+
+        // The runner started the run and owns its stdin pipe, so the selected entry can take input
+        // and the VM asked the view to focus the console.
+        Assert.True(vm.CanSendInput);
+        Assert.True(focusRequested);
+    }
+
+    [Fact]
     public async Task DismissEntry_SelectsNeighbourAtRemovedPosition()
     {
         var now = DateTimeOffset.UtcNow;

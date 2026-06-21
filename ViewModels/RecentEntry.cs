@@ -31,7 +31,7 @@ public sealed class RecentEntry
     public DateTimeOffset LastRanAt { get; }
     public ScriptProcess? Process { get; }
 
-    public bool IsRunning => Process is { State: RunState.Running };
+    public bool IsRunning => Kind == PillKind.Running;
 
     /// <summary>The last-run time in local (JST) display form.</summary>
     public string LastRanDisplay =>
@@ -39,29 +39,41 @@ public sealed class RecentEntry
 
     /// <summary>Short label for the state pill. No live process (a recent carried over from a
     /// past session) reads <c>Idle</c> rather than a bare dash.</summary>
-    public string StatePillText => Process is null
-        ? "Idle"
-        : Process.State switch
-        {
-            RunState.Running => "Running",
-            RunState.Exited => Process.ExitCode is 0 or null ? "Exited" : $"Exited {Process.ExitCode}",
-            RunState.Terminated => "Stopped",
-            RunState.Failed => "Failed",
-            _ => Process.State.ToString(),
-        };
+    public string StatePillText => Kind switch
+    {
+        PillKind.Running => "Running",
+        PillKind.ExitedOk => "Exited",
+        PillKind.ExitedError => $"Exited {Process!.ExitCode}",
+        PillKind.Stopped => "Stopped",
+        PillKind.Failed => "Failed",
+        _ => "Idle",
+    };
 
     /// <summary>Background brush for the state pill, resolved from the shared palette: green when
     /// running, red on a failure or non-zero exit, muted gray for done/idle. Distinguishes states
     /// at a glance without relying on the text alone.</summary>
-    public IBrush StatePillBrush => Palette.Brush(
-        Process is null ? "TextSecondaryBrush"
-        : Process.State switch
-        {
-            RunState.Running => "RunningBrush",
-            RunState.Failed => "DangerTextBrush",
-            RunState.Exited when Process.ExitCode is not (0 or null) => "DangerTextBrush",
-            _ => "TextSecondaryBrush",
-        });
+    public IBrush StatePillBrush => Palette.Brush(Kind switch
+    {
+        PillKind.Running => "RunningBrush",
+        PillKind.Failed or PillKind.ExitedError => "DangerTextBrush",
+        _ => "TextSecondaryBrush",
+    });
+
+    // The run's display lifecycle, derived once so the pill text and brush can't disagree, and so
+    // the "no live process means Idle" and "Exited 0/null vs non-zero" rules live in one place
+    // rather than being re-derived at each call site.
+    private enum PillKind { Idle, Running, ExitedOk, ExitedError, Stopped, Failed }
+
+    private PillKind Kind => Process switch
+    {
+        null => PillKind.Idle,
+        { State: RunState.Running } => PillKind.Running,
+        { State: RunState.Exited, ExitCode: 0 or null } => PillKind.ExitedOk,
+        { State: RunState.Exited } => PillKind.ExitedError,
+        { State: RunState.Terminated } => PillKind.Stopped,
+        { State: RunState.Failed } => PillKind.Failed,
+        _ => PillKind.Idle,
+    };
 
     private static TimeZoneInfo ResolveDisplayZone()
     {

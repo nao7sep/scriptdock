@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using ScriptDock.Models;
 
 namespace ScriptDock.Services;
@@ -19,7 +20,7 @@ public interface IProcessRunner
 
     ScriptProcess Start(string scriptPath);
     void Terminate(ScriptProcess handle);
-    ScriptProcess Restart(ScriptProcess handle, TimeSpan? grace = null);
+    Task<ScriptProcess> RestartAsync(ScriptProcess handle);
     void Dismiss(ScriptProcess handle);
     void ShutdownAll(bool kill);
     void Recapture(IReadOnlyList<PersistedProcess> records);

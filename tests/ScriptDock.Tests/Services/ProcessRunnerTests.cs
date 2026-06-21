@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using ScriptDock.Models;
 using ScriptDock.Services;
 using Xunit;
@@ -100,6 +101,34 @@ public sealed class ProcessRunnerTests : IDisposable
         runner.Terminate(handle);
         Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
         Assert.Equal(RunState.Terminated, handle.State);
+    }
+
+    [MacOnlyFact]
+    public async Task RestartAsync_StopsTheOldRun_AndStartsAFreshOne()
+    {
+        var script = WriteExecutableScript("sleeper.command", "echo started\nsleep 60\n");
+        var runner = new ProcessRunner(_runsDir);
+        var first = runner.Start(script);
+
+        // Wait until the first run is genuinely live before restarting it.
+        var deadline = DateTime.UtcNow.AddSeconds(20);
+        while (first.Pid is null && DateTime.UtcNow < deadline)
+            Thread.Sleep(50);
+        Assert.NotNull(first.Pid);
+
+        var second = await runner.RestartAsync(first);
+        try
+        {
+            Assert.NotEqual(first.Id, second.Id);                  // a genuinely new run
+            Assert.Equal(RunState.Terminated, first.State);        // the old run was stopped and finalised
+            Assert.DoesNotContain(first, runner.Active);           // and dismissed from the active set
+            Assert.Same(second, Assert.Single(runner.Active));     // only the replacement remains
+        }
+        finally
+        {
+            runner.Terminate(second);
+            second.WaitForExit(TimeSpan.FromSeconds(20));
+        }
     }
 
     [Fact]

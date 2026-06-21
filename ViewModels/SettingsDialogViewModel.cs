@@ -1,11 +1,11 @@
 using System;
-using System.IO;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ScriptDock.Models;
+using ScriptDock.Storage;
 
 namespace ScriptDock.ViewModels;
 
@@ -84,25 +84,12 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         return true;
     }
 
-    // Expand a leading ~ / ~/ and make the value absolute against the home
-    // directory. The folder need not exist yet — the scanner reports a missing
-    // root as inaccessible rather than failing.
-    private static string ResolveRoot(string value)
-    {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        string expanded;
-        if (value == "~")
-            expanded = home;
-        else if (value.StartsWith("~/", StringComparison.Ordinal) ||
-                 value.StartsWith("~" + Path.DirectorySeparatorChar))
-            expanded = Path.Combine(home, value[2..]);
-        else
-            expanded = value;
-
-        return Path.IsPathRooted(expanded)
-            ? Path.GetFullPath(expanded)
-            : Path.GetFullPath(Path.Combine(home, expanded));
-    }
+    // Expand a leading ~ / ~/ and make the value absolute against the home directory (never the
+    // working directory), shared with the storage-root resolver via HomePath so both anchor paths
+    // identically. The folder need not exist yet — the scanner reports a missing root as
+    // inaccessible rather than failing.
+    private static string ResolveRoot(string value) =>
+        HomePath.AnchorToHome(value, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
 
     public bool AddExtension(string value)
     {
@@ -135,7 +122,10 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
             return false;
         }
 
-        if (IgnorePatterns.Contains(trimmed))
+        // Dedup case-insensitively to match how the scanner matches patterns (IgnoreRules compiles
+        // them IgnoreCase), so "/Node_modules/" and "/node_modules/" are one entry, not two that
+        // prune the same directories.
+        if (IgnorePatterns.Any(p => string.Equals(p, trimmed, StringComparison.OrdinalIgnoreCase)))
             return false;
 
         IgnorePatterns.Add(trimmed);
