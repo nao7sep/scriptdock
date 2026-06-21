@@ -46,7 +46,7 @@ public sealed class MainWindowViewModelTests
     {
         var (vm, runner) = BuildVm();
         var process = runner.AddRunning("/x/run.command");
-        var entry = new DockEntry("/x/run.command", "run.command", DateTimeOffset.UtcNow, process);
+        var entry = new RecentEntry("/x/run.command", "run.command", DateTimeOffset.UtcNow, process);
         var confirm = new ConfirmSpy(result: false);
         vm.ConfirmHandler = confirm.Handle;
 
@@ -61,7 +61,7 @@ public sealed class MainWindowViewModelTests
     {
         var (vm, runner) = BuildVm();
         var process = runner.AddRunning("/x/run.command");
-        var entry = new DockEntry("/x/run.command", "run.command", DateTimeOffset.UtcNow, process);
+        var entry = new RecentEntry("/x/run.command", "run.command", DateTimeOffset.UtcNow, process);
         vm.ConfirmHandler = new ConfirmSpy(result: true).Handle;
 
         await vm.StopEntryCommand.ExecuteAsync(entry);
@@ -74,7 +74,7 @@ public sealed class MainWindowViewModelTests
     {
         var state = new AppState { RecentlyRun = [new RecentRun { Path = "/x/done.command", RanAt = DateTimeOffset.UtcNow }] };
         var (vm, _) = BuildVm(state: state);
-        var entry = new DockEntry("/x/done.command", "done.command", DateTimeOffset.UtcNow, process: null);
+        var entry = new RecentEntry("/x/done.command", "done.command", DateTimeOffset.UtcNow, process: null);
         var confirm = new ConfirmSpy(result: false); // would block if consulted
         vm.ConfirmHandler = confirm.Handle;
 
@@ -90,7 +90,7 @@ public sealed class MainWindowViewModelTests
         var state = new AppState { RecentlyRun = [new RecentRun { Path = "/x/live.command", RanAt = DateTimeOffset.UtcNow }] };
         var (vm, runner) = BuildVm(state: state);
         var process = runner.AddRunning("/x/live.command");
-        var entry = new DockEntry("/x/live.command", "live.command", DateTimeOffset.UtcNow, process);
+        var entry = new RecentEntry("/x/live.command", "live.command", DateTimeOffset.UtcNow, process);
         vm.ConfirmHandler = new ConfirmSpy(result: false).Handle;
 
         await vm.DismissEntryCommand.ExecuteAsync(entry);
@@ -106,7 +106,7 @@ public sealed class MainWindowViewModelTests
         var state = new AppState { RecentlyRun = [new RecentRun { Path = "/x/live.command", RanAt = DateTimeOffset.UtcNow }] };
         var (vm, runner) = BuildVm(state: state);
         var process = runner.AddRunning("/x/live.command");
-        var entry = new DockEntry("/x/live.command", "live.command", DateTimeOffset.UtcNow, process);
+        var entry = new RecentEntry("/x/live.command", "live.command", DateTimeOffset.UtcNow, process);
         vm.ConfirmHandler = new ConfirmSpy(result: true).Handle;
 
         await vm.DismissEntryCommand.ExecuteAsync(entry);
@@ -155,7 +155,7 @@ public sealed class MainWindowViewModelTests
 
         Assert.Empty(confirm.Requests);
         Assert.Equal("/x/new.command", Assert.Single(runner.StartCalls));
-        Assert.Equal("/x/new.command", vm.SelectedDockEntry?.Path); // Run surfaces its Recent entry
+        Assert.Equal("/x/new.command", vm.SelectedRecentEntry?.Path); // Run surfaces its Recent entry
     }
 
     [Fact]
@@ -181,7 +181,7 @@ public sealed class MainWindowViewModelTests
         await vm.DismissEntryCommand.ExecuteAsync(vm.Recent[1]);
 
         Assert.Equal(["/x/a.command", "/x/c.command"], vm.Recent.Select(e => e.Path));
-        Assert.Equal("/x/c.command", vm.SelectedDockEntry?.Path);
+        Assert.Equal("/x/c.command", vm.SelectedRecentEntry?.Path);
     }
 
     [Fact]

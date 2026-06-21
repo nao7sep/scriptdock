@@ -15,7 +15,7 @@ namespace ScriptDock.ViewModels;
 /// <summary>
 /// Root view model. Drives scanning (<see cref="ScriptScanner"/>) and launching
 /// (<see cref="ProcessRunner"/>), and exposes the two lists the window binds to: the Scripts
-/// catalog (tiles) and the Recent list (<see cref="DockEntry"/> — running and recently-run
+/// catalog (tiles) and the Recent list (<see cref="RecentEntry"/> — running and recently-run
 /// scripts merged, kept until dismissed). Every command and callback is guarded so a single
 /// failure logs and degrades rather than crashing the window — ScriptDock owns the user's
 /// running scripts, so it must not go down.
@@ -39,12 +39,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private DispatcherTimer? _outputTimer;
 
     public ObservableCollection<ScriptItem> Scripts { get; } = [];
-    public ObservableCollection<DockEntry> Recent { get; } = [];
+    public ObservableCollection<RecentEntry> Recent { get; } = [];
 
     [ObservableProperty] private bool _showHidden;
     [ObservableProperty] private bool _isScanning;
     [ObservableProperty] private string _status = "Ready.";
-    [ObservableProperty] private DockEntry? _selectedDockEntry;
+    [ObservableProperty] private RecentEntry? _selectedRecentEntry;
     [ObservableProperty] private string _selectedOutput = string.Empty;
     [ObservableProperty] private int _runningCount;
 
@@ -80,10 +80,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     /// <summary>Whether the console input field can send: the selected run is running and accepts input
     /// (a recaptured run does not). Re-evaluated whenever the selected entry changes.</summary>
-    public bool CanSendInput => SelectedDockEntry?.Process is { State: RunState.Running, AcceptsInput: true };
+    public bool CanSendInput => SelectedRecentEntry?.Process is { State: RunState.Running, AcceptsInput: true };
 
     /// <summary>Whether a Recent entry is selected — drives the Output header's script-name pill.</summary>
-    public bool HasSelection => SelectedDockEntry is not null;
+    public bool HasSelection => SelectedRecentEntry is not null;
 
     /// <summary>The Scripts pane's Hide/Show toggle label, reflecting the selected script's current
     /// state. Single-selection list, so the one button serves both directions (Hide a visible script,
@@ -173,7 +173,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// <summary>Sends a line to the selected running script's stdin (from the console input field).</summary>
     public void SendInput(string text) => Guard("send input", () =>
     {
-        SelectedDockEntry?.Process?.SendInput(text);
+        SelectedRecentEntry?.Process?.SendInput(text);
     });
 
     [RelayCommand]
@@ -224,14 +224,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     });
 
     [RelayCommand]
-    private async Task RunOrRestart(DockEntry? entry) => await GuardAsync("run", async () =>
+    private async Task RunOrRestart(RecentEntry? entry) => await GuardAsync("run", async () =>
     {
         if (entry is not null)
             await RunByPath(entry.Path, entry.DisplayName);
     });
 
     [RelayCommand]
-    private async Task StopEntry(DockEntry? entry) => await GuardAsync("stop", async () =>
+    private async Task StopEntry(RecentEntry? entry) => await GuardAsync("stop", async () =>
     {
         if (entry?.Process is not { State: RunState.Running })
             return;
@@ -244,7 +244,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     });
 
     [RelayCommand]
-    private async Task DismissEntry(DockEntry? entry) => await GuardAsync("dismiss", async () =>
+    private async Task DismissEntry(RecentEntry? entry) => await GuardAsync("dismiss", async () =>
     {
         if (entry is null)
             return;
@@ -274,7 +274,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         // The dismissed path is gone, so RebuildRecent cleared the selection; move it to the
         // neighbour at that position instead (the next entry, or the previous if it was last).
-        SelectedDockEntry = index < 0 || Recent.Count == 0 ? null : Recent[Math.Min(index, Recent.Count - 1)];
+        SelectedRecentEntry = index < 0 || Recent.Count == 0 ? null : Recent[Math.Min(index, Recent.Count - 1)];
     });
 
     [RelayCommand]
@@ -301,7 +301,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         RebuildScripts();
     });
 
-    partial void OnSelectedDockEntryChanged(DockEntry? value)
+    partial void OnSelectedRecentEntryChanged(RecentEntry? value)
     {
         OnPropertyChanged(nameof(CanSendInput));
         OnPropertyChanged(nameof(HasSelection));
@@ -331,7 +331,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         // Surface the just-run script: select its Recent entry so its output shows in the console
         // immediately (selection re-pins the console to the bottom).
-        SelectedDockEntry = Recent.FirstOrDefault(e => string.Equals(e.Path, path, StringComparison.Ordinal));
+        SelectedRecentEntry = Recent.FirstOrDefault(e => string.Equals(e.Path, path, StringComparison.Ordinal));
 
         // A freshly started/restarted run owns a stdin pipe, so move keyboard focus to the console
         // input for immediate typing. Gated on CanSendInput so a non-input run never steals focus.
@@ -362,13 +362,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             _subscribed.Add(process);
         }
 
-        var selectedPath = SelectedDockEntry?.Path;
+        var selectedPath = SelectedRecentEntry?.Path;
 
         Recent.Clear();
-        foreach (var entry in DockListBuilder.Build(_state.RecentlyRun, _runner.Active, BuildLabels()))
+        foreach (var entry in RecentListBuilder.Build(_state.RecentlyRun, _runner.Active, BuildLabels()))
             Recent.Add(entry);
 
-        SelectedDockEntry = Recent.FirstOrDefault(e => string.Equals(e.Path, selectedPath, StringComparison.Ordinal));
+        SelectedRecentEntry = Recent.FirstOrDefault(e => string.Equals(e.Path, selectedPath, StringComparison.Ordinal));
         RunningCount = _runner.Active.Count(p => p.State == RunState.Running);
         OnPropertyChanged(nameof(NoRecent));
         RefreshOutput();
@@ -441,7 +441,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         try
         {
-            var lines = SelectedDockEntry?.Process?.ReadOutput();
+            var lines = SelectedRecentEntry?.Process?.ReadOutput();
             SelectedOutput = lines is null ? string.Empty : string.Join(Environment.NewLine, lines);
         }
         catch (Exception ex)

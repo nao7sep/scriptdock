@@ -8,7 +8,7 @@ using Xunit;
 
 namespace ScriptDock.Tests.ViewModels;
 
-public sealed class DockListBuilderTests
+public sealed class RecentListBuilderTests
 {
     private static readonly IReadOnlyDictionary<string, string> NoLabels = new Dictionary<string, string>();
 
@@ -27,7 +27,7 @@ public sealed class DockListBuilderTests
     [Fact]
     public void Build_OneEntryPerRecent_NewestFirst_NoProcesses()
     {
-        var entries = DockListBuilder.Build([Run("/b", 5), Run("/a", 1)], [], NoLabels);
+        var entries = RecentListBuilder.Build([Run("/b", 5), Run("/a", 1)], [], NoLabels);
 
         Assert.Equal(["/b", "/a"], entries.Select(e => e.Path));
         Assert.All(entries, e => Assert.Null(e.Process));
@@ -39,7 +39,7 @@ public sealed class DockListBuilderTests
     {
         var running = Running("/a");
 
-        var entry = Assert.Single(DockListBuilder.Build([Run("/a", 1)], [running], NoLabels));
+        var entry = Assert.Single(RecentListBuilder.Build([Run("/a", 1)], [running], NoLabels));
 
         Assert.True(entry.IsRunning);
         Assert.Same(running, entry.Process);
@@ -51,7 +51,7 @@ public sealed class DockListBuilderTests
     {
         var stopped = Stopped("/a");
 
-        var entry = Assert.Single(DockListBuilder.Build([Run("/a", 1)], [stopped], NoLabels));
+        var entry = Assert.Single(RecentListBuilder.Build([Run("/a", 1)], [stopped], NoLabels));
 
         Assert.False(entry.IsRunning);
         Assert.Same(stopped, entry.Process);
@@ -63,7 +63,7 @@ public sealed class DockListBuilderTests
         var stopped = Stopped("/a");
         var running = Running("/a");
 
-        var entry = Assert.Single(DockListBuilder.Build([Run("/a", 1)], [stopped, running], NoLabels));
+        var entry = Assert.Single(RecentListBuilder.Build([Run("/a", 1)], [stopped, running], NoLabels));
 
         Assert.Same(running, entry.Process);
     }

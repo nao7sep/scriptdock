@@ -12,13 +12,13 @@ namespace ScriptDock.ViewModels;
 /// Running (with output); a finished one keeps its output and exit code until the entry is
 /// dismissed; a recent with no live process (carried over from a past session) shows idle.
 /// The <see cref="DisplayName"/> is the same disambiguated label the Scripts list uses. Built
-/// fresh by <see cref="DockListBuilder"/> on each refresh.
+/// fresh by <see cref="RecentListBuilder"/> on each refresh.
 /// </summary>
-public sealed class DockEntry
+public sealed class RecentEntry
 {
     private static readonly TimeZoneInfo DisplayZone = ResolveDisplayZone();
 
-    public DockEntry(string path, string displayName, DateTimeOffset lastRanAt, ScriptProcess? process)
+    public RecentEntry(string path, string displayName, DateTimeOffset lastRanAt, ScriptProcess? process)
     {
         Path = path;
         DisplayName = displayName;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
 using ScriptDock.Models;
 
@@ -68,13 +69,35 @@ public sealed class ScriptProcess
 
     internal Process? Process { get; set; }
 
-    /// <summary>The tail of this run's output (ANSI-stripped), read from the run-log file.</summary>
+    private long _outputCacheLength = long.MinValue;
+    private IReadOnlyList<string> _outputCache = Array.Empty<string>();
+
+    /// <summary>
+    /// The tail of this run's output (ANSI-stripped), read from the run-log file. A run log is
+    /// append-only for the life of a run (the shell truncates once at start, then only appends), so
+    /// the file's length is a sound change key: the tail is re-read and re-parsed only when the file
+    /// has grown since the last call — otherwise the cached lines are returned. This keeps the
+    /// periodic output poll from re-reading and re-stripping a large tail on every tick of a log that
+    /// hasn't changed.
+    /// </summary>
     public IReadOnlyList<string> ReadOutput()
     {
         if (_failureMessage is not null)
             return [_failureMessage];
 
-        return LogFilePath is null ? Array.Empty<string>() : RunLog.ReadTail(LogFilePath);
+        if (LogFilePath is null)
+            return Array.Empty<string>();
+
+        long length;
+        try { length = new FileInfo(LogFilePath).Length; }
+        catch { length = -1; } // missing/unreadable — ReadTail returns empty for the same reason
+
+        if (length == _outputCacheLength)
+            return _outputCache;
+
+        _outputCache = RunLog.ReadTail(LogFilePath);
+        _outputCacheLength = length;
+        return _outputCache;
     }
 
     /// <summary>Sends a line to the running script's stdin. No-op unless this run accepts input

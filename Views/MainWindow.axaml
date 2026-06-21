@@ -196,10 +196,10 @@
                         </Border>
                         <Grid Margin="10">
                             <ListBox x:Name="RecentList" ItemsSource="{Binding Recent}"
-                                     SelectedItem="{Binding SelectedDockEntry, Mode=TwoWay}"
+                                     SelectedItem="{Binding SelectedRecentEntry, Mode=TwoWay}"
                                      DoubleTapped="OnRecentDoubleTapped" KeyDown="OnRecentKeyDown">
                                 <ListBox.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:DockEntry">
+                                    <DataTemplate x:DataType="vm:RecentEntry">
                                         <Grid ColumnDefinitions="*,Auto">
                                             <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"/>
@@ -238,7 +238,7 @@
                             <Border DockPanel.Dock="Right" VerticalAlignment="Center" Margin="8,0,0,0"
                                     Background="{StaticResource SelectionBrush}" CornerRadius="10" Padding="10,3"
                                     IsVisible="{Binding HasSelection}">
-                                <TextBlock Text="{Binding SelectedDockEntry.DisplayName}" FontSize="12" FontWeight="SemiBold"
+                                <TextBlock Text="{Binding SelectedRecentEntry.DisplayName}" FontSize="12" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
                             </Border>
                             <TextBlock Text="Output" Classes="cardHeader" VerticalAlignment="Center"/>

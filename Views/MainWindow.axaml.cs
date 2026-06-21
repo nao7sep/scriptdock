@@ -203,7 +203,7 @@ public partial class MainWindow : Window
     // Console: keep the view glued to the latest output unless the user has scrolled up to read.
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MainWindowViewModel.SelectedDockEntry))
+        if (e.PropertyName == nameof(MainWindowViewModel.SelectedRecentEntry))
         {
             _consolePinnedToBottom = true; // a freshly-selected run starts pinned to its latest line
             _scrollConsolePending = true;
@@ -338,14 +338,14 @@ public partial class MainWindow : Window
 
     private void OnRecentDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (sender is ListBox { SelectedItem: DockEntry item })
+        if (sender is ListBox { SelectedItem: RecentEntry item })
             ViewModel?.RunOrRestartCommand.Execute(item);
     }
 
     private void OnRecentKeyDown(object? sender, KeyEventArgs e)
     {
         // Delete and Backspace (with or without Cmd/Ctrl) all remove the selected entry.
-        if (e.Key is Key.Delete or Key.Back && sender is ListBox { SelectedItem: DockEntry item })
+        if (e.Key is Key.Delete or Key.Back && sender is ListBox { SelectedItem: RecentEntry item })
         {
             e.Handled = true;
             if (item.IsRunning)
