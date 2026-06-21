@@ -24,6 +24,7 @@ public partial class MainWindow : Window
     private IReadOnlyList<ShortcutItem> _shortcuts = [];
     private bool _consolePinnedToBottom = true;
     private bool _scrollConsolePending = true; // follow the console on the next layout after output/selection changes
+    private bool _quitConfirmed; // set once the user confirms a kill-on-close quit, so the re-close proceeds
 
     // The user's INTENT for the two fixed panes, in pixels: what they last dragged the Recent column /
     // console row to. The on-screen size is DERIVED from this (clamped to what the current window can
@@ -100,6 +101,8 @@ public partial class MainWindow : Window
 
             vm.PropertyChanged += OnViewModelPropertyChanged;
             vm.ConsoleInputFocusRequested += OnConsoleInputFocusRequested;
+            vm.ConfirmHandler = request =>
+                ConfirmDialog.ConfirmDestructiveAsync(this, request.Title, request.Message, request.ConfirmLabel);
 
             await vm.InitializeAsync();
         }
@@ -156,13 +159,31 @@ public partial class MainWindow : Window
     private void OnConsoleSplitterDragCompleted(object? sender, VectorEventArgs e) =>
         _consoleHeightIntent = BodyGrid.RowDefinitions[2].ActualHeight;
 
-    private void OnClosing(object? sender, WindowClosingEventArgs e)
+    private async void OnClosing(object? sender, WindowClosingEventArgs e)
     {
         try
         {
             var vm = ViewModel;
             if (vm is null)
                 return;
+
+            // Quitting with Kill-on-close on terminates running work, so confirm it first: cancel this
+            // close, ask, and only close for real on a yes (mirrors the dialog discard guard).
+            if (!_quitConfirmed && vm.ShouldConfirmQuit())
+            {
+                e.Cancel = true;
+                var proceed = await ConfirmDialog.ConfirmDestructiveAsync(
+                    this,
+                    "Quit ScriptDock",
+                    $"{vm.RunningCount} running script(s) will be terminated when ScriptDock quits. Quit anyway?",
+                    "Quit");
+                if (proceed)
+                {
+                    _quitConfirmed = true;
+                    Close();
+                }
+                return;
+            }
 
             // Persist the stored INTENT, not the live ActualWidth/ActualHeight — those may have been
             // clamped down by a small window, and saving a clamped size would lose the user's intent.

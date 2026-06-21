@@ -17,7 +17,7 @@ namespace ScriptDock.Services;
 /// the view model (PID + OS start-time) so a relaunch can <see cref="Recapture"/> still-running
 /// children; whether quitting kills them is configurable (default: leave them running).
 /// </summary>
-public sealed class ProcessRunner
+public sealed class ProcessRunner : IProcessRunner
 {
     private readonly List<ScriptProcess> _processes = new();
     private readonly object _gate = new();

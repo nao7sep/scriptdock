@@ -27,7 +27,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly AppConfig _config;
     private readonly AppState _state;
     private readonly ScriptScanner _scanner;
-    private readonly ProcessRunner _runner;
+    private readonly IProcessRunner _runner;
 
     // The most recent scan's outcome, kept so a hidden/show toggle preserves the new/removed
     // flags until the next scan replaces them.
@@ -58,7 +58,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         AppConfig config,
         AppState state,
         ScriptScanner scanner,
-        ProcessRunner runner)
+        IProcessRunner runner)
     {
         _configStore = configStore;
         _stateStore = stateStore;
@@ -94,6 +94,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// input field so the user can type immediately. Focus is a view concern, so it is signalled here
     /// rather than performed.</summary>
     public event EventHandler? ConsoleInputFocusRequested;
+
+    /// <summary>Set by the view to confirm a destructive action (the view owns the dialog). Returns
+    /// true to proceed. Null when no view is attached (e.g. tests), in which case the action proceeds
+    /// unconfirmed.</summary>
+    public Func<ConfirmRequest, Task<bool>>? ConfirmHandler { get; set; }
+
+    /// <summary>Whether quitting now would kill running work and so warrants a confirm: only when
+    /// Kill-on-close is enabled and something is still running (otherwise the children survive the
+    /// quit, so there is nothing to lose). The view drives the actual quit confirmation.</summary>
+    public bool ShouldConfirmQuit() => _config.KillProcessesOnClose && RunningCount > 0;
 
     /// <summary>Starts the console poll, builds the Recent list, and runs the first scan.</summary>
     public async Task InitializeAsync()
@@ -207,30 +217,42 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void RunScript(ScriptItem? item) => Guard("run", () =>
+    private async Task RunScript(ScriptItem? item) => await GuardAsync("run", async () =>
     {
         if (item is not null)
-            RunByPath(item.Path);
+            await RunByPath(item.Path, item.DisplayName);
     });
 
     [RelayCommand]
-    private void RunOrRestart(DockEntry? entry) => Guard("run", () =>
+    private async Task RunOrRestart(DockEntry? entry) => await GuardAsync("run", async () =>
     {
         if (entry is not null)
-            RunByPath(entry.Path);
+            await RunByPath(entry.Path, entry.DisplayName);
     });
 
     [RelayCommand]
-    private void StopEntry(DockEntry? entry) => Guard("stop", () =>
+    private async Task StopEntry(DockEntry? entry) => await GuardAsync("stop", async () =>
     {
-        if (entry?.Process is { State: RunState.Running })
-            _runner.Terminate(entry.Process);
+        if (entry?.Process is not { State: RunState.Running })
+            return;
+
+        // Stopping kills the live run, so confirm first.
+        if (!await ConfirmAsync("Stop Script", $"“{entry.DisplayName}” is running. Stop it?", "Stop"))
+            return;
+
+        _runner.Terminate(entry.Process);
     });
 
     [RelayCommand]
-    private void DismissEntry(DockEntry? entry) => Guard("dismiss", () =>
+    private async Task DismissEntry(DockEntry? entry) => await GuardAsync("dismiss", async () =>
     {
         if (entry is null)
+            return;
+
+        // Only dismissing a *running* entry destroys work, so confirm just that case; dismissing a
+        // finished entry only drops it from the list (it can be re-run), so it stays immediate.
+        if (entry.Process is { State: RunState.Running } &&
+            !await ConfirmAsync("Dismiss Script", $"“{entry.DisplayName}” is running. Stop and dismiss it?", "Dismiss"))
             return;
 
         // Remember the dismissed row's position so focus lands on its neighbour, not nowhere.
@@ -286,15 +308,22 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         RefreshOutput();
     }
 
-    private void RunByPath(string path)
+    private async Task RunByPath(string path, string displayName)
     {
         var running = _runner.Active.FirstOrDefault(p =>
             string.Equals(p.ScriptPath, path, StringComparison.Ordinal) && p.State == RunState.Running);
 
         if (running is not null)
+        {
+            // Running an already-running script restarts it — that kills the live run, so confirm.
+            if (!await ConfirmAsync("Restart Script", $"“{displayName}” is already running. Restart it?", "Restart"))
+                return;
             _runner.Restart(running);
+        }
         else
+        {
             _runner.Start(path);
+        }
 
         _state.RecentlyRun = RecentRuns.Add(_state.RecentlyRun, path, DateTimeOffset.UtcNow);
         _stateStore.Save(_state);
@@ -433,4 +462,23 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             Status = $"{action} failed — see logs.";
         }
     }
+
+    // Async sibling of Guard for the commands that await a confirmation before acting.
+    private async Task GuardAsync(string action, Func<Task> body)
+    {
+        try
+        {
+            await body();
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"ui: {action} failed", ex);
+            Status = $"{action} failed — see logs.";
+        }
+    }
+
+    // Ask the view to confirm a destructive action. With no handler attached (tests) there is no UI
+    // to ask, so the action proceeds.
+    private async Task<bool> ConfirmAsync(string title, string message, string confirmLabel) =>
+        ConfirmHandler is null || await ConfirmHandler(new ConfirmRequest(title, message, confirmLabel));
 }
