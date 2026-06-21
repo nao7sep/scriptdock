@@ -118,6 +118,55 @@ public sealed class WindowMetricsTests
     }
 
     [Fact]
+    public void DisplayFromIntent_ShowsTheIntentWhenItFits()
+    {
+        // Window big enough to honour the user's intent: the display equals the intent exactly,
+        // neither clamped up to the min nor down to the fit.
+        const double intent = 460, min = 260;
+        var maxFit = WindowMetrics.MaxRecentWidth(1400, 360, min); // ample room
+        Assert.Equal(intent, WindowMetrics.DisplayFromIntent(intent, min, maxFit));
+    }
+
+    [Fact]
+    public void DisplayFromIntent_NarrowsTowardFit_WhenTheWindowIsTooSmall_ButLeavesIntentUntouched()
+    {
+        // The user wants 460px, but a small window only fits ~maxFit. The DISPLAY drops to maxFit
+        // while the stored intent (the argument) is, by construction, never mutated — the helper is
+        // pure, so the resize path that calls it cannot change what the user intended.
+        const double intent = 460, min = 260;
+        var maxFit = WindowMetrics.MaxRecentWidth(620, 360, min); // tight: less room than the intent
+        var display = WindowMetrics.DisplayFromIntent(intent, min, maxFit);
+        Assert.True(display < intent);   // narrowed for the small window
+        Assert.Equal(maxFit, display);   // exactly the room the window leaves
+        Assert.Equal(460, intent);       // the intent value is unchanged by the derivation
+    }
+
+    [Fact]
+    public void DisplayFromIntent_ReturnsToIntent_WhenTheWindowGrowsBack()
+    {
+        // The core regression guard: deriving the display from the SAME stored intent must give the
+        // narrowed size on a small window and the full intent again once the window grows — so a
+        // shrink-then-grow returns the pane to where the user left it (the old code clamped down on
+        // shrink and never came back, and persisted that clamped value).
+        const double intent = 460, scriptsMin = 360, recentMin = 260;
+        var small = WindowMetrics.DisplayFromIntent(
+            intent, recentMin, WindowMetrics.MaxRecentWidth(620, scriptsMin, recentMin));
+        var large = WindowMetrics.DisplayFromIntent(
+            intent, recentMin, WindowMetrics.MaxRecentWidth(1400, scriptsMin, recentMin));
+        Assert.True(small < intent);
+        Assert.Equal(intent, large);
+    }
+
+    [Fact]
+    public void DisplayFromIntent_NeverDropsBelowTheMinimum_EvenWhenFitWouldRoundUpToIt()
+    {
+        // maxFit already floors at min; the helper must still never return below min for any intent.
+        const double min = 260;
+        Assert.Equal(min, WindowMetrics.DisplayFromIntent(100, min, min)); // tiny intent, no room
+        Assert.Equal(min, WindowMetrics.DisplayFromIntent(500, min, min)); // big intent, no room
+    }
+
+    [Fact]
     public void EveryListColumnAndBodyRow_DeclaresANonZeroMinimum()
     {
         // Guard against a column or row being added/changed without a minimum: such a track would

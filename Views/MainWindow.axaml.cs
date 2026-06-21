@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
@@ -23,6 +24,15 @@ public partial class MainWindow : Window
     private IReadOnlyList<ShortcutItem> _shortcuts = [];
     private bool _consolePinnedToBottom = true;
     private bool _scrollConsolePending = true; // follow the console on the next layout after output/selection changes
+
+    // The user's INTENT for the two fixed panes, in pixels: what they last dragged the Recent column /
+    // console row to. The on-screen size is DERIVED from this (clamped to what the current window can
+    // fit) — so a window shrink narrows the display but never the intent, and a later grow returns the
+    // pane to the intended size. Only a real splitter drag updates these; a resize never does. They
+    // seed from the persisted values on load and are what gets persisted on close (never the live
+    // ActualWidth, which may have been clamped down by a small window).
+    private double? _recentWidthIntent;
+    private double? _consoleHeightIntent;
 
     public MainWindow()
     {
@@ -62,30 +72,25 @@ public partial class MainWindow : Window
             MinHeight = WindowMetrics.MinHeightFor(
                 BodyGrid.RowDefinitions.Select(r => r.MinHeight));
 
-            // Restore persisted pane sizes, clamped to the current window so a size saved on a larger
-            // screen can't squeeze a pane to nothing here. The bounds come from WindowMetrics — the
-            // same source the window minimum uses — so the clamp and the track minimums can't disagree.
-            var recentColumnMin = ListsGrid.ColumnDefinitions[2].MinWidth;
-            var scriptsColumnMin = ListsGrid.ColumnDefinitions[0].MinWidth;
-            var consoleRowMin = BodyGrid.RowDefinitions[2].MinHeight;
-            var listsRowMin = BodyGrid.RowDefinitions[0].MinHeight;
+            // Seed the user's pane INTENT from the persisted values (pixels), defaulting to the
+            // XAML's own size when nothing is saved yet. The on-screen size is derived from this
+            // intent, never the other way round: a window too small to honour it shows a clamped
+            // display while the intent is preserved, so growing the window restores the pane.
+            _recentWidthIntent = vm.SavedRecentWidth ?? ListsGrid.ColumnDefinitions[2].Width.Value;
+            _consoleHeightIntent = vm.SavedConsoleHeight ?? BodyGrid.RowDefinitions[2].Height.Value;
 
-            if (vm.SavedRecentWidth is { } recentWidth)
-            {
-                var maxRecent = WindowMetrics.MaxRecentWidth(Width, scriptsColumnMin, recentColumnMin);
-                ListsGrid.ColumnDefinitions[2].Width =
-                    new GridLength(Math.Clamp(recentWidth, recentColumnMin, maxRecent), GridUnitType.Pixel);
-            }
-            if (vm.SavedConsoleHeight is { } consoleHeight)
-            {
-                var maxConsole = WindowMetrics.MaxConsoleHeight(Height, listsRowMin, consoleRowMin);
-                BodyGrid.RowDefinitions[2].Height =
-                    new GridLength(Math.Clamp(consoleHeight, consoleRowMin, maxConsole), GridUnitType.Pixel);
-            }
+            // Capture intent on a real splitter drag only. The GridSplitter's inner Thumb bubbles the
+            // routed DragCompleted event up through the splitter, so hooking it here fires exactly when
+            // the user finishes a drag — never on a programmatic resize/clamp. We read the resulting
+            // ActualWidth/ActualHeight (the size the drag produced) and store it as the new intent.
+            RecentSplitter.AddHandler(Thumb.DragCompletedEvent, OnRecentSplitterDragCompleted);
+            ConsoleSplitter.AddHandler(Thumb.DragCompletedEvent, OnConsoleSplitterDragCompleted);
 
-            // The Recent column and console row are fixed pixel sizes that don't shrink when the
-            // window does, so re-clamp them on every resize — otherwise shrinking the window lets the
-            // console spill over the status bar, and a wide Recent column starves the Scripts pane.
+            // The Recent column and console row are fixed pixel sizes that don't track the window, so
+            // derive their display size from the intent on load and on every resize (ClampPanesToWindow):
+            // window-shrink narrows the display toward the min, window-grow returns it to the intent. The
+            // bounds come from WindowMetrics — the same source the window minimum uses — so the derivation
+            // and the track minimums can't disagree.
             ClampPanesToWindow();
             PropertyChanged += OnWindowPropertyChanged;
 
@@ -104,32 +109,52 @@ public partial class MainWindow : Window
         }
     }
 
-    // Re-clamp the fixed-size panes whenever the window resizes (ClientSize/Bounds both track it;
-    // the clamp is idempotent, so reacting to either — or both — is harmless).
+    // Re-derive the fixed-size panes whenever the window resizes (ClientSize/Bounds both track it;
+    // the derivation is idempotent, so reacting to either — or both — is harmless). This path reads
+    // the stored intent and only updates the DISPLAY; it never changes the intent and never persists.
     private void OnWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
     {
         if (e.Property == ClientSizeProperty || e.Property == BoundsProperty)
             ClampPanesToWindow();
     }
 
-    // Keep the fixed-pixel Recent column and console row within the current window. A fixed track
-    // doesn't shrink when the window does, so without this the console row would overflow past the
-    // window edge over the status bar, and a wide Recent column would push Scripts below its minimum.
-    // Bounds come from WindowMetrics — the same source as the window minimum and the restore clamp.
+    // Set the fixed-pixel Recent column and console row to the size the current window can fit for the
+    // user's stored INTENT: WindowMetrics.DisplayFromIntent(intent, min, maxFit). A fixed track doesn't
+    // track the window on its own, so without this a shrink would let the console row overflow the
+    // status bar and a wide Recent column would starve Scripts — and a grow would never return a pane
+    // that an earlier shrink had narrowed. Bounds come from WindowMetrics, the same source as the
+    // window minimum. This MUST NOT touch the intent (only a real splitter drag does) and never persists.
     private void ClampPanesToWindow()
     {
-        var recentColumn = ListsGrid.ColumnDefinitions[2];
-        var maxRecent = WindowMetrics.MaxRecentWidth(
-            Width, ListsGrid.ColumnDefinitions[0].MinWidth, recentColumn.MinWidth);
-        if (recentColumn.Width.IsAbsolute && recentColumn.Width.Value > maxRecent)
-            recentColumn.Width = new GridLength(maxRecent, GridUnitType.Pixel);
+        if (_recentWidthIntent is { } recentIntent)
+        {
+            var recentColumn = ListsGrid.ColumnDefinitions[2];
+            var maxRecent = WindowMetrics.MaxRecentWidth(
+                Width, ListsGrid.ColumnDefinitions[0].MinWidth, recentColumn.MinWidth);
+            recentColumn.Width = new GridLength(
+                WindowMetrics.DisplayFromIntent(recentIntent, recentColumn.MinWidth, maxRecent), GridUnitType.Pixel);
+        }
 
-        var consoleRow = BodyGrid.RowDefinitions[2];
-        var maxConsole = WindowMetrics.MaxConsoleHeight(
-            Height, BodyGrid.RowDefinitions[0].MinHeight, consoleRow.MinHeight);
-        if (consoleRow.Height.IsAbsolute && consoleRow.Height.Value > maxConsole)
-            consoleRow.Height = new GridLength(maxConsole, GridUnitType.Pixel);
+        if (_consoleHeightIntent is { } consoleIntent)
+        {
+            var consoleRow = BodyGrid.RowDefinitions[2];
+            var maxConsole = WindowMetrics.MaxConsoleHeight(
+                Height, BodyGrid.RowDefinitions[0].MinHeight, consoleRow.MinHeight);
+            consoleRow.Height = new GridLength(
+                WindowMetrics.DisplayFromIntent(consoleIntent, consoleRow.MinHeight, maxConsole), GridUnitType.Pixel);
+        }
     }
+
+    // A real user drag of the Recent column splitter just finished: the resulting ActualWidth is the
+    // size the user wants, so record it as the new intent. This is the ONLY place the intent changes
+    // for the Recent column — the resize/clamp path never does — so a window shrink can never be
+    // mistaken for the user's intent. The display already matches (the drag set it), so no re-derive.
+    private void OnRecentSplitterDragCompleted(object? sender, VectorEventArgs e) =>
+        _recentWidthIntent = ListsGrid.ColumnDefinitions[2].ActualWidth;
+
+    // As above, for the console row splitter.
+    private void OnConsoleSplitterDragCompleted(object? sender, VectorEventArgs e) =>
+        _consoleHeightIntent = BodyGrid.RowDefinitions[2].ActualHeight;
 
     private void OnClosing(object? sender, WindowClosingEventArgs e)
     {
@@ -139,7 +164,13 @@ public partial class MainWindow : Window
             if (vm is null)
                 return;
 
-            vm.PersistPaneSizes(ListsGrid.ColumnDefinitions[2].ActualWidth, BodyGrid.RowDefinitions[2].ActualHeight);
+            // Persist the stored INTENT, not the live ActualWidth/ActualHeight — those may have been
+            // clamped down by a small window, and saving a clamped size would lose the user's intent.
+            // Falls back to the live size only if no intent was ever established (defensive; OnLoaded
+            // always seeds it).
+            vm.PersistPaneSizes(
+                _recentWidthIntent ?? ListsGrid.ColumnDefinitions[2].ActualWidth,
+                _consoleHeightIntent ?? BodyGrid.RowDefinitions[2].ActualHeight);
             vm.Shutdown();
         }
         catch (Exception ex)

@@ -68,4 +68,19 @@ public static class WindowMetrics
     /// </summary>
     public static double MaxConsoleHeight(double windowHeight, double listsRowMin, double consoleRowMin)
         => Math.Max(consoleRowMin, windowHeight - (HeaderHeight + StatusBarHeight + listsRowMin + RowSplitter + BodyVerticalMargin));
+
+    /// <summary>
+    /// The pixel size a fixed pane should DISPLAY at: the user's stored <paramref name="intent"/>
+    /// clamped to <c>[min, maxFit]</c>, where <paramref name="maxFit"/> is the room the current
+    /// window leaves (from <see cref="MaxRecentWidth"/> / <see cref="MaxConsoleHeight"/>). Window-shrink
+    /// narrows the display toward <paramref name="min"/>; window-grow returns it toward intent. The
+    /// intent itself is never altered here — only a real splitter drag updates it — so a temporary
+    /// shrink can never be persisted as the new intent.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="maxFit"/> already floors at <paramref name="min"/>, so when the window is so
+    /// small that there is no room beyond the minimum, the display lands exactly on the minimum.
+    /// </remarks>
+    public static double DisplayFromIntent(double intent, double min, double maxFit)
+        => Math.Clamp(intent, min, Math.Max(min, maxFit));
 }
