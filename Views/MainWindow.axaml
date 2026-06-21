@@ -100,14 +100,24 @@
             </DockPanel>
         </Border>
 
-        <!-- Status bar: left = status, right = N running. In its own bottom track so it stays
-             reserved and visible at every window size. -->
+        <!-- Status bar in its own bottom track so it stays reserved at every window size. Two zones:
+             left is the transient activity/result, coloured by severity (StatusBrush — secondary,
+             accent while busy, danger on failure); right is the persistent fact cluster (total scripts,
+             hidden when any, and running with a green dot when something is live). -->
         <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="14,6">
             <DockPanel>
-                <TextBlock DockPanel.Dock="Right" Text="{Binding RunningCount, StringFormat='{}{0} running'}"
-                           Foreground="{StaticResource TextSecondaryBrush}"/>
-                <TextBlock Text="{Binding Status}" Foreground="{StaticResource TextSecondaryBrush}"/>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ScriptCount, StringFormat='{}{0} scripts'}" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <TextBlock Text="·" Foreground="{StaticResource BorderBrush}" IsVisible="{Binding HasHidden}"/>
+                    <TextBlock Text="{Binding HiddenCount, StringFormat='{}{0} hidden'}" Foreground="{StaticResource TextSecondaryBrush}" IsVisible="{Binding HasHidden}"/>
+                    <TextBlock Text="·" Foreground="{StaticResource BorderBrush}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Ellipse Width="7" Height="7" Fill="{StaticResource RunningBrush}" VerticalAlignment="Center" IsVisible="{Binding HasRunning}"/>
+                        <TextBlock Text="{Binding RunningCount, StringFormat='{}{0} running'}" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    </StackPanel>
+                </StackPanel>
+                <TextBlock Text="{Binding Status}" Foreground="{Binding StatusBrush}" VerticalAlignment="Center"/>
             </DockPanel>
         </Border>
 

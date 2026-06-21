@@ -8,10 +8,11 @@ namespace ScriptDock.Views;
 /// <summary>Semantic section a shortcut belongs to; drives the modal's section order and headers.</summary>
 public enum ShortcutGroup
 {
+    Commands,
+    Focus,
     Scripts,
     Recent,
     Navigation,
-    App,
 }
 
 /// <summary>
@@ -21,8 +22,12 @@ public enum ShortcutGroup
 public enum ShortcutAction
 {
     Rescan,
+    ToggleShowHidden,
     OpenSettings,
     ShowShortcuts,
+    FocusScripts,
+    FocusRecent,
+    FocusConsole,
 }
 
 /// <summary>
@@ -48,18 +53,20 @@ public static class ShortcutCatalog
     /// <summary>Section order for the help modal; only non-empty groups render.</summary>
     public static readonly IReadOnlyList<ShortcutGroup> GroupOrder =
     [
+        ShortcutGroup.Commands,
+        ShortcutGroup.Focus,
         ShortcutGroup.Scripts,
         ShortcutGroup.Recent,
         ShortcutGroup.Navigation,
-        ShortcutGroup.App,
     ];
 
     public static string GroupHeader(ShortcutGroup group) => group switch
     {
+        ShortcutGroup.Commands => "Commands",
+        ShortcutGroup.Focus => "Focus",
         ShortcutGroup.Scripts => "Scripts",
         ShortcutGroup.Recent => "Recent",
         ShortcutGroup.Navigation => "Navigation",
-        ShortcutGroup.App => "App",
         _ => group.ToString(),
     };
 
@@ -76,7 +83,18 @@ public static class ShortcutCatalog
         var cmd = CommandModifier(top);
         return new List<ShortcutItem>
         {
-            // Scripts — running is owned by the tile (pointer + keys), listed for discoverability.
+            // Commands — global app accelerators, in rough order of use.
+            Command(ShortcutGroup.Commands, "Rescan", cmd, Key.R, "R", ShortcutAction.Rescan),
+            Command(ShortcutGroup.Commands, "Toggle hidden scripts", cmd | KeyModifiers.Shift, Key.H, "Shift+H", ShortcutAction.ToggleShowHidden),
+            Command(ShortcutGroup.Commands, "Settings", cmd, Key.OemComma, "Comma", ShortcutAction.OpenSettings),
+            Command(ShortcutGroup.Commands, "Keyboard shortcuts", cmd, Key.OemQuestion, "Slash", ShortcutAction.ShowShortcuts),
+
+            // Focus — jump to a pane without the mouse (numbered to match the layout).
+            Command(ShortcutGroup.Focus, "Scripts list", cmd, Key.D1, "1", ShortcutAction.FocusScripts),
+            Command(ShortcutGroup.Focus, "Recent list", cmd, Key.D2, "2", ShortcutAction.FocusRecent),
+            Command(ShortcutGroup.Focus, "Console input", cmd, Key.D3, "3", ShortcutAction.FocusConsole),
+
+            // Scripts — running the selection is owned by the tile (pointer + keys), listed for discoverability.
             Display(ShortcutGroup.Scripts, "Run or restart the selected script", "Double-click / Enter / Space"),
 
             // Recent — Delete is owned by the Recent list while it has focus.
@@ -84,11 +102,6 @@ public static class ShortcutCatalog
 
             // Navigation — native list selection.
             Display(ShortcutGroup.Navigation, "Move between items in the focused list", "Up / Down"),
-
-            // App — the centralized command accelerators.
-            Command(ShortcutGroup.App, "Rescan", cmd, Key.R, "R", ShortcutAction.Rescan),
-            Command(ShortcutGroup.App, "Open Settings", cmd, Key.OemComma, "Comma", ShortcutAction.OpenSettings),
-            Command(ShortcutGroup.App, "Show shortcuts", cmd, Key.OemQuestion, "Slash", ShortcutAction.ShowShortcuts),
         };
     }
 

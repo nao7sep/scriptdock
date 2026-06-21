@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -46,7 +47,20 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private string _status = "Ready.";
     [ObservableProperty] private RecentEntry? _selectedRecentEntry;
     [ObservableProperty] private string _selectedOutput = string.Empty;
-    [ObservableProperty] private int _runningCount;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasRunning))]
+    private int _runningCount;
+
+    // Status-bar persistent facts: total scripts found and how many of those are hidden.
+    [ObservableProperty] private int _scriptCount;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasHidden))]
+    private int _hiddenCount;
+
+    // Severity of the current status message, driving the status-bar text colour (see StatusBrush).
+    private StatusKind _statusKind = StatusKind.Info;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ToggleHiddenLabel))]
@@ -89,6 +103,19 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// state. Single-selection list, so the one button serves both directions (Hide a visible script,
     /// Show a hidden one). Defaults to "Hide" when nothing is selected.</summary>
     public string ToggleHiddenLabel => SelectedScript?.IsHidden == true ? "Show" : "Hide";
+
+    /// <summary>Status-bar text colour by the current message's severity: accent while busy, danger on
+    /// failure, secondary otherwise. Resolved from the shared palette.</summary>
+    public IBrush StatusBrush => _statusKind switch
+    {
+        StatusKind.Busy => Palette.Brush("AccentBrush"),
+        StatusKind.Error => Palette.Brush("DangerTextBrush"),
+        _ => Palette.Brush("TextSecondaryBrush"),
+    };
+
+    /// <summary>Status-bar fact toggles: the running dot/segment and the hidden segment show only when non-zero.</summary>
+    public bool HasRunning => RunningCount > 0;
+    public bool HasHidden => HiddenCount > 0;
 
     /// <summary>Raised after running an input-accepting script, asking the view to focus the console
     /// input field so the user can type immediately. Focus is a view concern, so it is signalled here
@@ -167,7 +194,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _config.KillProcessesOnClose = draft.KillProcessesOnClose;
         _config.RecaptureProcessesOnLaunch = draft.RecaptureProcessesOnLaunch;
         _configStore.Save(_config);
-        Status = "Configuration changed — Rescan to apply.";
+        SetStatus("Configuration changed — Rescan to apply.");
     });
 
     /// <summary>Sends a line to the selected running script's stdin (from the console input field).</summary>
@@ -183,7 +210,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
 
         IsScanning = true;
-        Status = "Scanning…";
+        SetStatus("Scanning…", StatusKind.Busy);
         try
         {
             var roots = _config.RootDirs.ToList();
@@ -203,12 +230,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             _state.KnownPaths = report.Found.ToList();
             _stateStore.Save(_state);
 
-            Status = $"{report.Found.Count} script(s) — {diff.Added.Count} new, {diff.Removed.Count} removed.";
+            SetStatus(ScanResultMessage(diff));
         }
         catch (Exception ex)
         {
             Log.Error("ui: rescan failed", ex);
-            Status = "Scan failed — see logs.";
+            SetStatus("Scan failed — see logs.", StatusKind.Error);
         }
         finally
         {
@@ -418,6 +445,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             restored = Scripts[Math.Min(selectedIndex, Scripts.Count - 1)];
         SelectedScript = restored;
 
+        // Status-bar facts: total found, and how many of those are hidden.
+        ScriptCount = _lastFound.Count;
+        HiddenCount = _lastFound.Count(hidden.Contains);
         OnPropertyChanged(nameof(NoScripts));
     }
 
@@ -459,7 +489,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             Log.Error($"ui: {action} failed", ex);
-            Status = $"{action} failed — see logs.";
+            SetStatus($"{action} failed — see logs.", StatusKind.Error);
         }
     }
 
@@ -473,7 +503,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             Log.Error($"ui: {action} failed", ex);
-            Status = $"{action} failed — see logs.";
+            SetStatus($"{action} failed — see logs.", StatusKind.Error);
         }
     }
 
@@ -481,4 +511,27 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // to ask, so the action proceeds.
     private async Task<bool> ConfirmAsync(string title, string message, string confirmLabel) =>
         ConfirmHandler is null || await ConfirmHandler(new ConfirmRequest(title, message, confirmLabel));
+
+    // Set the status-bar text and its severity together (severity drives StatusBrush's colour).
+    private void SetStatus(string text, StatusKind kind = StatusKind.Info)
+    {
+        _statusKind = kind;
+        Status = text;
+        OnPropertyChanged(nameof(StatusBrush));
+    }
+
+    // The status line after a scan: the deltas only ("3 new, 1 removed" / "Up to date"), since the
+    // status bar's right side already shows the total script count.
+    private static string ScanResultMessage(ScanDiff diff)
+    {
+        var added = diff.Added.Count;
+        var removed = diff.Removed.Count;
+        if (added == 0 && removed == 0)
+            return "Up to date.";
+        if (removed == 0)
+            return $"{added} new.";
+        if (added == 0)
+            return $"{removed} removed.";
+        return $"{added} new, {removed} removed.";
+    }
 }

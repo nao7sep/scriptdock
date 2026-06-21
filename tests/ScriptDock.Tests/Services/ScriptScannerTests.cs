@@ -46,7 +46,8 @@ public sealed class ScriptScannerTests : IDisposable
         var report = new ScriptScanner().Scan(
             rootDirs: [_root],
             extensions: [".command"],
-            ignorePatterns: ["/node_modules/", "ignore-me"]);
+            ignorePatterns: ["/node_modules/", "ignore-me"],
+            cancellationToken: TestContext.Current.CancellationToken);
 
         var foundNames = report.Found.Select(Path.GetFileName).ToList();
         Assert.Contains("a.command", foundNames);
@@ -65,7 +66,7 @@ public sealed class ScriptScannerTests : IDisposable
     {
         Touch("a.command");
 
-        var report = new ScriptScanner().Scan([_root], [".command"], ["["]);
+        var report = new ScriptScanner().Scan([_root], [".command"], ["["], TestContext.Current.CancellationToken);
 
         Assert.Contains("[", report.InvalidPatterns);
         Assert.Contains(report.Found, p => Path.GetFileName(p) == "a.command");
@@ -76,7 +77,7 @@ public sealed class ScriptScannerTests : IDisposable
     {
         var missing = Path.Combine(_root, "does-not-exist");
 
-        var report = new ScriptScanner().Scan([missing], [".command"], []);
+        var report = new ScriptScanner().Scan([missing], [".command"], [], TestContext.Current.CancellationToken);
 
         Assert.Contains(Path.GetFullPath(missing), report.Inaccessible);
         Assert.Empty(report.Found);

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Xunit;
 
@@ -10,7 +11,11 @@ namespace ScriptDock.Tests;
 /// </summary>
 public sealed class MacOnlyFactAttribute : FactAttribute
 {
-    public MacOnlyFactAttribute()
+    // Forward the caller's source location to the base so xunit can report it (xUnit3003).
+    public MacOnlyFactAttribute(
+        [CallerFilePath] string? sourceFilePath = null,
+        [CallerLineNumber] int sourceLineNumber = -1)
+        : base(sourceFilePath, sourceLineNumber)
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             Skip = "Runs on macOS only.";
@@ -20,7 +25,10 @@ public sealed class MacOnlyFactAttribute : FactAttribute
 /// <summary>A <see cref="FactAttribute"/> that runs only on Windows.</summary>
 public sealed class WindowsOnlyFactAttribute : FactAttribute
 {
-    public WindowsOnlyFactAttribute()
+    public WindowsOnlyFactAttribute(
+        [CallerFilePath] string? sourceFilePath = null,
+        [CallerLineNumber] int sourceLineNumber = -1)
+        : base(sourceFilePath, sourceLineNumber)
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             Skip = "Runs on Windows only.";

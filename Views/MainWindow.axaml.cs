@@ -266,11 +266,24 @@ public partial class MainWindow : Window
                 if (ViewModel?.RescanCommand.CanExecute(null) == true)
                     ViewModel.RescanCommand.Execute(null);
                 break;
+            case ShortcutAction.ToggleShowHidden:
+                if (ViewModel is { } vm)
+                    vm.ShowHidden = !vm.ShowHidden;
+                break;
             case ShortcutAction.OpenSettings:
                 _ = OpenSettingsAsync();
                 break;
             case ShortcutAction.ShowShortcuts:
                 _ = ShowShortcutsAsync();
+                break;
+            case ShortcutAction.FocusScripts:
+                ScriptsList.Focus();
+                break;
+            case ShortcutAction.FocusRecent:
+                RecentList.Focus();
+                break;
+            case ShortcutAction.FocusConsole:
+                ConsoleInput.Focus(); // no-op when disabled (no input-accepting run selected)
                 break;
         }
     }
