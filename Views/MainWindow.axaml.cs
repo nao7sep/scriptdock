@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -40,18 +41,53 @@ public partial class MainWindow : Window
             if (vm is null)
                 return;
 
-            // Clamp restored pane sizes to the current window so a size saved on a larger screen
-            // can't squeeze a pane to nothing here: keep room for the Scripts pane and the lists row.
+            // Reserve each pane's header button row. The right-aligned actions (Run/Hide/Show-hidden/
+            // Rescan on Scripts; Run/Stop/Dismiss on Recent) overlap the section title once the column
+            // is narrower than the header needs, so measure each header's natural width and raise the
+            // column minimum to fit it. The width is font-dependent, so it's measured, not guessed.
+            ScriptsHeader.Measure(Size.Infinity);
+            RecentHeader.Measure(Size.Infinity);
+            ListsGrid.ColumnDefinitions[0].MinWidth =
+                Math.Max(ListsGrid.ColumnDefinitions[0].MinWidth, ScriptsHeader.DesiredSize.Width);
+            ListsGrid.ColumnDefinitions[2].MinWidth =
+                Math.Max(ListsGrid.ColumnDefinitions[2].MinWidth, RecentHeader.DesiredSize.Width);
+
+            // Derive the window minimum from the live grids plus fixed chrome (see WindowMetrics)
+            // rather than a hand-typed constant, so the window can never be shrunk small enough to
+            // hide a pane or overlap the status bar — and so changing a column/row minimum (or the
+            // measured header width above) moves the window minimum with it. The status bar sits in
+            // its own reserved track, so the body fill can't cover it.
+            MinWidth = WindowMetrics.MinWidthFor(
+                ListsGrid.ColumnDefinitions.Select(c => c.MinWidth));
+            MinHeight = WindowMetrics.MinHeightFor(
+                BodyGrid.RowDefinitions.Select(r => r.MinHeight));
+
+            // Restore persisted pane sizes, clamped to the current window so a size saved on a larger
+            // screen can't squeeze a pane to nothing here. The bounds come from WindowMetrics — the
+            // same source the window minimum uses — so the clamp and the track minimums can't disagree.
+            var recentColumnMin = ListsGrid.ColumnDefinitions[2].MinWidth;
+            var scriptsColumnMin = ListsGrid.ColumnDefinitions[0].MinWidth;
+            var consoleRowMin = BodyGrid.RowDefinitions[2].MinHeight;
+            var listsRowMin = BodyGrid.RowDefinitions[0].MinHeight;
+
             if (vm.SavedRecentWidth is { } recentWidth)
             {
-                var maxRecent = Math.Max(240, Width - 360);
-                ListsGrid.ColumnDefinitions[2].Width = new GridLength(Math.Clamp(recentWidth, 240, maxRecent), GridUnitType.Pixel);
+                var maxRecent = WindowMetrics.MaxRecentWidth(Width, scriptsColumnMin, recentColumnMin);
+                ListsGrid.ColumnDefinitions[2].Width =
+                    new GridLength(Math.Clamp(recentWidth, recentColumnMin, maxRecent), GridUnitType.Pixel);
             }
             if (vm.SavedConsoleHeight is { } consoleHeight)
             {
-                var maxConsole = Math.Max(120, Height - 260);
-                BodyGrid.RowDefinitions[2].Height = new GridLength(Math.Clamp(consoleHeight, 120, maxConsole), GridUnitType.Pixel);
+                var maxConsole = WindowMetrics.MaxConsoleHeight(Height, listsRowMin, consoleRowMin);
+                BodyGrid.RowDefinitions[2].Height =
+                    new GridLength(Math.Clamp(consoleHeight, consoleRowMin, maxConsole), GridUnitType.Pixel);
             }
+
+            // The Recent column and console row are fixed pixel sizes that don't shrink when the
+            // window does, so re-clamp them on every resize — otherwise shrinking the window lets the
+            // console spill over the status bar, and a wide Recent column starves the Scripts pane.
+            ClampPanesToWindow();
+            PropertyChanged += OnWindowPropertyChanged;
 
             // Catalog drives the live accelerators (the help modal renders the same source); the
             // command key (Cmd on macOS, Ctrl on Windows) is resolved by the framework.
@@ -66,6 +102,33 @@ public partial class MainWindow : Window
         {
             Log.Error("ui: window load failed", ex);
         }
+    }
+
+    // Re-clamp the fixed-size panes whenever the window resizes (ClientSize/Bounds both track it;
+    // the clamp is idempotent, so reacting to either — or both — is harmless).
+    private void OnWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == ClientSizeProperty || e.Property == BoundsProperty)
+            ClampPanesToWindow();
+    }
+
+    // Keep the fixed-pixel Recent column and console row within the current window. A fixed track
+    // doesn't shrink when the window does, so without this the console row would overflow past the
+    // window edge over the status bar, and a wide Recent column would push Scripts below its minimum.
+    // Bounds come from WindowMetrics — the same source as the window minimum and the restore clamp.
+    private void ClampPanesToWindow()
+    {
+        var recentColumn = ListsGrid.ColumnDefinitions[2];
+        var maxRecent = WindowMetrics.MaxRecentWidth(
+            Width, ListsGrid.ColumnDefinitions[0].MinWidth, recentColumn.MinWidth);
+        if (recentColumn.Width.IsAbsolute && recentColumn.Width.Value > maxRecent)
+            recentColumn.Width = new GridLength(maxRecent, GridUnitType.Pixel);
+
+        var consoleRow = BodyGrid.RowDefinitions[2];
+        var maxConsole = WindowMetrics.MaxConsoleHeight(
+            Height, BodyGrid.RowDefinitions[0].MinHeight, consoleRow.MinHeight);
+        if (consoleRow.Height.IsAbsolute && consoleRow.Height.Value > maxConsole)
+            consoleRow.Height = new GridLength(maxConsole, GridUnitType.Pixel);
     }
 
     private void OnClosing(object? sender, WindowClosingEventArgs e)

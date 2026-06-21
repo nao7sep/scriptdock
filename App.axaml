@@ -80,6 +80,24 @@
         <SolidColorBrush x:Key="DisabledTextBrush" Color="{StaticResource DisabledText}"/>
 
         <conv:ScriptItemColorConverter x:Key="ScriptColor"/>
+
+        <!-- Scroll-bar theming. Fluent's default ScrollBar thumb/track brushes are NOT remapped to
+             this app's custom palette, so left alone the bar reads off-theme. Remap the Fluent
+             thumb-fill resource keys (referenced as DynamicResources inside the Fluent ScrollBar
+             template) to the app's existing palette brushes — the resting thumb is the same Border
+             colour used across the UI, brightening to the secondary-text colour on hover/press — and
+             keep the track transparent so the bar is a slim thumb over the content. ScrollBarSize is
+             the template's thickness token; 10px gives the thin, modern bar the conventions call for.
+             The CornerRadius that makes the thumb a pill is set on the Thumb in Application.Styles. -->
+        <x:Double x:Key="ScrollBarSize">10</x:Double>
+        <SolidColorBrush x:Key="ScrollBarPanningThumbBackground" Color="{StaticResource Border}"/>
+        <SolidColorBrush x:Key="ScrollBarThumbFill" Color="{StaticResource Border}"/>
+        <SolidColorBrush x:Key="ScrollBarThumbFillPointerOver" Color="{StaticResource TextSecondary}"/>
+        <SolidColorBrush x:Key="ScrollBarThumbFillPressed" Color="{StaticResource TextSecondary}"/>
+        <SolidColorBrush x:Key="ScrollBarTrackFill" Color="Transparent"/>
+        <SolidColorBrush x:Key="ScrollBarTrackFillPointerOver" Color="Transparent"/>
+        <SolidColorBrush x:Key="ScrollBarBackground" Color="Transparent"/>
+        <SolidColorBrush x:Key="ScrollBarBackgroundPointerOver" Color="Transparent"/>
     </Application.Resources>
 
     <Application.Styles>
@@ -200,6 +218,20 @@
         <Style Selector="TextBox.stdin:disabled /template/ Border#PART_BorderElement">
             <Setter Property="Background" Value="{StaticResource DisabledInputBrush}"/>
             <Setter Property="BorderBrush" Value="{StaticResource DisabledInputBorderBrush}"/>
+        </Style>
+
+        <!-- Thin, rounded, palette-themed scroll bars everywhere (per the window-chrome
+             conventions). Applied globally so the console ScrollViewer, both main ListBoxes, and the
+             Settings lists all match. The slim thickness comes from the ScrollBarSize resource
+             override above; here the thumb is rounded into a pill. The thumb's fill colour (resting
+             vs. hover/press) is driven by the remapped Fluent resources above, so this style only
+             needs the shape — keeping it template-version-robust. CornerRadius 5 on a 10px bar makes
+             the thumb fully rounded (a pill) in both orientations. -->
+        <Style Selector="ScrollBar">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="ScrollBar /template/ Thumb">
+            <Setter Property="CornerRadius" Value="5"/>
         </Style>
     </Application.Styles>
 </Application>

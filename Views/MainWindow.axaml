@@ -5,10 +5,18 @@
         x:Class="ScriptDock.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="ScriptDock"
-        Width="1100" Height="720" MinWidth="860" MinHeight="540"
+        Width="1100" Height="720"
         WindowStartupLocation="CenterScreen"
         KeyDown="OnWindowKeyDown"
-        Background="{StaticResource AppBackgroundBrush}">
+        Background="{StaticResource AppBackgroundBrush}"
+        RequestedThemeVariant="Dark"><!-- ScriptDock is dark-only; setting the variant on the
+        Window itself (not just App) makes its ActualThemeVariant Dark, which Avalonia's macOS
+        backend uses to paint the native NSWindow title bar dark regardless of the system
+        appearance. The native bar's color can't be verified headlessly — VISUALLY VERIFY on a
+        light-mode Mac. If it still renders light, the documented follow-up is to force
+        NSApplication.appearance = NSAppearanceNameDarkAqua at startup (deliberately not done
+        here, to avoid risky untested interop). The MinWidth/MinHeight are intentionally NOT set
+        here: they are derived from the layout in WindowMetrics and assigned in OnLoaded. -->
 
     <Window.Resources>
         <!-- Content-sized script chip: slightly raised from the dark list well. A newly-found script is
@@ -66,10 +74,13 @@
         </Style>
     </Window.Styles>
 
-    <DockPanel>
+    <!-- Header / body / status bar each get their own track so the status bar is reserved chrome
+         and the body's MinHeight can never overlap it (a DockPanel fill child would). Row order is
+         visual top-to-bottom: header, fill body, status bar. -->
+    <Grid RowDefinitions="Auto,*,Auto">
 
         <!-- Flat header: wordmark + hamburger, with a single bottom border. -->
-        <Border DockPanel.Dock="Top" Background="{StaticResource SurfaceBrush}"
+        <Border Grid.Row="0" Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="14,10">
             <DockPanel>
                 <!-- Hamburger docked right; the wordmark is the last (fill) child so it stays left. -->
@@ -89,8 +100,9 @@
             </DockPanel>
         </Border>
 
-        <!-- Status bar: left = status, right = N running. -->
-        <Border DockPanel.Dock="Bottom" Background="{StaticResource SurfaceBrush}"
+        <!-- Status bar: left = status, right = N running. In its own bottom track so it stays
+             reserved and visible at every window size. -->
+        <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="14,6">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Right" Text="{Binding RunningCount, StringFormat='{}{0} running'}"
@@ -99,22 +111,38 @@
             </DockPanel>
         </Border>
 
-        <!-- Body: lists row, splitter, console row. Both content rows carry a MinHeight so shrinking
-             the window (or dragging the splitter) can't smash either the Scripts/Recent lists or the
-             console to nothing — they stop shrinking and the window's own MinHeight takes over. -->
-        <Grid x:Name="BodyGrid" Margin="12">
+        <!-- Body: lists row, splitter, console row. The lists row fills (*) and shrinks to its
+             MinHeight under window pressure; the console row is a fixed pixel height the user sizes
+             with the splitter (and which persists), bounded by its MinHeight. The window's own
+             MinHeight (derived in WindowMetrics) reserves both mins; because a fixed-pixel row does
+             not shrink on its own, OnLoaded clamps the console row down on every resize
+             (ClampPanesToWindow) so it can never spill past the shrinking window over the status bar. -->
+        <Grid x:Name="BodyGrid" Grid.Row="1" Margin="12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" MinHeight="200"/>
                 <RowDefinition Height="6"/>
-                <RowDefinition Height="220" MinHeight="120"/>
+                <!-- 160 = section header (~40) + stdin input (~46) + the well's margin and a few
+                     readable lines; below this the console well collapses to nothing. -->
+                <RowDefinition Height="220" MinHeight="160"/>
             </Grid.RowDefinitions>
 
-            <Grid x:Name="ListsGrid" Grid.Row="0" ColumnDefinitions="*,6,340">
+            <!-- Both content columns carry a real minimum width; WindowMetrics sums these (read
+                 from the live columns) to derive the window MinWidth and to back the restore clamp.
+                 These XAML values are a floor: OnLoaded measures each pane's header button row and
+                 raises the column minimum to fit it, so the right-aligned buttons can never overlap
+                 the section title (a font-dependent width the header itself dictates). The column
+                 splitter sits between them in its own 6px column. -->
+            <Grid x:Name="ListsGrid" Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MinWidth="360"/>
+                    <ColumnDefinition Width="6"/>
+                    <ColumnDefinition Width="340" MinWidth="260"/>
+                </Grid.ColumnDefinitions>
 
                 <!-- Scripts (content-sized tiles); Rescan + Show-hidden act on this list. -->
                 <Border Grid.Column="0" Classes="card" Padding="0">
                     <DockPanel>
-                        <Border DockPanel.Dock="Top" Classes="sectionHeader">
+                        <Border DockPanel.Dock="Top" Classes="sectionHeader" x:Name="ScriptsHeader">
                             <DockPanel>
                                 <TextBlock Text="Scripts" Classes="cardHeader" VerticalAlignment="Center"/>
                                 <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center">
@@ -156,7 +184,7 @@
                 <!-- Recent (running + recently-run, dismissible). -->
                 <Border Grid.Column="2" Classes="card" Padding="0">
                     <DockPanel>
-                        <Border DockPanel.Dock="Top" Classes="sectionHeader">
+                        <Border DockPanel.Dock="Top" Classes="sectionHeader" x:Name="RecentHeader">
                             <DockPanel>
                                 <TextBlock Text="Recent" Classes="cardHeader" VerticalAlignment="Center"/>
                                 <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center">
@@ -233,5 +261,5 @@
                 </DockPanel>
             </Border>
         </Grid>
-    </DockPanel>
+    </Grid>
 </Window>
