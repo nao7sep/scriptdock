@@ -22,7 +22,7 @@ public sealed class ConfigBootstrapTests
         Assert.Same(config, store.LastSaved);
         Assert.Contains(ConfigDefaults.DefaultExtension, config.Extensions);
         Assert.Equal(ConfigDefaults.BuiltInIgnorePatterns, config.IgnorePatterns);
-        Assert.NotEmpty(config.RootDirs);
+        Assert.Empty(config.RootDirs); // no root is seeded — the scan target is personal, set in Settings
     }
 
     [Fact]

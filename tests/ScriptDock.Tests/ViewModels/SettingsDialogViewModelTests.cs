@@ -95,6 +95,41 @@ public sealed class SettingsDialogViewModelTests
     }
 
     [Fact]
+    public void AddExtension_RejectsWhitespace_AndReportsIt()
+    {
+        var vm = new SettingsDialogViewModel(Seed());
+
+        // Interior space — a pasted multi-token blob, never a real extension.
+        Assert.False(vm.AddExtension(".com mand"));
+        Assert.NotEqual(string.Empty, vm.ExtensionError);
+        Assert.DoesNotContain(".com mand", vm.Extensions);
+
+        // A multi-line paste leaks a newline into the single-line field.
+        Assert.False(vm.AddExtension(".sh\n.ps1"));
+
+        // A clean value still adds and clears the error.
+        Assert.True(vm.AddExtension(".sh"));
+        Assert.Contains(".sh", vm.Extensions);
+        Assert.Equal(string.Empty, vm.ExtensionError);
+    }
+
+    [Fact]
+    public void AddIgnorePattern_RejectsLineBreak_ButKeepsInteriorSpaces()
+    {
+        var vm = new SettingsDialogViewModel(Seed());
+
+        // A multi-line paste — reject rather than flatten (flattening a newline to a space would
+        // silently change what the regex matches).
+        Assert.False(vm.AddIgnorePattern("/node_modules/\n/obj/"));
+        Assert.NotEqual(string.Empty, vm.PatternError);
+
+        // An interior space is legitimate regex content — a path can contain one — so it is kept.
+        Assert.True(vm.AddIgnorePattern("/My Projects/"));
+        Assert.Contains("/My Projects/", vm.IgnorePatterns);
+        Assert.Equal(string.Empty, vm.PatternError);
+    }
+
+    [Fact]
     public void AddIgnorePattern_RejectsInvalidRegex_AndReportsIt()
     {
         var vm = new SettingsDialogViewModel(Seed());

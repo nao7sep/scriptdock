@@ -23,7 +23,17 @@ public sealed class ScriptScanner
         CancellationToken cancellationToken = default)
     {
         var rules = IgnoreRules.Compile(ignorePatterns);
-        var extensionSet = new HashSet<string>(extensions, StringComparer.OrdinalIgnoreCase);
+
+        // Normalize each configured extension to the leading-dot form Path.GetExtension returns, and
+        // drop blanks. The Settings dialog normalizes on entry, but config.json is an editable surface
+        // (storage-path conventions) — a hand-edited "command" (no dot) or "" would otherwise match
+        // nothing and the scan would silently come back empty.
+        var extensionSet = new HashSet<string>(
+            extensions
+                .Select(e => e.Trim())
+                .Where(e => e.Length > 0)
+                .Select(e => e.StartsWith('.') ? e : "." + e),
+            StringComparer.OrdinalIgnoreCase);
 
         var found = new List<string>();
         var prunedDirectories = new List<IgnoredEntry>();
@@ -116,8 +126,12 @@ public sealed class ScriptScanner
 
     private static IReadOnlyList<string> SortedPaths(List<string> values)
     {
-        values.Sort(StringComparer.Ordinal);
-        return values;
+        // Distinct: overlapping or nested roots (e.g. /code and /code/proj) enumerate the same file
+        // under more than one walk, so dedup by ordinal path — otherwise a script shows as a duplicate
+        // tile and the status-bar total/hidden counts (derived from Found.Count) are inflated.
+        var distinct = values.Distinct(StringComparer.Ordinal).ToList();
+        distinct.Sort(StringComparer.Ordinal);
+        return distinct;
     }
 
     private static IReadOnlyList<IgnoredEntry> SortedEntries(List<IgnoredEntry> entries)

@@ -21,6 +21,7 @@ public sealed class FakeProcessRunner : IProcessRunner
     public List<ScriptProcess> TerminateCalls { get; } = new();
     public List<ScriptProcess> RestartCalls { get; } = new();
     public List<ScriptProcess> DismissCalls { get; } = new();
+    public List<PersistedProcess> RecaptureCalls { get; } = new();
 
     public event EventHandler? ProcessesChanged { add { } remove { } }
 
@@ -59,7 +60,15 @@ public sealed class FakeProcessRunner : IProcessRunner
 
     public void ShutdownAll(bool kill) { }
 
-    public void Recapture(IReadOnlyList<PersistedProcess> records) { }
+    /// <summary>Re-attaches each persisted record as a Running process, mirroring the real runner so
+    /// the view model's recapture→Recent wiring is exercisable. A recaptured run owns no stdin pipe,
+    /// so AcceptsInput stays false; it has no live OS Process, so Pid/OsStartedAt read null.</summary>
+    public void Recapture(IReadOnlyList<PersistedProcess> records)
+    {
+        RecaptureCalls.AddRange(records);
+        foreach (var record in records)
+            _active.Add(new ScriptProcess(_nextId++, record.ScriptPath, record.LaunchedAt) { LogFilePath = record.LogFilePath });
+    }
 
     public void ReconcileExited() { }
 }

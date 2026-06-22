@@ -15,17 +15,19 @@ namespace ScriptDock.Converters;
 /// </summary>
 public sealed class ScriptItemColorConverter : IValueConverter
 {
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        if (value is not ScriptItem item)
-            return Brushes.Transparent;
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is ScriptItem item ? Palette.Brush(PaletteKeyFor(item)) : Brushes.Transparent;
 
-        if (item.Flag == ScriptFlag.Removed)
-            return Palette.Brush("DangerTextBrush");
-        if (item.IsHidden)
-            return Palette.Brush("ScriptHiddenBrush");
-        return Palette.Brush("TextPrimaryBrush");
-    }
+    /// <summary>
+    /// The palette key for a row's foreground by state — removed → danger, else hidden → dimmed,
+    /// else primary text. This is the converter's actual decision (precedence: removed over hidden);
+    /// it is split from the brush lookup so it can be unit-tested without a running Application, which
+    /// <see cref="Palette.Brush"/> needs to resolve a key into a brush.
+    /// </summary>
+    internal static string PaletteKeyFor(ScriptItem item) =>
+        item.Flag == ScriptFlag.Removed ? "DangerTextBrush"
+        : item.IsHidden ? "ScriptHiddenBrush"
+        : "TextPrimaryBrush";
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();

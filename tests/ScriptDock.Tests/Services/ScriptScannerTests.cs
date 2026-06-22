@@ -82,4 +82,64 @@ public sealed class ScriptScannerTests : IDisposable
         Assert.Contains(Path.GetFullPath(missing), report.Inaccessible);
         Assert.Empty(report.Found);
     }
+
+    [Fact]
+    public void Scan_NormalisesDotlessExtension_FromHandEditedConfig()
+    {
+        Touch("a.command");
+
+        // A config.json hand-edited to "command" (no leading dot) must still match — Path.GetExtension
+        // always yields a dotted form, so the scanner normalizes the configured extension.
+        var report = new ScriptScanner().Scan([_root], ["command"], [], TestContext.Current.CancellationToken);
+
+        Assert.Contains(report.Found, p => Path.GetFileName(p) == "a.command");
+    }
+
+    [Fact]
+    public void Scan_OverlappingRoots_ListEachScriptOnce()
+    {
+        Touch("sub/x.command");
+        var sub = Path.Combine(_root, "sub");
+
+        // The inner script is reachable from both roots; it must be found exactly once, not duplicated.
+        var report = new ScriptScanner().Scan([_root, sub], [".command"], [], TestContext.Current.CancellationToken);
+
+        Assert.Single(report.Found, p => Path.GetFileName(p) == "x.command");
+    }
+
+    [MacOnlyFact]
+    public void Scan_DoesNotDescendSymbolicLinks()
+    {
+        Touch("real/x.command");
+        Directory.CreateSymbolicLink(Path.Combine(_root, "link"), Path.Combine(_root, "real"));
+
+        var report = new ScriptScanner().Scan([_root], [".command"], [], TestContext.Current.CancellationToken);
+
+        // Found once, via the real directory only — the symlink is not followed (no loop, no dup).
+        Assert.Single(report.Found, p => Path.GetFileName(p) == "x.command");
+        Assert.DoesNotContain(report.Found, p => p.Contains($"{Path.DirectorySeparatorChar}link{Path.DirectorySeparatorChar}"));
+    }
+
+    [MacOnlyFact]
+    public void Scan_RecordsMidWalkInaccessibleDirectory_AndKeepsGoing()
+    {
+        Touch("ok/x.command");
+        Touch("locked/y.command");
+        var locked = Path.Combine(_root, "locked");
+        if (OperatingSystem.IsWindows())
+            return; // MacOnlyFact already skips Windows; this guard is what the CA1416 analyzer recognizes
+        File.SetUnixFileMode(locked, UnixFileMode.None); // 000: enumerating it throws, must not abort the scan
+        try
+        {
+            var report = new ScriptScanner().Scan([_root], [".command"], [], TestContext.Current.CancellationToken);
+
+            Assert.Contains(report.Found, p => Path.GetFileName(p) == "x.command");        // sibling still scanned
+            Assert.Contains(report.Inaccessible, p => Path.GetFileName(p) == "locked");    // recorded, not fatal
+            Assert.DoesNotContain(report.Found, p => Path.GetFileName(p) == "y.command");
+        }
+        finally
+        {
+            File.SetUnixFileMode(locked, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
 }

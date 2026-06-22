@@ -1,10 +1,8 @@
 # ScriptDock
 
-ScriptDock is a local macOS desktop launcher for the `.command`/`.ps1` scripts scattered across your project repos. It scans the root directories you configure for scripts matching the extensions you choose, and presents them in a sorted Scripts pane of tiles alongside a Recent pane that merges what's currently running with what you ran recently — so you stop digging through Finder for the one you want. It runs a script as a child process it owns: double-click to run, double-click again to restart — it confirms first, then kills the whole process tree (so dev servers free their ports cleanly) and relaunches — with each run's output kept in an in-app console you can read after it finishes and then dismiss. Actions that would end a running script — stopping it, dismissing it, or restarting it — ask for confirmation. That last part is the point — instead of a coding session buried under a hundred Terminal tabs you can't tell apart, every run lives in one window you can clear when you're done.
+ScriptDock is a local macOS desktop launcher for the `.command`/`.ps1` scripts scattered across your project repos. It scans the root directories you configure for scripts matching the extensions you choose, and presents them in a sorted Scripts pane of tiles alongside a Recent pane that merges what's currently running with what you ran recently — so you stop digging through Finder for the one you want. It runs a script as a child process it owns: double-click to run, double-click again to restart — it confirms first, then kills the whole process tree (so dev servers free their ports cleanly) and relaunches — with each run's output in an in-app console you can read after it finishes (and type back into, to answer scripts that prompt for input) and then dismiss. Actions that would end a running script — stopping it, dismissing it, or restarting it — ask for confirmation. That last part is the point — instead of a coding session buried under a hundred Terminal tabs you can't tell apart, every run lives in one window you can clear when you're done.
 
 It's for a developer who juggles many repos and restarts dev servers constantly, and who wants reliable restarts without the terminal clutter. Newly-found and vanished scripts are flagged after each scan; hidden items, recent runs, and pane sizes persist between sessions; root directories, extensions, and regex ignore patterns are editable from a settings dialog. Scripts launch through a login shell so their `PATH` matches your terminal. ScriptDock is pre-release (0.x) and macOS-first; the Windows launchers exist but are less exercised.
-
-<!-- TODO (dog-fooding): add a screenshot of the main window here. -->
 
 ## Requirements
 
@@ -14,9 +12,9 @@ It's for a developer who juggles many repos and restarts dev servers constantly,
 
 ## Getting started
 
-Run `scripts/run-dev.command` (double-click in Finder, or run it from a shell) — the fastest way to try it. On first launch ScriptDock creates `~/.scriptdock/` and seeds it to scan `~/code` for `.command` scripts; edit the roots, extensions, and ignore patterns from the Settings dialog, then Rescan.
+Run `scripts/run-dev.command` (double-click in Finder, or run it from a shell) — the fastest way to try it. On first launch ScriptDock creates `~/.scriptdock/` and seeds sensible defaults. Add your project root directory (e.g. `~/code`) and adjust extensions and ignore patterns from the Settings dialog, then Rescan.
 
-For the production-faithful build — a signed `ScriptDock.app` you can keep in your Dock — run `scripts/rebuild.command`.
+For the production-faithful build — an ad-hoc-signed `ScriptDock.app` you can keep in your Dock — run `scripts/rebuild.command`.
 
 ## License
 

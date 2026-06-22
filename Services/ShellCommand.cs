@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 
 namespace ScriptDock.Services;
 
@@ -18,8 +17,11 @@ public enum ScriptPlatform
 /// child's output — a crash can't break the child's writes). The child's stdin is left inherited
 /// from ScriptDock, which redirects it to a pipe so the user can type into an interactive script;
 /// a ScriptDock crash merely EOFs that stdin, which a script handles like a closed terminal.
-/// On Windows, <c>.ps1</c> runs under <c>pwsh</c> (output to the file) and <c>.bat</c>/<c>.cmd</c>
-/// under <c>cmd</c>.
+/// On Windows every script (including <c>.bat</c>/<c>.cmd</c>) runs under <c>pwsh</c> — the shell
+/// already required for <c>.ps1</c> — via the call operator with all streams redirected to the log.
+/// Routing through <c>pwsh</c> rather than <c>cmd</c> means the script path is a single-quoted
+/// argument, so a path containing a <c>%VAR%</c> token is taken literally instead of being expanded
+/// by <c>cmd</c>'s command-line substitution.
 /// </summary>
 /// <remarks>
 /// Because the child writes to a file rather than a TTY, a program that block-buffers its
@@ -36,12 +38,7 @@ public readonly record struct ShellCommand(string FileName, IReadOnlyList<string
     public static ShellCommand ForRun(string scriptPath, string logPath, ScriptPlatform platform)
     {
         if (platform == ScriptPlatform.Windows)
-        {
-            var ext = Path.GetExtension(scriptPath).ToLowerInvariant();
-            return ext is ".bat" or ".cmd"
-                ? new ShellCommand("cmd", ["/c", $"{CmdQuote(scriptPath)} > {CmdQuote(logPath)} 2>&1"])
-                : new ShellCommand("pwsh", ["-NoLogo", "-Command", $"& {PwshQuote(scriptPath)} *> {PwshQuote(logPath)}"]);
-        }
+            return new ShellCommand("pwsh", ["-NoLogo", "-Command", $"& {PwshQuote(scriptPath)} *> {PwshQuote(logPath)}"]);
 
         return new ShellCommand("zsh", ["-l", "-c", $"{ShellQuote(scriptPath)} > {ShellQuote(logPath)} 2>&1"]);
     }
@@ -49,6 +46,4 @@ public readonly record struct ShellCommand(string FileName, IReadOnlyList<string
     private static string ShellQuote(string value) => "'" + value.Replace("'", "'\\''") + "'";
 
     private static string PwshQuote(string value) => "'" + value.Replace("'", "''") + "'";
-
-    private static string CmdQuote(string value) => "\"" + value + "\"";
 }

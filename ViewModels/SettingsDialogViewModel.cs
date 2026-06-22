@@ -11,10 +11,11 @@ namespace ScriptDock.ViewModels;
 
 /// <summary>
 /// Editable draft of the configuration shown by the settings dialog: root directories,
-/// file extensions, ignore patterns, and the process-lifecycle settings. Add validates (non-empty, no
-/// duplicate; a pattern must compile; an extension is normalised to a leading dot at
-/// commit time — never mid-keystroke, per the text-input-ime-conventions). <see
-/// cref="IsDirty"/> is the draft differing from the config it was seeded from, so the
+/// file extensions, ignore patterns, and the process-lifecycle settings. Add validates (non-empty,
+/// no duplicate; an extension rejects whitespace and is normalised to a leading dot; a pattern must
+/// be a single line and must compile) — all at commit time, never mid-keystroke, per the
+/// text-input-ime-conventions; rejection is validation, which the text-cleanup conventions leave to
+/// the app. <see cref="IsDirty"/> is the draft differing from the config it was seeded from, so the
 /// dialog can gate Save and prompt on discard.
 /// </summary>
 public sealed partial class SettingsDialogViewModel : ObservableObject
@@ -28,6 +29,9 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     public ObservableCollection<string> RootDirs { get; }
     public ObservableCollection<string> Extensions { get; }
     public ObservableCollection<string> IgnorePatterns { get; }
+
+    [ObservableProperty]
+    private string _extensionError = string.Empty;
 
     [ObservableProperty]
     private string _patternError = string.Empty;
@@ -97,6 +101,16 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         if (trimmed.Length == 0)
             return false;
 
+        // An extension is a single token, so reject a pasted multi-token / multi-line value rather
+        // than silently forming a junk extension. This is validation, which the text-cleanup
+        // convention leaves to the app; char.IsWhiteSpace also covers a tab, a stray newline, and
+        // the full-width space (U+3000).
+        if (trimmed.Any(char.IsWhiteSpace))
+        {
+            ExtensionError = "An extension can’t contain spaces or line breaks.";
+            return false;
+        }
+
         if (!trimmed.StartsWith('.'))
             trimmed = "." + trimmed;
 
@@ -107,6 +121,7 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
             return false;
 
         Extensions.Add(trimmed);
+        ExtensionError = string.Empty;
         return true;
     }
 
@@ -115,6 +130,16 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         var trimmed = value.Trim();
         if (trimmed.Length == 0)
             return false;
+
+        // A pattern is a single-line regex. An interior line break means a multi-line paste leaked
+        // in; reject it rather than flatten it — collapsing a newline to a space would silently
+        // change what the regex matches. Interior spaces are left alone (a regex can match a literal
+        // space in a path), so this checks only line breaks, not all whitespace.
+        if (trimmed.Contains('\n') || trimmed.Contains('\r'))
+        {
+            PatternError = "A pattern must be a single line.";
+            return false;
+        }
 
         if (!IsValidRegex(trimmed))
         {

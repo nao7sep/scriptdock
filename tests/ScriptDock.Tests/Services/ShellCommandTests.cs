@@ -36,11 +36,23 @@ public sealed class ShellCommandTests
     }
 
     [Fact]
-    public void Windows_Bat_RunsUnderCmd()
+    public void Windows_Bat_RunsUnderPwsh_LikeEveryWindowsScript()
     {
+        // .bat/.cmd go through pwsh too (not cmd), so the path is a single-quoted argument and a
+        // %VAR% token in it is taken literally instead of being expanded by cmd.
         var command = ShellCommand.ForRun(@"C:\x\task.bat", @"C:\logs\run.log", ScriptPlatform.Windows);
 
-        Assert.Equal("cmd", command.FileName);
-        Assert.Equal(["/c", "\"C:\\x\\task.bat\" > \"C:\\logs\\run.log\" 2>&1"], command.Arguments);
+        Assert.Equal("pwsh", command.FileName);
+        Assert.Equal(["-NoLogo", "-Command", @"& 'C:\x\task.bat' *> 'C:\logs\run.log'"], command.Arguments);
+    }
+
+    [Fact]
+    public void Windows_PercentTokenInPath_IsTakenLiterally_NotCmdExpanded()
+    {
+        // A legal NTFS filename containing %VAR%: single-quoted in pwsh, so it is never expanded.
+        var command = ShellCommand.ForRun(@"C:\scripts\%PATH%.bat", @"C:\logs\run.log", ScriptPlatform.Windows);
+
+        Assert.Equal("pwsh", command.FileName);
+        Assert.Equal(@"& 'C:\scripts\%PATH%.bat' *> 'C:\logs\run.log'", command.Arguments[2]);
     }
 }

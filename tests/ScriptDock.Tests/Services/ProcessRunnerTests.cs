@@ -65,6 +65,21 @@ public sealed class ProcessRunnerTests : IDisposable
     }
 
     [MacOnlyFact]
+    public void Start_CapturesNonZeroExitCode()
+    {
+        // The failure path a launcher most needs to surface: a non-zero exit must be captured, not
+        // dropped to null. (Clean exit 0 and tree-kill Terminated are covered above/below.)
+        var script = WriteExecutableScript("fail.command", "echo nope\nexit 3\n");
+        var runner = new ProcessRunner(_runsDir);
+
+        var handle = runner.Start(script);
+        Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+
+        Assert.Equal(RunState.Exited, handle.State);
+        Assert.Equal(3, handle.ExitCode);
+    }
+
+    [MacOnlyFact]
     public void Start_AcceptsStdinInput_AndScriptReadsIt()
     {
         var script = WriteExecutableScript("echoer.command", "read line\necho \"got:$line\"\nexit 0\n");

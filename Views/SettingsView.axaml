@@ -29,6 +29,8 @@
                 <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddExtClick"/>
                 <TextBox x:Name="ExtEntry" PlaceholderText=".command" KeyDown="OnExtKeyDown"/>
             </DockPanel>
+            <TextBlock Text="{Binding ExtensionError}" Foreground="{StaticResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"
+                       IsVisible="{Binding ExtensionError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
         </StackPanel>
 
         <!-- Ignore patterns -->

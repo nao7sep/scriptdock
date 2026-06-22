@@ -16,8 +16,6 @@ namespace ScriptDock.ViewModels;
 /// </summary>
 public sealed class RecentEntry
 {
-    private static readonly TimeZoneInfo DisplayZone = ResolveDisplayZone();
-
     public RecentEntry(string path, string displayName, DateTimeOffset lastRanAt, ScriptProcess? process)
     {
         Path = path;
@@ -33,9 +31,10 @@ public sealed class RecentEntry
 
     public bool IsRunning => Kind == PillKind.Running;
 
-    /// <summary>The last-run time in local (JST) display form.</summary>
+    /// <summary>The last-run time in the machine's local time (UTC is converted only when facing the
+    /// user, per the timestamp conventions), in a fixed <c>yyyy-MM-dd HH:mm</c> form.</summary>
     public string LastRanDisplay =>
-        TimeZoneInfo.ConvertTime(LastRanAt, DisplayZone).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+        LastRanAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
 
     /// <summary>Short label for the state pill. No live process (a recent carried over from a
     /// past session) reads <c>Idle</c> rather than a bare dash.</summary>
@@ -74,10 +73,4 @@ public sealed class RecentEntry
         { State: RunState.Failed } => PillKind.Failed,
         _ => PillKind.Idle,
     };
-
-    private static TimeZoneInfo ResolveDisplayZone()
-    {
-        try { return TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo"); }
-        catch (TimeZoneNotFoundException) { return TimeZoneInfo.Local; }
-    }
 }
