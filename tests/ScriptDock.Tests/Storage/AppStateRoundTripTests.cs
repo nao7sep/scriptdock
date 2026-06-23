@@ -20,6 +20,10 @@ public sealed class AppStateRoundTripTests
         {
             ShowHidden = true,
             KnownPaths = { "/a/x.command", "/b/y.command" },
+            // The persisted pane intents (Recent column width / console row height) the window
+            // restores and re-clamps on load; they must survive the serializer untouched.
+            RecentPaneWidth = 420,
+            ConsoleHeight = 240,
             RecentlyRun =
             {
                 new RecentRun
@@ -46,6 +50,8 @@ public sealed class AppStateRoundTripTests
 
         Assert.True(back.ShowHidden);
         Assert.Equal(state.KnownPaths, back.KnownPaths);
+        Assert.Equal(420, back.RecentPaneWidth);
+        Assert.Equal(240, back.ConsoleHeight);
         Assert.Single(back.RecentlyRun);
         Assert.Equal("/a/x.command", back.RecentlyRun[0].Path);
         Assert.Equal(state.RecentlyRun[0].RanAt, back.RecentlyRun[0].RanAt);

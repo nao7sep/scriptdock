@@ -7,10 +7,10 @@ namespace ScriptDock.Views;
 /// <summary>
 /// Derives the main window's minimum size — and the bounds the restore-clamp uses — from the
 /// layout itself, per the window-chrome conventions: the minimum is the sum of the content
-/// panes' real minimums plus the fixed chrome, never a hand-typed magic constant. The two
-/// content rows (lists + console) and the two list columns (Scripts + Recent) carry the real
-/// pane minimums; the header bar, status bar, splitters, and the BodyGrid margin are the fixed
-/// chrome that gets reserved on top of them.
+/// panes' real minimums plus the fixed chrome, never a hand-typed magic constant. The two body
+/// columns (the Scripts/console stack and Recent) and the two left-column rows (Scripts and the
+/// console) carry the real pane minimums; the header bar, status bar, splitters, and the BodyGrid
+/// margin are the fixed chrome that gets reserved on top of them.
 /// </summary>
 /// <remarks>
 /// Kept as pure functions over the live column/row minimums (read from the grids by the caller)
@@ -27,7 +27,7 @@ public static class WindowMetrics
     private const double BodyHorizontalMargin = BodyMargin + BodyMargin;
     private const double BodyVerticalMargin = BodyMargin + BodyMargin;
 
-    // The GridSplitters between the two list columns and between the two body rows are both 6px.
+    // The GridSplitters between the two body columns and between the two left-column rows are both 6px.
     public const double ColumnSplitter = 6;
     public const double RowSplitter = 6;
 
@@ -39,7 +39,7 @@ public static class WindowMetrics
     public const double StatusBarHeight = 31;
 
     /// <summary>
-    /// The minimum window width: the sum of the list columns' minimum widths plus the column
+    /// The minimum window width: the sum of the body columns' minimum widths plus the column
     /// splitter and the BodyGrid's horizontal margin.
     /// </summary>
     public static double MinWidthFor(IEnumerable<double> columnMinWidths)
@@ -47,27 +47,27 @@ public static class WindowMetrics
 
     /// <summary>
     /// The minimum window height: the fixed chrome (header + status bar) plus the body's
-    /// vertical margin, the row splitter, and the sum of the body rows' minimum heights.
+    /// vertical margin, the row splitter, and the sum of the left column's row minimum heights.
     /// </summary>
     public static double MinHeightFor(IEnumerable<double> rowMinHeights)
         => HeaderHeight + StatusBarHeight + BodyVerticalMargin + RowSplitter + rowMinHeights.Sum();
 
     /// <summary>
-    /// The widest the (fixed-size) Recent column may be at the given window width while the Scripts
+    /// The widest the (fixed-size) Recent column may be at the given window width while the left
     /// column keeps its minimum — never below the Recent column's own minimum. Used both to clamp a
     /// restored width and to re-clamp on resize, since a fixed-pixel column does not shrink itself.
     /// </summary>
-    public static double MaxRecentWidth(double windowWidth, double scriptsColumnMin, double recentColumnMin)
-        => Math.Max(recentColumnMin, windowWidth - (scriptsColumnMin + ColumnSplitter + BodyHorizontalMargin));
+    public static double MaxRecentWidth(double windowWidth, double leftColumnMin, double recentColumnMin)
+        => Math.Max(recentColumnMin, windowWidth - (leftColumnMin + ColumnSplitter + BodyHorizontalMargin));
 
     /// <summary>
-    /// The tallest the (fixed-size) console row may be at the given window height while the lists
+    /// The tallest the (fixed-size) console row may be at the given window height while the Scripts
     /// row keeps its minimum and the header and status bar stay reserved — never below the console
     /// row's own minimum. A fixed-pixel row does not shrink on its own, so this bounds it on resize
     /// to keep it from spilling past the window over the status bar.
     /// </summary>
-    public static double MaxConsoleHeight(double windowHeight, double listsRowMin, double consoleRowMin)
-        => Math.Max(consoleRowMin, windowHeight - (HeaderHeight + StatusBarHeight + listsRowMin + RowSplitter + BodyVerticalMargin));
+    public static double MaxConsoleHeight(double windowHeight, double scriptsRowMin, double consoleRowMin)
+        => Math.Max(consoleRowMin, windowHeight - (HeaderHeight + StatusBarHeight + scriptsRowMin + RowSplitter + BodyVerticalMargin));
 
     /// <summary>
     /// The pixel size a fixed pane should DISPLAY at: the user's stored <paramref name="intent"/>

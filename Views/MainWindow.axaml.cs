@@ -53,33 +53,37 @@ public partial class MainWindow : Window
             if (vm is null)
                 return;
 
-            // Reserve each pane's header button row. The right-aligned actions (Run/Hide/Show-hidden/
-            // Rescan on Scripts; Run/Stop/Dismiss on Recent) overlap the section title once the column
+            // Reserve each list pane's header button row. The right-aligned actions (Run/Hide/Show-hidden/
+            // Rescan on Scripts; Run/Stop/Dismiss on Recent) overlap the section title once the body column
             // is narrower than the header needs, so measure each header's natural width and raise the
-            // column minimum to fit it. The width is font-dependent, so it's measured, not guessed.
+            // column minimum to fit it. The width is font-dependent, so it's measured, not guessed. The
+            // Output header (in the left column) carries no widening buttons — its name pill trims — so the
+            // left column's minimum is governed by the Scripts header alone.
             ScriptsHeader.Measure(Size.Infinity);
             RecentHeader.Measure(Size.Infinity);
-            ListsGrid.ColumnDefinitions[0].MinWidth =
-                Math.Max(ListsGrid.ColumnDefinitions[0].MinWidth, ScriptsHeader.DesiredSize.Width);
-            ListsGrid.ColumnDefinitions[2].MinWidth =
-                Math.Max(ListsGrid.ColumnDefinitions[2].MinWidth, RecentHeader.DesiredSize.Width);
+            BodyGrid.ColumnDefinitions[0].MinWidth =
+                Math.Max(BodyGrid.ColumnDefinitions[0].MinWidth, ScriptsHeader.DesiredSize.Width);
+            BodyGrid.ColumnDefinitions[2].MinWidth =
+                Math.Max(BodyGrid.ColumnDefinitions[2].MinWidth, RecentHeader.DesiredSize.Width);
 
             // Derive the window minimum from the live grids plus fixed chrome (see WindowMetrics)
             // rather than a hand-typed constant, so the window can never be shrunk small enough to
             // hide a pane or overlap the status bar — and so changing a column/row minimum (or the
-            // measured header width above) moves the window minimum with it. The status bar sits in
-            // its own reserved track, so the body fill can't cover it.
+            // measured header width above) moves the window minimum with it. Width comes from the two
+            // body columns (the Scripts/Output stack and Recent); height from the left column's two
+            // rows (Scripts and the console). The status bar sits in its own reserved track, so the
+            // body fill can't cover it.
             MinWidth = WindowMetrics.MinWidthFor(
-                ListsGrid.ColumnDefinitions.Select(c => c.MinWidth));
+                BodyGrid.ColumnDefinitions.Select(c => c.MinWidth));
             MinHeight = WindowMetrics.MinHeightFor(
-                BodyGrid.RowDefinitions.Select(r => r.MinHeight));
+                LeftPanesGrid.RowDefinitions.Select(r => r.MinHeight));
 
             // Seed the user's pane INTENT from the persisted values (pixels), defaulting to the
             // XAML's own size when nothing is saved yet. The on-screen size is derived from this
             // intent, never the other way round: a window too small to honour it shows a clamped
             // display while the intent is preserved, so growing the window restores the pane.
-            _recentWidthIntent = vm.SavedRecentWidth ?? ListsGrid.ColumnDefinitions[2].Width.Value;
-            _consoleHeightIntent = vm.SavedConsoleHeight ?? BodyGrid.RowDefinitions[2].Height.Value;
+            _recentWidthIntent = vm.SavedRecentWidth ?? BodyGrid.ColumnDefinitions[2].Width.Value;
+            _consoleHeightIntent = vm.SavedConsoleHeight ?? LeftPanesGrid.RowDefinitions[2].Height.Value;
 
             // Capture intent on a real splitter drag only. The GridSplitter's inner Thumb bubbles the
             // routed DragCompleted event up through the splitter, so hooking it here fires exactly when
@@ -132,18 +136,18 @@ public partial class MainWindow : Window
     {
         if (_recentWidthIntent is { } recentIntent)
         {
-            var recentColumn = ListsGrid.ColumnDefinitions[2];
+            var recentColumn = BodyGrid.ColumnDefinitions[2];
             var maxRecent = WindowMetrics.MaxRecentWidth(
-                Width, ListsGrid.ColumnDefinitions[0].MinWidth, recentColumn.MinWidth);
+                Width, BodyGrid.ColumnDefinitions[0].MinWidth, recentColumn.MinWidth);
             recentColumn.Width = new GridLength(
                 WindowMetrics.DisplayFromIntent(recentIntent, recentColumn.MinWidth, maxRecent), GridUnitType.Pixel);
         }
 
         if (_consoleHeightIntent is { } consoleIntent)
         {
-            var consoleRow = BodyGrid.RowDefinitions[2];
+            var consoleRow = LeftPanesGrid.RowDefinitions[2];
             var maxConsole = WindowMetrics.MaxConsoleHeight(
-                Height, BodyGrid.RowDefinitions[0].MinHeight, consoleRow.MinHeight);
+                Height, LeftPanesGrid.RowDefinitions[0].MinHeight, consoleRow.MinHeight);
             consoleRow.Height = new GridLength(
                 WindowMetrics.DisplayFromIntent(consoleIntent, consoleRow.MinHeight, maxConsole), GridUnitType.Pixel);
         }
@@ -154,11 +158,11 @@ public partial class MainWindow : Window
     // for the Recent column — the resize/clamp path never does — so a window shrink can never be
     // mistaken for the user's intent. The display already matches (the drag set it), so no re-derive.
     private void OnRecentSplitterDragCompleted(object? sender, VectorEventArgs e) =>
-        _recentWidthIntent = ListsGrid.ColumnDefinitions[2].ActualWidth;
+        _recentWidthIntent = BodyGrid.ColumnDefinitions[2].ActualWidth;
 
     // As above, for the console row splitter.
     private void OnConsoleSplitterDragCompleted(object? sender, VectorEventArgs e) =>
-        _consoleHeightIntent = BodyGrid.RowDefinitions[2].ActualHeight;
+        _consoleHeightIntent = LeftPanesGrid.RowDefinitions[2].ActualHeight;
 
     private async void OnClosing(object? sender, WindowClosingEventArgs e)
     {
@@ -191,8 +195,8 @@ public partial class MainWindow : Window
             // Falls back to the live size only if no intent was ever established (defensive; OnLoaded
             // always seeds it).
             vm.PersistPaneSizes(
-                _recentWidthIntent ?? ListsGrid.ColumnDefinitions[2].ActualWidth,
-                _consoleHeightIntent ?? BodyGrid.RowDefinitions[2].ActualHeight);
+                _recentWidthIntent ?? BodyGrid.ColumnDefinitions[2].ActualWidth,
+                _consoleHeightIntent ?? LeftPanesGrid.RowDefinitions[2].ActualHeight);
             vm.Shutdown();
         }
         catch (Exception ex)

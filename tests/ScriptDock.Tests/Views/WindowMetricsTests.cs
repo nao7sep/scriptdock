@@ -14,9 +14,9 @@ namespace ScriptDock.Tests.Views;
 /// (header bar, status bar, splitters, body margin) so the window can never shrink small enough
 /// to hide a pane or overlap the status bar, and the restore clamp in <c>MainWindow.OnLoaded</c>
 /// reuses the same constants for its bounds. These tests pin the derivation math directly (no
-/// Avalonia headless harness, matching the suite's pure-helper style), guard that every list
-/// column and body row declares a non-zero minimum, and assert the live XAML track minimums match
-/// the values the helper and clamp are written against — so a future change to a minimum, a
+/// Avalonia headless harness, matching the suite's pure-helper style), guard that every body
+/// column and left-column row declares a non-zero minimum, and assert the live XAML track minimums
+/// match the values the helper and clamp are written against — so a future change to a minimum, a
 /// splitter, or the margin fails here rather than silently letting the window under-size or the
 /// clamp drift away from the layout.
 /// </summary>
@@ -26,9 +26,9 @@ public sealed class WindowMetricsTests
     // read against a concrete, known set; the XAML guards below are what catch drift between this
     // list and the actual XAML.
     // These are the XAML floor values; OnLoaded raises the column minimums further to fit each
-    // pane header's measured width. The console row min is 160 (header + stdin input + a few lines).
-    private static readonly double[] ColumnMinWidths = [360, 260]; // Scripts, Recent
-    private static readonly double[] RowMinHeights = [200, 160];   // lists row, console row
+    // list header's measured width. The console row min is 160 (header + stdin input + a few lines).
+    private static readonly double[] ColumnMinWidths = [360, 260]; // left column (Scripts/Output), Recent
+    private static readonly double[] RowMinHeights = [200, 160];   // Scripts row, console row
 
     [Fact]
     public void MinWidth_EqualsColumnMinimumsPlusSplitterAndMargin()
@@ -85,8 +85,8 @@ public sealed class WindowMetricsTests
         // bounds must equal what the XAML actually declares, so the clamp can never let a restored
         // size fall below the minimum the layout enforces.
         var axaml = ReadMainWindowAxaml();
-        var columnMins = ListsColumnMinWidths(axaml);
-        var rowMins = BodyRowMinHeights(axaml);
+        var columnMins = BodyColumnMinWidths(axaml);
+        var rowMins = LeftColumnRowMinHeights(axaml);
 
         Assert.Equal(260d, columnMins[1]); // Recent column min == clamp lower bound for SavedRecentWidth
         Assert.Equal(160d, rowMins[1]);    // console row min == clamp lower bound for SavedConsoleHeight
@@ -104,17 +104,17 @@ public sealed class WindowMetricsTests
     }
 
     [Fact]
-    public void MaxConsoleHeight_GivesBackTheRoomBelowTheLists_ButNeverBelowItsMinimum()
+    public void MaxConsoleHeight_GivesBackTheRoomBelowTheScripts_ButNeverBelowItsMinimum()
     {
-        const double listsMin = 200, consoleMin = 160;
-        // A tall window: the console may grow into the room left after chrome + the lists' min.
-        var tall = WindowMetrics.MaxConsoleHeight(900, listsMin, consoleMin);
+        const double scriptsMin = 200, consoleMin = 160;
+        // A tall window: the console may grow into the room left after chrome + the Scripts row's min.
+        var tall = WindowMetrics.MaxConsoleHeight(900, scriptsMin, consoleMin);
         var chrome = WindowMetrics.HeaderHeight + WindowMetrics.StatusBarHeight
             + WindowMetrics.RowSplitter + 2 * WindowMetrics.BodyMargin;
-        Assert.Equal(900 - (chrome + listsMin), tall);
+        Assert.Equal(900 - (chrome + scriptsMin), tall);
         // A short window: the cap never drops below the console's own minimum (so it can't be hidden,
         // and the window minimum keeps the whole body — including the status bar — visible).
-        Assert.Equal(consoleMin, WindowMetrics.MaxConsoleHeight(400, listsMin, consoleMin));
+        Assert.Equal(consoleMin, WindowMetrics.MaxConsoleHeight(400, scriptsMin, consoleMin));
     }
 
     [Fact]
@@ -167,18 +167,18 @@ public sealed class WindowMetricsTests
     }
 
     [Fact]
-    public void EveryListColumnAndBodyRow_DeclaresANonZeroMinimum()
+    public void EveryBodyColumnAndLeftColumnRow_DeclaresANonZeroMinimum()
     {
         // Guard against a column or row being added/changed without a minimum: such a track would
         // contribute 0 to the derived window minimum and could be squeezed to invisibility.
         var axaml = ReadMainWindowAxaml();
-        var columnMins = ListsColumnMinWidths(axaml);
-        var rowMins = BodyRowMinHeights(axaml);
+        var columnMins = BodyColumnMinWidths(axaml);
+        var rowMins = LeftColumnRowMinHeights(axaml);
 
         Assert.NotEmpty(columnMins);
         Assert.NotEmpty(rowMins);
-        Assert.All(columnMins, m => Assert.True(m > 0, "A ListsGrid column is missing a non-zero MinWidth."));
-        Assert.All(rowMins, m => Assert.True(m > 0, "A BodyGrid content row is missing a non-zero MinHeight."));
+        Assert.All(columnMins, m => Assert.True(m > 0, "A BodyGrid column is missing a non-zero MinWidth."));
+        Assert.All(rowMins, m => Assert.True(m > 0, "A LeftPanesGrid row is missing a non-zero MinHeight."));
     }
 
     [Fact]
@@ -187,24 +187,54 @@ public sealed class WindowMetricsTests
         // The mirrored lists used above must stay equal to what the XAML actually declares, so the
         // derivation tests cannot pass against a stale list.
         var axaml = ReadMainWindowAxaml();
-        Assert.Equal(ColumnMinWidths, ListsColumnMinWidths(axaml));
-        Assert.Equal(RowMinHeights, BodyRowMinHeights(axaml));
+        Assert.Equal(ColumnMinWidths, BodyColumnMinWidths(axaml));
+        Assert.Equal(RowMinHeights, LeftColumnRowMinHeights(axaml));
     }
 
-    // The two ListsGrid columns that carry a MinWidth (the 6px splitter column has none), in order.
-    private static IReadOnlyList<double> ListsColumnMinWidths(string axaml)
+    [Fact]
+    public void Body_IsColumnMajor_WithRecentBesideTheLeftScriptsOverConsoleStack()
     {
-        var listsGrid = Section(axaml, "<Grid x:Name=\"ListsGrid\"", "</Grid.ColumnDefinitions>");
-        return Regex.Matches(listsGrid, "<ColumnDefinition\\b[^>]*?MinWidth=\"(?<min>\\d+(?:\\.\\d+)?)\"")
+        // The layout's defining shape: the body splits into COLUMNS (left stack | splitter | Recent),
+        // and the left column splits into ROWS (Scripts | splitter | console). This is what makes
+        // Recent a full-body-height column rather than a top-right pane. Pin it so a regression to the
+        // old row-major body (Recent nested beside Scripts in a top row) fails here. The same shape is
+        // what lets WindowMetrics read width from BodyGrid's columns and height from LeftPanesGrid's rows.
+        var axaml = ReadMainWindowAxaml();
+
+        // BodyGrid's own track definitions are columns, not rows.
+        var bodyGridHead = Section(axaml, "<Grid x:Name=\"BodyGrid\"", "</Grid.ColumnDefinitions>");
+        Assert.DoesNotContain("<Grid.RowDefinitions>", bodyGridHead);
+
+        // The left column is an inner grid that splits into rows.
+        Assert.Contains("<Grid x:Name=\"LeftPanesGrid\"", axaml);
+        var leftGridHead = Section(axaml, "<Grid x:Name=\"LeftPanesGrid\"", "</Grid.RowDefinitions>");
+        Assert.DoesNotContain("<Grid.ColumnDefinitions>", leftGridHead);
+
+        // Recent sits in the third body column (it is the full-height right pane), and the column
+        // splitter resizes columns while the console splitter resizes rows.
+        Assert.Contains("<Border Grid.Column=\"2\" Classes=\"card\"", axaml);
+        Assert.Contains("x:Name=\"RecentSplitter\"", axaml);
+        Assert.Contains("x:Name=\"ConsoleSplitter\"", axaml);
+        Assert.Matches("RecentSplitter[^>]*ResizeDirection=\"Columns\"", axaml);
+        Assert.Matches("ConsoleSplitter[^>]*ResizeDirection=\"Rows\"", axaml);
+    }
+
+    // The two BodyGrid columns that carry a MinWidth (the 6px splitter column has none), in order:
+    // the left Scripts/console stack and the Recent column.
+    private static IReadOnlyList<double> BodyColumnMinWidths(string axaml)
+    {
+        var bodyGrid = Section(axaml, "<Grid x:Name=\"BodyGrid\"", "</Grid.ColumnDefinitions>");
+        return Regex.Matches(bodyGrid, "<ColumnDefinition\\b[^>]*?MinWidth=\"(?<min>\\d+(?:\\.\\d+)?)\"")
             .Select(m => double.Parse(m.Groups["min"].Value, System.Globalization.CultureInfo.InvariantCulture))
             .ToList();
     }
 
-    // The two BodyGrid content rows that carry a MinHeight (the 6px splitter row has none), in order.
-    private static IReadOnlyList<double> BodyRowMinHeights(string axaml)
+    // The two LeftPanesGrid rows that carry a MinHeight (the 6px splitter row has none), in order:
+    // the Scripts row and the console row.
+    private static IReadOnlyList<double> LeftColumnRowMinHeights(string axaml)
     {
-        var bodyGrid = Section(axaml, "<Grid.RowDefinitions>", "</Grid.RowDefinitions>");
-        return Regex.Matches(bodyGrid, "<RowDefinition\\b[^>]*?MinHeight=\"(?<min>\\d+(?:\\.\\d+)?)\"")
+        var leftGrid = Section(axaml, "<Grid x:Name=\"LeftPanesGrid\"", "</Grid.RowDefinitions>");
+        return Regex.Matches(leftGrid, "<RowDefinition\\b[^>]*?MinHeight=\"(?<min>\\d+(?:\\.\\d+)?)\"")
             .Select(m => double.Parse(m.Groups["min"].Value, System.Globalization.CultureInfo.InvariantCulture))
             .ToList();
     }

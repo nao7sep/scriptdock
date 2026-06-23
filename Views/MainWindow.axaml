@@ -122,36 +122,41 @@
             </DockPanel>
         </Border>
 
-        <!-- Body: lists row, splitter, console row. The lists row fills (*) and shrinks to its
-             MinHeight under window pressure; the console row is a fixed pixel height the user sizes
-             with the splitter (and which persists), bounded by its MinHeight. The window's own
-             MinHeight (derived in WindowMetrics) reserves both mins; because a fixed-pixel row does
-             not shrink on its own, OnLoaded clamps the console row down on every resize
-             (ClampPanesToWindow) so it can never spill past the shrinking window over the status bar. -->
+        <!-- Body: a left column (Scripts above Output, parted by a row splitter) beside a full-height
+             Recent column (parted by a column splitter). The left column fills (*) and each pane shrinks
+             to its MinWidth/MinHeight under window pressure; the Recent column and the console row are
+             fixed pixel sizes the user drags (and which persist), each floored by its MinWidth/MinHeight.
+             The window's own minimum (derived in WindowMetrics) reserves every pane min; because a
+             fixed-pixel track does not shrink on its own, OnLoaded re-derives the Recent width and console
+             height on every resize (ClampPanesToWindow) so neither can spill past the shrinking window. -->
         <Grid x:Name="BodyGrid" Grid.Row="1" Margin="12">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="*" MinHeight="200"/>
-                <RowDefinition Height="6"/>
-                <!-- 160 = section header (~40) + stdin input (~46) + the well's margin and a few
-                     readable lines; below this the console well collapses to nothing. -->
-                <RowDefinition Height="220" MinHeight="160"/>
-            </Grid.RowDefinitions>
+            <!-- Both body columns carry a real minimum width; WindowMetrics sums these (read from the
+                 live columns) to derive the window MinWidth and to back the restore clamp. These XAML
+                 values are a floor: OnLoaded measures the Scripts and Recent header button rows and
+                 raises each column minimum to fit them, so the right-aligned buttons can never overlap
+                 a section title (a font-dependent width the header itself dictates). The Recent column
+                 is the fixed-width right pane; the column splitter sits between the two in its own 6px
+                 column and spans the full body height. -->
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="360"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="340" MinWidth="260"/>
+            </Grid.ColumnDefinitions>
 
-            <!-- Both content columns carry a real minimum width; WindowMetrics sums these (read
-                 from the live columns) to derive the window MinWidth and to back the restore clamp.
-                 These XAML values are a floor: OnLoaded measures each pane's header button row and
-                 raises the column minimum to fit it, so the right-aligned buttons can never overlap
-                 the section title (a font-dependent width the header itself dictates). The column
-                 splitter sits between them in its own 6px column. -->
-            <Grid x:Name="ListsGrid" Grid.Row="0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" MinWidth="360"/>
-                    <ColumnDefinition Width="6"/>
-                    <ColumnDefinition Width="340" MinWidth="260"/>
-                </Grid.ColumnDefinitions>
+            <!-- Left column: Scripts above Output. The Scripts row fills (*) and shrinks to its MinHeight
+                 under window pressure; the console row is a fixed pixel height the user sizes with the row
+                 splitter (and which persists), floored by its MinHeight. -->
+            <Grid x:Name="LeftPanesGrid" Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" MinHeight="200"/>
+                    <RowDefinition Height="6"/>
+                    <!-- 160 = section header (~40) + stdin input (~46) + the well's margin and a few
+                         readable lines; below this the console well collapses to nothing. -->
+                    <RowDefinition Height="220" MinHeight="160"/>
+                </Grid.RowDefinitions>
 
                 <!-- Scripts (content-sized tiles); Rescan + Show-hidden act on this list. -->
-                <Border Grid.Column="0" Classes="card" Padding="0">
+                <Border Grid.Row="0" Classes="card" Padding="0">
                     <DockPanel>
                         <Border DockPanel.Dock="Top" Classes="sectionHeader" x:Name="ScriptsHeader">
                             <DockPanel>
@@ -190,85 +195,85 @@
                     </DockPanel>
                 </Border>
 
-                <GridSplitter x:Name="RecentSplitter" Grid.Column="1" Width="6" Background="Transparent" ResizeDirection="Columns"/>
+                <GridSplitter x:Name="ConsoleSplitter" Grid.Row="1" Height="6" Background="Transparent" ResizeDirection="Rows" HorizontalAlignment="Stretch"/>
 
-                <!-- Recent (running + recently-run, dismissible). -->
-                <Border Grid.Column="2" Classes="card" Padding="0">
+                <!-- Console: the selected Recent item's output (auto-scrolls when pinned to the bottom). -->
+                <Border Grid.Row="2" Classes="card" Padding="0">
                     <DockPanel>
-                        <Border DockPanel.Dock="Top" Classes="sectionHeader" x:Name="RecentHeader">
+                        <Border DockPanel.Dock="Top" Classes="sectionHeader">
                             <DockPanel>
-                                <TextBlock Text="Recent" Classes="cardHeader" VerticalAlignment="Center"/>
-                                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                    <Button Content="Run" Classes="tool" Command="{Binding RunOrRestartCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
-                                    <Button Content="Stop" Classes="tool" Command="{Binding StopEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
-                                    <Button Content="Dismiss" Classes="tool" Command="{Binding DismissEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
-                                </StackPanel>
+                                <!-- The selected script's name as a colored pill, floated right, so the
+                                     console makes clear whose output it is shown only when a run is selected. -->
+                                <Border DockPanel.Dock="Right" VerticalAlignment="Center" Margin="8,0,0,0"
+                                        Background="{StaticResource SelectionBrush}" CornerRadius="10" Padding="10,3"
+                                        IsVisible="{Binding HasSelection}">
+                                    <TextBlock Text="{Binding SelectedRecentEntry.DisplayName}" FontSize="12" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
+                                </Border>
+                                <TextBlock Text="Output" Classes="cardHeader" VerticalAlignment="Center"/>
                             </DockPanel>
                         </Border>
-                        <Grid Margin="10">
-                            <ListBox x:Name="RecentList" ItemsSource="{Binding Recent}"
-                                     SelectedItem="{Binding SelectedRecentEntry, Mode=TwoWay}"
-                                     DoubleTapped="OnRecentDoubleTapped" KeyDown="OnRecentKeyDown">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:RecentEntry">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"/>
-                                                <TextBlock Text="{Binding LastRanDisplay}" Classes="recentMeta" FontSize="11"
-                                                           Foreground="{StaticResource TextSecondaryBrush}"/>
-                                            </StackPanel>
-                                            <!-- State pill: colour distinguishes running / done / failed / idle at a glance. -->
-                                            <Border Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0"
-                                                    Background="{Binding StatePillBrush}" CornerRadius="10" Padding="9,2">
-                                                <TextBlock Text="{Binding StatePillText}" FontSize="11" FontWeight="SemiBold"
-                                                           Foreground="{StaticResource AppBackgroundBrush}"/>
-                                            </Border>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                            <TextBlock Text="No recent runs. Double-click a script to run it."
-                                       IsVisible="{Binding NoRecent}" IsHitTestVisible="False"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       TextAlignment="Center" TextWrapping="Wrap" MaxWidth="240"
-                                       Foreground="{StaticResource TextSecondaryBrush}"/>
-                        </Grid>
+                        <!-- Interactive input: a line typed here is sent to the selected running script's stdin
+                             on Enter. Enabled only while that run is running and accepts input. -->
+                        <ctl:ComposingTextBox x:Name="ConsoleInput" Classes="stdin" DockPanel.Dock="Bottom" Margin="10,0,10,10"
+                                 IsEnabled="{Binding CanSendInput}"
+                                 PlaceholderText="Type input and press Enter to send to the running script…"
+                                 Submitted="OnConsoleInputSubmitted"/>
+                        <!-- Recessed terminal-like field so the log reads as its own surface, not part of the header. -->
+                        <Border Margin="10" Background="{StaticResource ContentWellBrush}"
+                                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="8">
+                            <ScrollViewer x:Name="ConsoleScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                                <SelectableTextBlock Text="{Binding SelectedOutput}" TextWrapping="NoWrap"
+                                                     FontFamily="Menlo,Consolas,monospace" FontSize="12"/>
+                            </ScrollViewer>
+                        </Border>
                     </DockPanel>
                 </Border>
             </Grid>
 
-            <GridSplitter x:Name="ConsoleSplitter" Grid.Row="1" Height="6" Background="Transparent" ResizeDirection="Rows" HorizontalAlignment="Stretch"/>
+            <GridSplitter x:Name="RecentSplitter" Grid.Column="1" Width="6" Background="Transparent" ResizeDirection="Columns"/>
 
-            <!-- Console: the selected Recent item's output (auto-scrolls when pinned to the bottom). -->
-            <Border Grid.Row="2" Classes="card" Padding="0">
+            <!-- Recent (running + recently-run, dismissible); the full-height right column. -->
+            <Border Grid.Column="2" Classes="card" Padding="0">
                 <DockPanel>
-                    <Border DockPanel.Dock="Top" Classes="sectionHeader">
+                    <Border DockPanel.Dock="Top" Classes="sectionHeader" x:Name="RecentHeader">
                         <DockPanel>
-                            <!-- The selected script's name as a colored pill, floated right, so the
-                                 console makes clear whose output it is shown only when a run is selected. -->
-                            <Border DockPanel.Dock="Right" VerticalAlignment="Center" Margin="8,0,0,0"
-                                    Background="{StaticResource SelectionBrush}" CornerRadius="10" Padding="10,3"
-                                    IsVisible="{Binding HasSelection}">
-                                <TextBlock Text="{Binding SelectedRecentEntry.DisplayName}" FontSize="12" FontWeight="SemiBold"
-                                           Foreground="{StaticResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
-                            </Border>
-                            <TextBlock Text="Output" Classes="cardHeader" VerticalAlignment="Center"/>
+                            <TextBlock Text="Recent" Classes="cardHeader" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <Button Content="Run" Classes="tool" Command="{Binding RunOrRestartCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
+                                <Button Content="Stop" Classes="tool" Command="{Binding StopEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
+                                <Button Content="Dismiss" Classes="tool" Command="{Binding DismissEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
+                            </StackPanel>
                         </DockPanel>
                     </Border>
-                    <!-- Interactive input: a line typed here is sent to the selected running script's stdin
-                         on Enter. Enabled only while that run is running and accepts input. -->
-                    <ctl:ComposingTextBox x:Name="ConsoleInput" Classes="stdin" DockPanel.Dock="Bottom" Margin="10,0,10,10"
-                             IsEnabled="{Binding CanSendInput}"
-                             PlaceholderText="Type input and press Enter to send to the running script…"
-                             Submitted="OnConsoleInputSubmitted"/>
-                    <!-- Recessed terminal-like field so the log reads as its own surface, not part of the header. -->
-                    <Border Margin="10" Background="{StaticResource ContentWellBrush}"
-                            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="8">
-                        <ScrollViewer x:Name="ConsoleScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                            <SelectableTextBlock Text="{Binding SelectedOutput}" TextWrapping="NoWrap"
-                                                 FontFamily="Menlo,Consolas,monospace" FontSize="12"/>
-                        </ScrollViewer>
-                    </Border>
+                    <Grid Margin="10">
+                        <ListBox x:Name="RecentList" ItemsSource="{Binding Recent}"
+                                 SelectedItem="{Binding SelectedRecentEntry, Mode=TwoWay}"
+                                 DoubleTapped="OnRecentDoubleTapped" KeyDown="OnRecentKeyDown">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:RecentEntry">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding LastRanDisplay}" Classes="recentMeta" FontSize="11"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <!-- State pill: colour distinguishes running / done / failed / idle at a glance. -->
+                                        <Border Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0"
+                                                Background="{Binding StatePillBrush}" CornerRadius="10" Padding="9,2">
+                                            <TextBlock Text="{Binding StatePillText}" FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource AppBackgroundBrush}"/>
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <TextBlock Text="No recent runs. Double-click a script to run it."
+                                   IsVisible="{Binding NoRecent}" IsHitTestVisible="False"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   TextAlignment="Center" TextWrapping="Wrap" MaxWidth="240"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                    </Grid>
                 </DockPanel>
             </Border>
         </Grid>
