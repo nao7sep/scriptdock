@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:ScriptDock.ViewModels"
              xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:ctl="using:ScriptDock.Controls"
              x:Class="ScriptDock.Views.SettingsView"
              x:DataType="vm:SettingsDialogViewModel"
              Width="480">
@@ -27,7 +28,7 @@
             <DockPanel>
                 <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemoveExtClick"/>
                 <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddExtClick"/>
-                <TextBox x:Name="ExtEntry" PlaceholderText=".command" KeyDown="OnExtKeyDown"/>
+                <ctl:ComposingTextBox x:Name="ExtEntry" PlaceholderText=".command" Submitted="OnExtSubmitted"/>
             </DockPanel>
             <TextBlock Text="{Binding ExtensionError}" Foreground="{StaticResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"
                        IsVisible="{Binding ExtensionError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
@@ -41,7 +42,7 @@
             <DockPanel>
                 <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemovePatternClick"/>
                 <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddPatternClick"/>
-                <TextBox x:Name="PatternEntry" PlaceholderText="/node_modules/" KeyDown="OnPatternKeyDown"/>
+                <ctl:ComposingTextBox x:Name="PatternEntry" PlaceholderText="/node_modules/" Submitted="OnPatternSubmitted"/>
             </DockPanel>
             <TextBlock Text="{Binding PatternError}" Foreground="{StaticResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"
                        IsVisible="{Binding PatternError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>

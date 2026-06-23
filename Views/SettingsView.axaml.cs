@@ -1,6 +1,5 @@
 using System;
 using Avalonia.Controls;
-using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using ScriptDock.Services;
@@ -14,25 +13,12 @@ public partial class SettingsView : UserControl
 
     private SettingsDialogViewModel? Vm => DataContext as SettingsDialogViewModel;
 
-    // IME composition guard, shared by the typed-entry fields below: while composing, Enter
-    // commits the IME candidate and surfaces as Key.ImeProcessed, never Key.Enter — so acting
-    // only on Key.Enter is the guard the text-input-ime-conventions require: a composed Enter
-    // must never add an item.
-    private void OnExtKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key != Key.Enter)
-            return;
-        e.Handled = true;
-        AddExtension();
-    }
+    // Enter adds the typed value. The IME guard lives in ComposingTextBox, which raises Submitted only
+    // on a real Enter — never the IME's candidate-commit (Key.ImeProcessed) — per the
+    // text-input-ime-conventions, so a composed Enter never adds a half-finished item.
+    private void OnExtSubmitted(object? sender, RoutedEventArgs e) => AddExtension();
 
-    private void OnPatternKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key != Key.Enter)
-            return;
-        e.Handled = true;
-        AddPattern();
-    }
+    private void OnPatternSubmitted(object? sender, RoutedEventArgs e) => AddPattern();
 
     // Root directories are chosen with the OS folder picker. The picker is an external boundary,
     // so its work is wrapped per the crash guard's Layer-1 contract — a failure logs, never crashes.

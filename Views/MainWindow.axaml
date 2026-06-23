@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:ScriptDock.ViewModels"
         xmlns:models="using:ScriptDock.Models"
+        xmlns:ctl="using:ScriptDock.Controls"
         x:Class="ScriptDock.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="ScriptDock"
@@ -256,10 +257,10 @@
                     </Border>
                     <!-- Interactive input: a line typed here is sent to the selected running script's stdin
                          on Enter. Enabled only while that run is running and accepts input. -->
-                    <TextBox x:Name="ConsoleInput" Classes="stdin" DockPanel.Dock="Bottom" Margin="10,0,10,10"
+                    <ctl:ComposingTextBox x:Name="ConsoleInput" Classes="stdin" DockPanel.Dock="Bottom" Margin="10,0,10,10"
                              IsEnabled="{Binding CanSendInput}"
                              PlaceholderText="Type input and press Enter to send to the running script…"
-                             KeyDown="OnConsoleInputKeyDown"/>
+                             Submitted="OnConsoleInputSubmitted"/>
                     <!-- Recessed terminal-like field so the log reads as its own surface, not part of the header. -->
                     <Border Margin="10" Background="{StaticResource ContentWellBrush}"
                             BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="8">

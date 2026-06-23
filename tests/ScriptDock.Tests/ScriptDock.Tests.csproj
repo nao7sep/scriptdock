@@ -19,6 +19,8 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <!-- Official xUnit headless integration ([AvaloniaFact]) for the view/control tests. -->
+    <PackageReference Include="Avalonia.Headless.XUnit" Version="12.0.4" />
   </ItemGroup>
 
   <ItemGroup>

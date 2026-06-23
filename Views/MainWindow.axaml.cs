@@ -9,6 +9,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using ScriptDock.Controls;
 using ScriptDock.Models;
 using ScriptDock.Services;
 using ScriptDock.ViewModels;
@@ -247,6 +248,12 @@ public partial class MainWindow : Window
 
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
+        // A command accelerator is a chord the IME passes straight through, so while a field is
+        // mid-composition the chord belongs to the pending candidate: stand down and let the user
+        // finish, rather than firing on text the candidate is not yet part of (text-input-ime).
+        if (ComposingTextBox.IsFocusedElementComposing(this))
+            return;
+
         foreach (var item in _shortcuts)
         {
             if (item.Gesture is { } gesture && gesture.Matches(e))
@@ -368,15 +375,12 @@ public partial class MainWindow : Window
         }
     }
 
-    // Send the typed line to the selected running script's stdin on Enter. IME guard: only a real
-    // Enter (never the IME's Key.ImeProcessed) sends, per the text-input-ime-conventions.
-    private void OnConsoleInputKeyDown(object? sender, KeyEventArgs e)
+    // Send the typed line to the selected running script's stdin. Submitted is raised by
+    // ComposingTextBox only on a real Enter — never the IME's candidate-commit — per the
+    // text-input-ime-conventions, so a composed Enter no longer sends a half-finished line.
+    private void OnConsoleInputSubmitted(object? sender, RoutedEventArgs e)
     {
-        if (e.Key != Key.Enter)
-            return;
-
-        e.Handled = true;
-        if (sender is TextBox box)
+        if (sender is ComposingTextBox box)
         {
             ViewModel?.SendInput(box.Text ?? string.Empty);
             box.Text = string.Empty;
