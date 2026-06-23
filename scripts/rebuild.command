@@ -75,7 +75,7 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 # Copy the publish output (binary + native dylibs + managed DLLs) into MacOS/.
 cp -R "$PUBLISH_DIR/." "$APP_BUNDLE/Contents/MacOS/"
 
-# Drop in the Info.plist so the bundle has an identity.
+# Drop in the Info.plist so TCC has a bundle identity and usage strings.
 cp "$INFO_PLIST" "$APP_BUNDLE/Contents/Info.plist"
 
 log_step "Ad-hoc signing bundle"
@@ -90,6 +90,6 @@ codesign --force --deep --sign - "$APP_BUNDLE"
 codesign --verify --verbose=1 "$APP_BUNDLE"
 
 log_step "Launching"
-# `open` routes through Launch Services, which registers the app's bundle
-# identity with the OS.
+# `open` routes through Launch Services, which is what registers the app's
+# bundle identity with TCC and triggers permission prompts on first access.
 open "$APP_BUNDLE"
