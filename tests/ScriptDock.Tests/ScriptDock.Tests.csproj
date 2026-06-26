@@ -1,9 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
     <!-- xunit v3 test projects run as their own executable (not a class library loaded by a host). -->
     <OutputType>Exe</OutputType>
-    <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <IsPackable>false</IsPackable>
     <IsPublishable>false</IsPublishable>
@@ -24,6 +22,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\ScriptDock.csproj" />
+    <ProjectReference Include="..\..\src\ScriptDock\ScriptDock.csproj" />
   </ItemGroup>
 </Project>
