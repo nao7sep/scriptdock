@@ -6,6 +6,7 @@
         x:Class="ScriptDock.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="ScriptDock"
+        Icon="/Assets/icon.png"
         Width="1100" Height="720"
         WindowStartupLocation="CenterScreen"
         KeyDown="OnWindowKeyDown"
