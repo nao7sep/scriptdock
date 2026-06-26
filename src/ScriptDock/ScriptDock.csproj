@@ -1,8 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- Windows: embeds icon.ico into the .exe. macOS uses macOS/icon.icns (classic,
          CFBundleIconFile) and macOS/Assets.car (Liquid Glass, CFBundleIconName) instead;
@@ -10,27 +8,12 @@
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <AssemblyTitle>ScriptDock</AssemblyTitle>
-    <Product>ScriptDock</Product>
     <Description>A desktop launcher that finds the scripts across your projects and runs and restarts them as processes it owns.</Description>
-    <Authors>Yoshinao Inoguchi</Authors>
-    <Copyright>Copyright © 2026 Yoshinao Inoguchi</Copyright>
-    <Version>0.1.0</Version>
     <RuntimeIdentifiers>osx-arm64;osx-x64;win-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
-  </ItemGroup>
-
-  <!-- The test project lives under tests/ inside this project's directory, so the
-       SDK's default globbing would otherwise pull its sources into the app build.
-       Keep tests out of the shipped, typechecked surface entirely. -->
-  <ItemGroup>
-    <Compile Remove="tests\**" />
-    <AvaloniaResource Remove="tests\**" />
-    <AvaloniaXaml Remove="tests\**" />
-    <EmbeddedResource Remove="tests\**" />
-    <None Remove="tests\**" />
   </ItemGroup>
 
   <ItemGroup>
