@@ -4,6 +4,10 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Windows: embeds icon.ico into the .exe. macOS uses macOS/icon.icns (classic,
+         CFBundleIconFile) and macOS/Assets.car (Liquid Glass, CFBundleIconName) instead;
+         see scripts/rebuild.command. Icon provenance: company/assets/scriptdock/icons. -->
+    <ApplicationIcon>icon.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <AssemblyTitle>ScriptDock</AssemblyTitle>
     <Product>ScriptDock</Product>

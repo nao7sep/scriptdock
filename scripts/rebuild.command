@@ -54,8 +54,8 @@ require_command codesign
 cd "$REPO_DIR"
 
 # Remove stale publish output so a file deleted since the last build can't linger
-# and get copied into the bundle (the Contents/MacOS reset below only clears the
-# copy target, not the publish source).
+# and get copied into the bundle (the bundle is recreated from scratch below, but
+# that clears only the copy target, not the publish source).
 log_step "Cleaning previous publish output"
 rm -rf "$PUBLISH_DIR"
 
@@ -67,8 +67,12 @@ dotnet publish "$PROJECT_FILE" \
   -o "$PUBLISH_DIR"
 
 log_step "Assembling app bundle"
-# Reset MacOS so stale assemblies from a previous build can't linger.
-rm -rf "${APP_BUNDLE:?}/Contents/MacOS"
+# Recreate the whole bundle from scratch so nothing from a previous build can linger
+# in any subdir — the .app is a fully derived artifact (publish output, Info.plist,
+# icon.icns, Assets.car, signature), so a clean rebuild is the right model. Resetting
+# only Contents/MacOS would leave Resources/ (the icons) as copy-only, so a renamed or
+# dropped icon would persist. The :? guard aborts if APP_BUNDLE is somehow empty.
+rm -rf "${APP_BUNDLE:?}"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
 
@@ -77,6 +81,15 @@ cp -R "$PUBLISH_DIR/." "$APP_BUNDLE/Contents/MacOS/"
 
 # Drop in the Info.plist so TCC has a bundle identity and usage strings.
 cp "$INFO_PLIST" "$APP_BUNDLE/Contents/Info.plist"
+
+# Drop in the app icon. Info.plist's CFBundleIconFile points to "icon" -> icon.icns
+# (the classic flat tile read by older macOS); CFBundleIconName names the Liquid Glass
+# catalog Assets.car (the Tahoe tile read by macOS 26). Both committed under macOS/ and
+# copied in fresh each build. Icon provenance: company/assets/scriptdock/icons.
+cp "$REPO_DIR/macOS/icon.icns" "$APP_BUNDLE/Contents/Resources/icon.icns"
+if [[ -f "$REPO_DIR/macOS/Assets.car" ]]; then
+  cp "$REPO_DIR/macOS/Assets.car" "$APP_BUNDLE/Contents/Resources/Assets.car"
+fi
 
 log_step "Ad-hoc signing bundle"
 # `--sign -` is the ad-hoc identity. --force overwrites prior signatures (each

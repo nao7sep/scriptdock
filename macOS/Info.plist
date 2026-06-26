@@ -10,6 +10,14 @@
     <string>ScriptDock</string>
     <key>CFBundleExecutable</key>
     <string>ScriptDock</string>
+    <!-- App icon, dual-key: older macOS reads CFBundleIconFile -> Resources/icon.icns
+         (classic flat tile); macOS 26 (Tahoe) reads CFBundleIconName -> Resources/Assets.car
+         (the Liquid Glass tile). Both are staged into Contents/Resources by
+         scripts/rebuild.command. Icon provenance: company/assets/scriptdock/icons. -->
+    <key>CFBundleIconFile</key>
+    <string>icon</string>
+    <key>CFBundleIconName</key>
+    <string>speed-arrow-teal</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
