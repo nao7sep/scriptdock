@@ -251,9 +251,9 @@ public sealed class WindowMetricsTests
     private static string ReadMainWindowAxaml([CallerFilePath] string callerPath = "")
     {
         // This file: <repo>/tests/ScriptDock.Tests/Views/WindowMetricsTests.cs
-        // Target:    <repo>/Views/MainWindow.axaml
+        // Target:    <repo>/src/ScriptDock/Views/MainWindow.axaml
         var testsViewsDir = Path.GetDirectoryName(callerPath)!;
         var repoRoot = Path.GetFullPath(Path.Combine(testsViewsDir, "..", "..", ".."));
-        return File.ReadAllText(Path.Combine(repoRoot, "Views", "MainWindow.axaml"));
+        return File.ReadAllText(Path.Combine(repoRoot, "src", "ScriptDock", "Views", "MainWindow.axaml"));
     }
 }
