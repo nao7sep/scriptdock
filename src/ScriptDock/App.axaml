@@ -93,6 +93,11 @@
         <SolidColorBrush x:Key="ScrollBarTrackFillPointerOver" Color="Transparent"/>
         <SolidColorBrush x:Key="ScrollBarBackground" Color="Transparent"/>
         <SolidColorBrush x:Key="ScrollBarBackgroundPointerOver" Color="Transparent"/>
+
+        <!-- The app-wide UI (chrome) font. The default is the bundled Inter; the view model overrides
+             this resource at runtime from the configured UI font, and the Window style below binds it
+             via DynamicResource so the change applies live across every window. -->
+        <FontFamily x:Key="AppFontFamily">Inter</FontFamily>
     </Application.Resources>
 
     <Application.Styles>
@@ -105,6 +110,12 @@
             </FluentTheme.Palettes>
         </FluentTheme>
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml"/>
+
+        <!-- Every window (main + dialogs) takes the configured UI font; FontFamily inherits to child
+             controls. The read-only output console sets its own monospace font, so it is unaffected. -->
+        <Style Selector="Window">
+            <Setter Property="FontFamily" Value="{DynamicResource AppFontFamily}"/>
+        </Style>
 
         <!-- Keep DataGrid cell navigation active without drawing a harsh current-cell box. -->
         <Style Selector="DataGridCell">

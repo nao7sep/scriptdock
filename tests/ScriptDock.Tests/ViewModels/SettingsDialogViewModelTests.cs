@@ -24,6 +24,20 @@ public sealed class SettingsDialogViewModelTests
     }
 
     [Fact]
+    public void UiFont_SeedsFromConfig_AndDirtiesOnChange()
+    {
+        var config = Seed();
+        config.UiFontFamily = "Inter";
+        var vm = new SettingsDialogViewModel(config);
+
+        Assert.Equal("Inter", vm.UiFontFamily);
+        Assert.False(vm.IsDirty);
+
+        vm.UiFontFamily = "Iosevka, monospace";
+        Assert.True(vm.IsDirty);
+    }
+
+    [Fact]
     public void AddRootDir_TrimsDedupsAndDirties()
     {
         var vm = new SettingsDialogViewModel(Seed());

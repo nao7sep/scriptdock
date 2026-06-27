@@ -73,26 +73,36 @@ public static class ShortcutCatalog
     /// <summary>
     /// The platform command key — <c>Meta</c> (Cmd) on macOS, <c>Control</c> on Windows/Linux. Resolved
     /// once here from the framework's own notion of the command modifier, so every accelerator binds the
-    /// right modifier on every platform while the labels stay the universal <c>Cmd/Ctrl+…</c>.
+    /// right modifier on every platform.
     /// </summary>
     public static KeyModifiers CommandModifier(TopLevel top) =>
         top.GetPlatformSettings()?.HotkeyConfiguration.CommandModifiers ?? KeyModifiers.Control;
 
+    /// <summary>
+    /// The displayed word for the platform command key — <c>"Cmd"</c> on macOS (where the command
+    /// modifier is <c>Meta</c>), <c>"Ctrl"</c> on Windows/Linux. Derived from the same platform signal
+    /// as <see cref="CommandModifier"/> so labels show the running platform's single word, never the
+    /// combined <c>Cmd/Ctrl</c>.
+    /// </summary>
+    public static string CommandModifierLabel(TopLevel top) =>
+        CommandModifier(top) == KeyModifiers.Meta ? "Cmd" : "Ctrl";
+
     public static IReadOnlyList<ShortcutItem> Build(TopLevel top)
     {
         var cmd = CommandModifier(top);
+        var cmdLabel = CommandModifierLabel(top);
         return new List<ShortcutItem>
         {
             // Commands — global app accelerators, in rough order of use.
-            Command(ShortcutGroup.Commands, "Rescan", cmd, Key.R, "R", ShortcutAction.Rescan),
-            Command(ShortcutGroup.Commands, "Toggle hidden scripts", cmd | KeyModifiers.Shift, Key.H, "Shift+H", ShortcutAction.ToggleShowHidden),
-            Command(ShortcutGroup.Commands, "Settings", cmd, Key.OemComma, "Comma", ShortcutAction.OpenSettings),
-            Command(ShortcutGroup.Commands, "Keyboard shortcuts", cmd, Key.OemQuestion, "Slash", ShortcutAction.ShowShortcuts),
+            Command(ShortcutGroup.Commands, "Rescan", cmd, cmdLabel, Key.R, "R", ShortcutAction.Rescan),
+            Command(ShortcutGroup.Commands, "Toggle hidden scripts", cmd | KeyModifiers.Shift, cmdLabel, Key.H, "Shift+H", ShortcutAction.ToggleShowHidden),
+            Command(ShortcutGroup.Commands, "Settings", cmd, cmdLabel, Key.OemComma, "Comma", ShortcutAction.OpenSettings),
+            Command(ShortcutGroup.Commands, "Keyboard shortcuts", cmd, cmdLabel, Key.OemQuestion, "Slash", ShortcutAction.ShowShortcuts),
 
             // Focus — jump to a pane without the mouse (numbered to match the layout).
-            Command(ShortcutGroup.Focus, "Scripts list", cmd, Key.D1, "1", ShortcutAction.FocusScripts),
-            Command(ShortcutGroup.Focus, "Recent list", cmd, Key.D2, "2", ShortcutAction.FocusRecent),
-            Command(ShortcutGroup.Focus, "Console input", cmd, Key.D3, "3", ShortcutAction.FocusConsole),
+            Command(ShortcutGroup.Focus, "Scripts list", cmd, cmdLabel, Key.D1, "1", ShortcutAction.FocusScripts),
+            Command(ShortcutGroup.Focus, "Recent list", cmd, cmdLabel, Key.D2, "2", ShortcutAction.FocusRecent),
+            Command(ShortcutGroup.Focus, "Console input", cmd, cmdLabel, Key.D3, "3", ShortcutAction.FocusConsole),
 
             // Scripts — running the selection is owned by the tile (pointer + keys), listed for discoverability.
             Display(ShortcutGroup.Scripts, "Run or restart the selected script", "Double-click / Enter / Space"),
@@ -107,11 +117,12 @@ public static class ShortcutCatalog
 
     /// <summary>
     /// Builds a command accelerator from one definition so the label and the gesture cannot diverge.
-    /// The label is always the universal <c>Cmd/Ctrl+…</c>; only the gesture's modifier is platform-resolved.
+    /// The label uses the running platform's single command word (<paramref name="cmdLabel"/>); only the
+    /// gesture's modifier is platform-resolved.
     /// </summary>
     private static ShortcutItem Command(
-        ShortcutGroup group, string description, KeyModifiers cmd, Key key, string keyName, ShortcutAction action) =>
-        new(group, description, "Cmd/Ctrl+" + keyName, new KeyGesture(key, cmd), action);
+        ShortcutGroup group, string description, KeyModifiers cmd, string cmdLabel, Key key, string keyName, ShortcutAction action) =>
+        new(group, description, cmdLabel + "+" + keyName, new KeyGesture(key, cmd), action);
 
     private static ShortcutItem Display(ShortcutGroup group, string description, string label) =>
         new(group, description, label);

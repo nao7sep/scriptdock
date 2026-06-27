@@ -8,6 +8,15 @@
              Width="480">
     <StackPanel Spacing="14">
 
+        <!-- Appearance: the UI (chrome) font leads, set apart from the scanning/process settings. The
+             read-only output console keeps its own monospace font and is unaffected by this. -->
+        <StackPanel Spacing="6">
+            <TextBlock Text="UI font" Classes="cardHeader"/>
+            <TextBox Text="{Binding UiFontFamily}" PlaceholderText="Inter"/>
+            <TextBlock Text="Comma-separated; the first installed family is used. Blank uses the default (Inter)."
+                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
+        </StackPanel>
+
         <!-- Root directories: chosen with the native folder picker, not typed — they are
              directories that exist on disk, so picking beats hand-entering a path. -->
         <StackPanel Spacing="6">

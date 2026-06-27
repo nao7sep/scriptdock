@@ -14,6 +14,13 @@ namespace ScriptDock.Models;
 /// </remarks>
 public sealed class AppConfig
 {
+    /// <summary>The bundled default UI (chrome) font, registered via <c>.WithInterFont()</c>.</summary>
+    public const string DefaultUiFontFamily = "Inter";
+
+    /// <summary>The UI (chrome) font family. Family only; an empty value falls back to the bundled
+    /// default (Inter). Applied app-wide; the read-only output console keeps its own monospace font.</summary>
+    public string UiFontFamily { get; set; } = DefaultUiFontFamily;
+
     /// <summary>Root directories scanned for scripts.</summary>
     public List<string> RootDirs { get; set; } = [];
 

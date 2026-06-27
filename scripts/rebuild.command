@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# rebuild: build the app in its release configuration and launch it. On macOS that
-# means publishing a self-contained Release build, assembling an unsigned .app,
-# ad-hoc signing it, and launching via Launch Services. Slow; run after changing
-# source. run-built launches the existing bundle without rebuilding.
+# rebuild: produce a fresh self-contained Release build and launch it. The macOS
+# .app bundle is assembled and ad-hoc signed by the AssembleMacAppBundle target
+# (Directory.Build.targets) as part of `dotnet publish`, so this launcher only
+# publishes and opens the result — the same bundle the release workflow produces.
+# Slow; run after changing source. run-built launches the existing bundle.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROJECT_FILE="$REPO_DIR/src/ScriptDock/ScriptDock.csproj"
 APP_BUNDLE="$REPO_DIR/publish/ScriptDock.app"
-INFO_PLIST="$REPO_DIR/macOS/Info.plist"
 
-# Map the host CPU to a .NET runtime identifier so the same script works on
-# Apple Silicon and Intel Macs without a manual flag.
+# Map the host CPU to a .NET runtime identifier so a local rebuild runs natively
+# on Apple Silicon and Intel Macs without a manual flag.
 ARCH="$(uname -m)"
 case "$ARCH" in
   arm64)  RID="osx-arm64" ;;
@@ -23,19 +23,6 @@ case "$ARCH" in
     exit 1
     ;;
 esac
-
-PUBLISH_DIR="$REPO_DIR/bin/Release/net10.0/$RID/publish"
-
-log_step() {
-  printf '\n==> %s\n' "$1"
-}
-
-require_command() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    echo "Missing required command: $1" >&2
-    exit 1
-  fi
-}
 
 pause_on_failure() {
   local status="$1"
@@ -48,61 +35,11 @@ pause_on_failure() {
 
 trap 'pause_on_failure $?' EXIT
 
-require_command dotnet
-require_command codesign
-
 cd "$REPO_DIR"
 
-# Remove stale publish output so a file deleted since the last build can't linger
-# and get copied into the bundle (the bundle is recreated from scratch below, but
-# that clears only the copy target, not the publish source).
-log_step "Cleaning previous publish output"
-rm -rf "$PUBLISH_DIR"
+# Clear stale output, then publish. `dotnet publish` runs the bundling target,
+# leaving publish/ holding only the signed .app.
+rm -rf "$REPO_DIR/publish"
+dotnet publish "$PROJECT_FILE" -c Release -r "$RID" --self-contained true -o "$REPO_DIR/publish"
 
-log_step "Publishing self-contained $RID build (host arch $ARCH)"
-dotnet publish "$PROJECT_FILE" \
-  -c Release \
-  -r "$RID" \
-  --self-contained true \
-  -o "$PUBLISH_DIR"
-
-log_step "Assembling app bundle"
-# Recreate the whole bundle from scratch so nothing from a previous build can linger
-# in any subdir — the .app is a fully derived artifact (publish output, Info.plist,
-# icon.icns, Assets.car, signature), so a clean rebuild is the right model. Resetting
-# only Contents/MacOS would leave Resources/ (the icons) as copy-only, so a renamed or
-# dropped icon would persist. The :? guard aborts if APP_BUNDLE is somehow empty.
-rm -rf "${APP_BUNDLE:?}"
-mkdir -p "$APP_BUNDLE/Contents/MacOS"
-mkdir -p "$APP_BUNDLE/Contents/Resources"
-
-# Copy the publish output (binary + native dylibs + managed DLLs) into MacOS/.
-cp -R "$PUBLISH_DIR/." "$APP_BUNDLE/Contents/MacOS/"
-
-# Drop in the Info.plist so TCC has a bundle identity and usage strings.
-cp "$INFO_PLIST" "$APP_BUNDLE/Contents/Info.plist"
-
-# Drop in the app icon. Info.plist's CFBundleIconFile points to "icon" -> icon.icns
-# (the classic flat tile read by older macOS); CFBundleIconName names the Liquid Glass
-# catalog Assets.car (the Tahoe tile read by macOS 26). Both committed under macOS/ and
-# copied in fresh each build. Icon provenance: company/assets/scriptdock/icons.
-cp "$REPO_DIR/macOS/icon.icns" "$APP_BUNDLE/Contents/Resources/icon.icns"
-if [[ -f "$REPO_DIR/macOS/Assets.car" ]]; then
-  cp "$REPO_DIR/macOS/Assets.car" "$APP_BUNDLE/Contents/Resources/Assets.car"
-fi
-
-log_step "Ad-hoc signing bundle"
-# `--sign -` is the ad-hoc identity. --force overwrites prior signatures (each
-# rebuild produces a new cdhash). --deep recursively re-signs nested bundles
-# (Avalonia's native dylibs ship pre-signed with Avalonia's identity; we replace
-# those with our ad-hoc signature so the whole bundle has one consistent identity).
-codesign --force --deep --sign - "$APP_BUNDLE"
-
-# Verify the signature attached cleanly. `codesign --verify` exits non-zero if
-# the bundle isn't recognized as signed code.
-codesign --verify --verbose=1 "$APP_BUNDLE"
-
-log_step "Launching"
-# `open` routes through Launch Services, which is what registers the app's
-# bundle identity with TCC and triggers permission prompts on first access.
 open "$APP_BUNDLE"

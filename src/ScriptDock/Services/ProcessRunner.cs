@@ -59,7 +59,7 @@ public sealed class ProcessRunner : IProcessRunner
             var startInfo = new ProcessStartInfo
             {
                 FileName = command.FileName,
-                WorkingDirectory = Path.GetDirectoryName(scriptPath) ?? string.Empty,
+                WorkingDirectory = WorkingDirectoryFor(scriptPath),
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 // stdout/stderr are NOT redirected — the child shell writes them to the run log, so a
@@ -251,4 +251,11 @@ public sealed class ProcessRunner : IProcessRunner
     // tolerance (clock/precision slack); a reused PID will differ by far more.
     internal static bool StartTimesMatch(DateTimeOffset persisted, DateTimeOffset actual) =>
         (actual - persisted).Duration() <= TimeSpan.FromSeconds(2);
+
+    // The working directory a launched script runs in: its containing folder. A bare
+    // filename (no directory) and a filesystem root both yield "" — Process treats an
+    // empty WorkingDirectory as "inherit ScriptDock's current directory", the intended
+    // fallback when the script path has no usable parent.
+    internal static string WorkingDirectoryFor(string scriptPath) =>
+        Path.GetDirectoryName(scriptPath) ?? string.Empty;
 }

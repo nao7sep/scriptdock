@@ -25,6 +25,7 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     private readonly List<string> _originalPatterns;
     private readonly bool _originalKillProcessesOnClose;
     private readonly bool _originalRecaptureProcessesOnLaunch;
+    private readonly string _originalUiFontFamily;
 
     public ObservableCollection<string> RootDirs { get; }
     public ObservableCollection<string> Extensions { get; }
@@ -35,6 +36,11 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
 
     [ObservableProperty]
     private string _patternError = string.Empty;
+
+    // UI (chrome) font family. Family only; blank = the bundled default.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDirty))]
+    private string _uiFontFamily = string.Empty;
 
     // Process-lifecycle settings. NotifyPropertyChangedFor keeps IsDirty live as they toggle.
     [ObservableProperty]
@@ -52,8 +58,10 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         _originalPatterns = config.IgnorePatterns.ToList();
         _originalKillProcessesOnClose = config.KillProcessesOnClose;
         _originalRecaptureProcessesOnLaunch = config.RecaptureProcessesOnLaunch;
+        _originalUiFontFamily = config.UiFontFamily;
         _killProcessesOnClose = config.KillProcessesOnClose;          // field, not property: no dirty flip during construction
         _recaptureProcessesOnLaunch = config.RecaptureProcessesOnLaunch;
+        _uiFontFamily = config.UiFontFamily;
 
         RootDirs = new ObservableCollection<string>(_originalRoots);
         Extensions = new ObservableCollection<string>(_originalExtensions);
@@ -69,7 +77,8 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         !Extensions.SequenceEqual(_originalExtensions) ||
         !IgnorePatterns.SequenceEqual(_originalPatterns) ||
         KillProcessesOnClose != _originalKillProcessesOnClose ||
-        RecaptureProcessesOnLaunch != _originalRecaptureProcessesOnLaunch;
+        RecaptureProcessesOnLaunch != _originalRecaptureProcessesOnLaunch ||
+        UiFontFamily != _originalUiFontFamily;
 
     public bool AddRootDir(string value)
     {

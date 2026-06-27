@@ -158,6 +158,17 @@ public sealed class ProcessRunnerTests : IDisposable
         Assert.False(ProcessRunner.StartTimesMatch(t, t.AddMinutes(1)));
     }
 
+    [Fact]
+    public void WorkingDirectoryFor_IsEmptyForBareAndRootPaths()
+    {
+        // A bare filename and the filesystem root have no usable parent, so the working
+        // directory resolves to "" — Process then inherits ScriptDock's current directory.
+        Assert.Equal("", ProcessRunner.WorkingDirectoryFor("run.command"));
+        Assert.Equal("", ProcessRunner.WorkingDirectoryFor("/"));
+        // A path with a containing folder yields that folder (non-empty).
+        Assert.NotEqual("", ProcessRunner.WorkingDirectoryFor("/proj/scripts/run.command"));
+    }
+
     [MacOnlyFact]
     public void Recapture_ReattachesRunningProcess_ByPidAndStartTime()
     {

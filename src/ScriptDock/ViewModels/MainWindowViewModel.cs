@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -87,7 +88,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _runner = runner;
         _showHidden = state.ShowHidden; // field, not property: no save/rebuild during construction
 
+        ApplyUiFont();
         _runner.ProcessesChanged += (_, _) => Dispatcher.UIThread.Post(RebuildFromProcesses);
+    }
+
+    /// <summary>
+    /// Applies the configured UI (chrome) font app-wide by overriding the <c>AppFontFamily</c> resource
+    /// the Window style binds via DynamicResource, so it takes effect live across every window. The
+    /// read-only output console renders in its own monospace font and is unaffected.
+    /// </summary>
+    private void ApplyUiFont()
+    {
+        if (Application.Current is { } app)
+        {
+            app.Resources["AppFontFamily"] = UiFont.Resolve(_config.UiFontFamily);
+        }
     }
 
     public double? SavedRecentWidth => _state.RecentPaneWidth;
@@ -212,7 +227,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _config.IgnorePatterns = draft.IgnorePatterns.ToList();
         _config.KillProcessesOnClose = draft.KillProcessesOnClose;
         _config.RecaptureProcessesOnLaunch = draft.RecaptureProcessesOnLaunch;
+        _config.UiFontFamily = draft.UiFontFamily.Trim();
         _configStore.Save(_config);
+        ApplyUiFont();
         SetStatus("Configuration changed — Rescan to apply.");
     });
 
