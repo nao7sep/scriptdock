@@ -182,24 +182,12 @@ public sealed class BackupEngine
         }
     }
 
-    /// <summary>Creates the backups directory lazily and, on POSIX, restricts it to the owner (0700) so an
-    /// archive of an owner-only file (per the api-key-storage conventions) is never landed world-readable.
-    /// Skipped on Windows, exactly as the storage conventions treat POSIX permissions.</summary>
+    /// <summary>Creates the backups directory lazily with the platform's default mode. Secrets are excluded
+    /// from backups fleet-wide, so no archive can contain a secret and the directory needs no permission
+    /// hardening (per the data-backup conventions).</summary>
     private void EnsureBackupsDirectory()
     {
-        var created = Directory.CreateDirectory(_backupsDirectory);
-        if (!OperatingSystem.IsWindows())
-        {
-            try
-            {
-                created.UnixFileMode =
-                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
-            }
-            catch
-            {
-                // Best effort: an inability to tighten the mode is not worth failing the backup over.
-            }
-        }
+        Directory.CreateDirectory(_backupsDirectory);
     }
 
     private static string ArchiveFileName(string archivedAt) => "backup-" + archivedAt + ".zip";
