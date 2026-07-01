@@ -6,12 +6,18 @@ using ScriptDock.Services;
 namespace ScriptDock.Storage;
 
 /// <summary>
-/// Generic JSON-backed store with atomic replace, sidecar backup, and
-/// backup-fallback recovery on load. Two files are written: <c>{file}</c>
-/// is the live document; <c>{file}.bak</c> holds the previous successful
-/// version. If the live document is missing or unparseable on load, the
-/// backup is tried before the type's default-constructed value is returned.
+/// Generic JSON-backed store with atomic replace. A single file is written:
+/// <c>{file}</c> is the live document, replaced by a write-to-temp-then-rename so a
+/// crash mid-write never tears it. If the live document is missing or unparseable on
+/// load, the type's default-constructed value is returned.
 /// </summary>
+/// <remarks>
+/// The <c>.bak</c> last-good sidecar this store once kept has been retired (see the
+/// data-backup conventions): the atomic write below is the durability floor against a
+/// torn write, and point-in-time history a user can be recovered from now lives in the
+/// startup backup archives under <c>~/.scriptdock/backups/</c>. An unreadable live file
+/// simply falls back to defaults.
+/// </remarks>
 /// <remarks>
 /// Caller responsibilities: this store does not impose any ordering or
 /// canonicalisation on the value it receives. If on-disk ordering matters
@@ -22,7 +28,6 @@ namespace ScriptDock.Storage;
 public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
 {
     private readonly string _filePath;
-    private readonly string _backupPath;
     private readonly string _label;
 
     /// <summary>
@@ -33,30 +38,23 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
     public JsonStore(string fileName, string label)
     {
         _filePath = Path.Combine(StorageRoot.Directory, fileName);
-        _backupPath = _filePath + ".bak";
         _label = label;
     }
 
     /// <summary>
-    /// True when a live document or its backup already exists on disk. Distinguishes a
-    /// first run ("seed defaults") from a document the user has deliberately emptied,
-    /// which <see cref="Load"/> alone cannot tell apart.
+    /// True when the live document already exists on disk. Distinguishes a first run
+    /// ("seed defaults") from a document the user has deliberately emptied, which
+    /// <see cref="Load"/> alone cannot tell apart.
     /// </summary>
-    public bool Exists => File.Exists(_filePath) || File.Exists(_backupPath);
+    public bool Exists => File.Exists(_filePath);
 
     public T Load()
     {
         if (TryLoadFile(_filePath, out var value))
             return value;
 
-        if (TryLoadFile(_backupPath, out value))
-        {
-            Log.Warn("store: recovered from backup", new { label = _label, path = _backupPath });
-            return value;
-        }
-
-        // Reached on first run (no files yet — normal) or after both the live file and
-        // its backup were unreadable (each already logged a warn above).
+        // Reached on first run (no file yet — normal) or after the live file was
+        // unreadable (already logged a warn above).
         Log.Info("store: no existing data, using defaults", new { label = _label });
         return new T();
     }
@@ -81,8 +79,8 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
     {
         value = new T();
 
-        // An absent file is normal (first run, or no backup yet): not a failure, so it
-        // is not logged here — the caller decides what the absence means.
+        // An absent file is normal (first run): not a failure, so it is not logged
+        // here — the caller decides what the absence means.
         if (!File.Exists(filePath))
             return false;
 
@@ -96,12 +94,16 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         catch (Exception ex)
         {
             // The file exists but will not parse — unexpected, yet recoverable (the
-            // caller falls back to the backup or to defaults), so warn rather than error.
+            // caller falls back to defaults), so warn rather than error.
             Log.Warn("store: file unreadable", ex, new { label = _label, path = filePath });
             return false;
         }
     }
 
+    // Write-to-temp-then-rename: the temp holds the full new content before it ever
+    // replaces the live file, so a crash mid-write leaves the old file intact rather
+    // than a torn one. No .bak sidecar is produced — File.Replace's backup argument is
+    // null and the first-write path is a plain move (see the class remarks).
     private void WriteAtomically(string json)
     {
         var tempPath = $"{_filePath}.{Guid.NewGuid():N}.tmp";
@@ -112,12 +114,11 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
 
             if (File.Exists(_filePath))
             {
-                File.Replace(tempPath, _filePath, _backupPath, ignoreMetadataErrors: true);
+                File.Replace(tempPath, _filePath, destinationBackupFileName: null, ignoreMetadataErrors: true);
             }
             else
             {
                 File.Move(tempPath, _filePath);
-                File.Copy(_filePath, _backupPath, overwrite: true);
             }
         }
         finally

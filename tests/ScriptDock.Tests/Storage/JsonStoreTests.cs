@@ -11,10 +11,12 @@ namespace ScriptDock.Tests.Storage;
 /// Exercises the real file I/O of <see cref="JsonStore{T}"/> against a temp
 /// directory redirected via the <c>SCRIPTDOCK_HOME</c> environment variable — the one
 /// relocation seam, used the same way in tests and production. These touch the
-/// disk on purpose: atomic-write and backup-recovery are the behaviours that
-/// protect the user's saved data, and a fake filesystem would not exercise them.
-/// A self-contained <see cref="SampleDoc"/> stands in for any persisted model, so
-/// these tests do not depend on the app's evolving config/state shape.
+/// disk on purpose: the atomic write is the behaviour that protects the user's saved
+/// data from a torn write, and a fake filesystem would not exercise it. The <c>.bak</c>
+/// last-good sidecar has been retired (see the data-backup conventions), so these also
+/// assert no such sidecar is ever produced. A self-contained <see cref="SampleDoc"/>
+/// stands in for any persisted model, so these tests do not depend on the app's evolving
+/// config/state shape.
 /// </summary>
 [Collection(StorageRootEnvironment.CollectionName)]
 public sealed class JsonStoreTests : IDisposable
@@ -80,33 +82,21 @@ public sealed class JsonStoreTests : IDisposable
     }
 
     [Fact]
-    public void Load_CorruptPrimary_RecoversFromBackup()
+    public void Load_CorruptPrimary_ReturnsDefault()
     {
+        // The .bak sidecar is retired: an unreadable live file falls back to defaults; earlier content is
+        // recovered, if ever needed, from the startup backup archives rather than a sidecar.
         var store = new JsonStore<SampleDoc>("doc.json", "doc");
         store.Save(new SampleDoc { Name = "one" });
-        // A second save promotes the first version into doc.json.bak.
         store.Save(new SampleDoc { Name = "two" });
 
         File.WriteAllText(PathOf("doc.json"), "{ not valid json");
 
         var loaded = store.Load();
 
-        // The backup holds the "one" version.
-        Assert.Equal("one", loaded.Name);
-    }
-
-    [Fact]
-    public void Load_PrimaryAndBackupBothCorrupt_ReturnsDefault()
-    {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc");
-        store.Save(new SampleDoc { Name = "one" });
-
-        File.WriteAllText(PathOf("doc.json"), "garbage");
-        File.WriteAllText(PathOf("doc.json.bak"), "also garbage");
-
-        var loaded = store.Load();
-
         Assert.Equal("", loaded.Name);
+        // No sidecar was ever written to recover from.
+        Assert.False(File.Exists(PathOf("doc.json.bak")));
     }
 
     [Fact]
@@ -122,28 +112,42 @@ public sealed class JsonStoreTests : IDisposable
     }
 
     [Fact]
-    public void Save_FirstTime_CreatesBothLiveAndBackup()
+    public void Save_FirstTime_CreatesLiveFileButNoBakSidecar()
     {
         var store = new JsonStore<SampleDoc>("doc.json", "doc");
 
         store.Save(new SampleDoc());
 
         Assert.True(File.Exists(PathOf("doc.json")));
-        Assert.True(File.Exists(PathOf("doc.json.bak")));
+        Assert.False(File.Exists(PathOf("doc.json.bak")));
     }
 
     [Fact]
-    public void Save_SecondTime_BackupHoldsPreviousVersion()
+    public void Save_SecondTime_WritesNewContentAndStillNoBakSidecar()
     {
         var store = new JsonStore<SampleDoc>("doc.json", "doc");
         store.Save(new SampleDoc { Name = "one" });
         store.Save(new SampleDoc { Name = "two" });
 
-        var backupJson = File.ReadAllText(PathOf("doc.json.bak"));
         var liveJson = File.ReadAllText(PathOf("doc.json"));
 
-        Assert.Contains("one", backupJson);
         Assert.Contains("two", liveJson);
+        // The overwrite is atomic (temp + replace) and leaves no last-good sidecar behind.
+        Assert.False(File.Exists(PathOf("doc.json.bak")));
+    }
+
+    [Fact]
+    public void Save_LeavesOnlyTheLiveFileInTheRoot()
+    {
+        // Locks the retirement: repeated saves produce exactly one file — no .bak, no leftover .tmp.
+        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        store.Save(new SampleDoc { Name = "one" });
+        store.Save(new SampleDoc { Name = "two" });
+        store.Save(new SampleDoc { Name = "three" });
+
+        var files = Directory.EnumerateFiles(_root).Select(Path.GetFileName).ToList();
+
+        Assert.Equal(["doc.json"], files);
     }
 
     [Fact]

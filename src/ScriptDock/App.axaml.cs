@@ -28,6 +28,11 @@ public partial class App : Application
             {
                 DataContext = CreateMainViewModel(),
             };
+
+            // Kick off the just-in-case data backup on a background thread — after CreateMainViewModel
+            // has materialized config.json — so the window never waits on it and the first-run seed is
+            // already on disk to capture.
+            BackupService.RunInBackground();
         }
 
         base.OnFrameworkInitializationCompleted();
