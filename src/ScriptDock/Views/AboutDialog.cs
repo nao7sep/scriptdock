@@ -17,7 +17,7 @@ public sealed class AboutDialog : DialogBase
         Width = 420;
         Title = "About ScriptDock";
 
-        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.1.0";
+        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "unknown";
 
         var githubButton = new Button { Content = "GitHub ↗", Classes = { "tool" } };
         githubButton.Click += (_, _) => ExternalLauncher.Open(GitHubUrl);

@@ -109,7 +109,6 @@ public sealed class BackupEngineTests : IDisposable
         WriteHome("config.json", "{\"a\":1}");
         WriteHome("state.json", "{\"showHidden\":true}");
         WriteHome(".DS_Store", "junk");
-        WriteHome("config.json.bak", "old");            // the retired sidecar
         WriteHome("config.json.abc.tmp", "partial");    // an atomic-write leftover
         WriteHome(Path.Combine("logs", "session.log"), "log line");
 

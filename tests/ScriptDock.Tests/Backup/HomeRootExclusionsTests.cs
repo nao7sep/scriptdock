@@ -23,7 +23,6 @@ public sealed class HomeRootExclusionsTests
     [InlineData("backups/index.json")]                          // the feature's own store
     [InlineData("backups/backup-20260701-120000-utc.zip")]
     [InlineData("config.json.abc123.tmp")]                      // atomic-write temp
-    [InlineData("config.json.bak")]                             // the retired sidecar
     [InlineData(".DS_Store")]
     [InlineData("data/.DS_Store")]                              // OS litter at any depth
     [InlineData("Thumbs.db")]
@@ -31,7 +30,6 @@ public sealed class HomeRootExclusionsTests
     [InlineData("desktop.ini")]                                 // Explorer folder-metadata (fleet floor)
     [InlineData("Desktop.ini")]
     [InlineData("data/desktop.ini")]
-    [InlineData("CONFIG.JSON.BAK")]                             // .bak matched case-insensitively
     public void Throwaway_And_Self_Managed_Paths_Are_Excluded(string relativePath)
     {
         Assert.True(HomeRootExclusions.IsExcluded(relativePath));
