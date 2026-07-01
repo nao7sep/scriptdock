@@ -6,10 +6,17 @@ It scans the root directories you configure and shows each matching script as a 
 
 It's for a developer who juggles many repos and restarts dev servers constantly. Newly-found and vanished scripts are flagged after each scan; hidden items, recent runs, and pane sizes persist between sessions; and root directories, extensions, and regex ignore patterns are editable from a Settings dialog. ScriptDock is pre-release (0.x) and macOS-first; the Windows launchers exist but are less exercised.
 
+## Download
+
+Prebuilt builds for **macOS (Apple Silicon)** and **Windows (x64)** are on the [Releases](https://github.com/nao7sep/scriptdock/releases) page — a `.dmg` / `setup.exe` installer or a portable `.zip`, whichever you prefer. These builds are **unsigned**, so the OS warns the first time you open one:
+
+- **macOS** — right-click the app and choose **Open** (or run `xattr -dr com.apple.quarantine /Applications/ScriptDock.app`).
+- **Windows** — on the SmartScreen prompt, click **More info → Run anyway**.
+
 ## Requirements
 
-- **macOS** (Apple Silicon or Intel).
-- **.NET 10 SDK** to build and run — there is no packaged installer yet.
+- **macOS** (Apple Silicon) or **Windows (x64)** to run a prebuilt download.
+- **.NET 10 SDK** only if you build from source; the prebuilt downloads need nothing installed.
 - The scripts ScriptDock launches run as **child processes it owns**. By default, quitting ScriptDock **leaves running scripts alive** and recaptures them on the next launch (matched by PID and start-time), so an accidental quit won't kill your in-progress work; you can configure it to terminate everything on quit instead (when that's on, quitting with scripts still running asks for confirmation first). Either way, a restart-while-running cleanly kills the whole process tree so dev servers free their ports.
 
 ## Getting started
