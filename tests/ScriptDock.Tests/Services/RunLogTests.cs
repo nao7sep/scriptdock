@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using ScriptDock;
 using ScriptDock.Services;
 using Xunit;
 
@@ -16,7 +17,7 @@ public sealed class RunLogTests : IDisposable
 
     public RunLogTests()
     {
-        _dir = Path.Combine(Path.GetTempPath(), "scriptdock-runlog-tests", Guid.NewGuid().ToString("N"));
+        _dir = Path.Combine(Path.GetTempPath(), "scriptdock-runlog-tests", NanoId.New());
         Directory.CreateDirectory(_dir);
         _file = Path.Combine(_dir, "run.log");
     }

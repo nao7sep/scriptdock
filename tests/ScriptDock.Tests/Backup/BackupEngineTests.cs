@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
+using ScriptDock;
 using ScriptDock.Backup;
 using ScriptDock.Storage;
 using ScriptDock.Tests.Storage;
@@ -28,7 +29,7 @@ public sealed class BackupEngineTests : IDisposable
     public BackupEngineTests()
     {
         _previousHome = Environment.GetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable);
-        _home = Path.Combine(Path.GetTempPath(), "scriptdock-backup-tests", Guid.NewGuid().ToString("N"));
+        _home = Path.Combine(Path.GetTempPath(), "scriptdock-backup-tests", NanoId.New());
         Directory.CreateDirectory(_home);
         Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, _home);
     }

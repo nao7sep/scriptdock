@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using ScriptDock;
 using ScriptDock.Models;
 using ScriptDock.Services;
 using ScriptDock.Storage;
@@ -29,7 +30,7 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
 
     public MainWindowViewModelScriptsTests()
     {
-        var baseDir = Path.Combine(Path.GetTempPath(), "scriptdock-scripts-tests", Guid.NewGuid().ToString("N"));
+        var baseDir = Path.Combine(Path.GetTempPath(), "scriptdock-scripts-tests", NanoId.New());
         _root = Path.Combine(baseDir, "scripts");
         _home = Path.Combine(baseDir, "home");
         Directory.CreateDirectory(_root);

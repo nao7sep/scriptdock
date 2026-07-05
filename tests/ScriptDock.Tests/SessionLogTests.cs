@@ -1,4 +1,5 @@
 using System;
+using ScriptDock;
 using ScriptDock.Services;
 using Xunit;
 
@@ -55,7 +56,7 @@ public sealed class SessionLogTests
             Path = System.IO.Path.Combine(
                 System.IO.Path.GetTempPath(),
                 "scriptdock-sessionlog-tests",
-                Guid.NewGuid().ToString("N"));
+                NanoId.New());
             System.IO.Directory.CreateDirectory(Path);
         }
 

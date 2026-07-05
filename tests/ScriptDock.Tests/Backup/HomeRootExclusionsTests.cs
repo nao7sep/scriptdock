@@ -23,6 +23,9 @@ public sealed class HomeRootExclusionsTests
     [InlineData("backups/index.json")]                          // the feature's own store
     [InlineData("backups/backup-20260701-120000-utc.zip")]
     [InlineData("config-abc123.tmp")]                           // atomic-write temp
+    [InlineData("config-20260701-120000-123-utc.invalid")]      // quarantined corrupt file
+    [InlineData("Config-20260701-120000-123-UTC.INVALID")]      // matched case-insensitively
+    [InlineData("data/state-20260701-120000-123-utc.invalid")]  // at any depth
     [InlineData(".DS_Store")]
     [InlineData("data/.DS_Store")]                              // OS litter at any depth
     [InlineData("Thumbs.db")]

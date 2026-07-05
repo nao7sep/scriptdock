@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using ScriptDock;
 using ScriptDock.Services;
 using Xunit;
 
@@ -17,7 +18,7 @@ public sealed class ScriptScannerTests : IDisposable
 
     public ScriptScannerTests()
     {
-        _root = Path.Combine(Path.GetTempPath(), "scriptdock-scan-tests", Guid.NewGuid().ToString("N"));
+        _root = Path.Combine(Path.GetTempPath(), "scriptdock-scan-tests", NanoId.New());
         Directory.CreateDirectory(_root);
     }
 

@@ -204,13 +204,12 @@ public sealed class BackupEngine
     private static string ArchiveFileName(string archivedAt) => "backup-" + archivedAt + ".zip";
 
     // <stem>-<discriminator>.tmp, in the same directory as the target — per the derived-filename
-    // grammar, never a suffix dot-appended after the full file name. No nanoid utility exists in
-    // this app yet, so the discriminator stays a GUID.
+    // grammar, never a suffix dot-appended after the full file name.
     private static string TempPathFor(string targetPath)
     {
         var directory = Path.GetDirectoryName(targetPath) ?? string.Empty;
         var stem = Path.GetFileNameWithoutExtension(targetPath);
-        return Path.Combine(directory, $"{stem}-{Guid.NewGuid():N}.tmp");
+        return Path.Combine(directory, $"{stem}-{NanoId.New()}.tmp");
     }
 
     private static void TryDelete(string path)

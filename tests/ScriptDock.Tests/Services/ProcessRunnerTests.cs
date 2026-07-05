@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ScriptDock;
 using ScriptDock.Models;
 using ScriptDock.Services;
 using Xunit;
@@ -22,7 +23,7 @@ public sealed class ProcessRunnerTests : IDisposable
 
     public ProcessRunnerTests()
     {
-        _dir = Path.Combine(Path.GetTempPath(), "scriptdock-runner-tests", Guid.NewGuid().ToString("N"));
+        _dir = Path.Combine(Path.GetTempPath(), "scriptdock-runner-tests", NanoId.New());
         Directory.CreateDirectory(_dir);
         _runsDir = Path.Combine(_dir, "runs");
     }

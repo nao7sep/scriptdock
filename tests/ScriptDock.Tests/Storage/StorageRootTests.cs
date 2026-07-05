@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using ScriptDock;
 using ScriptDock.Storage;
 using Xunit;
 
@@ -37,7 +38,7 @@ public sealed class StorageRootTests : IDisposable
     [Fact]
     public void Override_Relocates_The_Whole_Root()
     {
-        var target = Path.Combine(Path.GetTempPath(), "scriptdock-home-tests-" + Guid.NewGuid().ToString("N"));
+        var target = Path.Combine(Path.GetTempPath(), "scriptdock-home-tests-" + NanoId.New());
         Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, target);
 
         Assert.Equal(Path.GetFullPath(target), Path.GetFullPath(StorageRoot.Directory));
@@ -57,7 +58,7 @@ public sealed class StorageRootTests : IDisposable
     [Fact]
     public void Relative_Override_Resolves_Against_Home_Not_Working_Directory()
     {
-        var relative = "scriptdock-relative-" + Guid.NewGuid().ToString("N");
+        var relative = "scriptdock-relative-" + NanoId.New();
         Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, relative);
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -72,8 +73,11 @@ public sealed class StorageRootTests : IDisposable
     {
         // The resolver expands the %VAR% form (here) as well as the POSIX $VAR / ${VAR} forms
         // (covered by the test below); an unset reference expands to empty.
-        var varName = "SCRIPTDOCK_EXPAND_TEST_" + Guid.NewGuid().ToString("N");
-        var target = Path.Combine(Path.GetTempPath(), "scriptdock-expand-" + Guid.NewGuid().ToString("N"));
+        // Env var *names* must be [A-Za-z0-9_] only (see StorageRoot's EnvReferencePattern), so the
+        // nanoid's URL-safe hyphen is remapped to an underscore here — the discriminator only needs
+        // to be unique, not to keep every character of the id's usual alphabet.
+        var varName = "SCRIPTDOCK_EXPAND_TEST_" + NanoId.New().Replace('-', '_');
+        var target = Path.Combine(Path.GetTempPath(), "scriptdock-expand-" + NanoId.New());
         var previousVar = Environment.GetEnvironmentVariable(varName);
         try
         {
@@ -91,7 +95,7 @@ public sealed class StorageRootTests : IDisposable
     [Fact]
     public void Override_Expands_A_Leading_Tilde()
     {
-        var sub = "scriptdock-tilde-" + Guid.NewGuid().ToString("N");
+        var sub = "scriptdock-tilde-" + NanoId.New();
         Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, "~/" + sub);
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -101,8 +105,9 @@ public sealed class StorageRootTests : IDisposable
     [Fact]
     public void Override_Expands_Dollar_Environment_References()
     {
-        var varName = "SCRIPTDOCK_EXPAND_TEST_" + Guid.NewGuid().ToString("N");
-        var target = Path.Combine(Path.GetTempPath(), "scriptdock-dollar-" + Guid.NewGuid().ToString("N"));
+        // See the note above: env var names stay within [A-Za-z0-9_].
+        var varName = "SCRIPTDOCK_EXPAND_TEST_" + NanoId.New().Replace('-', '_');
+        var target = Path.Combine(Path.GetTempPath(), "scriptdock-dollar-" + NanoId.New());
         var previousVar = Environment.GetEnvironmentVariable(varName);
         try
         {
@@ -125,7 +130,8 @@ public sealed class StorageRootTests : IDisposable
     {
         // A reference to a variable that is definitely unset expands to empty; that is a
         // misconfiguration, reported rather than silently collapsing onto the home directory.
-        var unsetVar = "SCRIPTDOCK_UNSET_PROBE_" + Guid.NewGuid().ToString("N");
+        // See the note above: env var names stay within [A-Za-z0-9_].
+        var unsetVar = "SCRIPTDOCK_UNSET_PROBE_" + NanoId.New().Replace('-', '_');
         Environment.SetEnvironmentVariable(unsetVar, null);
         Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, "$" + unsetVar);
 

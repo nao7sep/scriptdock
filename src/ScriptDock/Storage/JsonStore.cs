@@ -8,15 +8,19 @@ namespace ScriptDock.Storage;
 /// <summary>
 /// Generic JSON-backed store with atomic replace. A single file is written:
 /// <c>{file}</c> is the live document, replaced by a write-to-temp-then-rename so a
-/// crash mid-write never tears it. If the live document is missing or unparseable on
-/// load, the type's default-constructed value is returned.
+/// crash mid-write never tears it. If the live document is missing, the type's
+/// default-constructed value is returned. If it exists but will not parse, it is
+/// quarantined (moved aside, bytes preserved) and the default-constructed value is
+/// returned in its place — see <see cref="TryLoadFile"/>.
 /// </summary>
 /// <remarks>
 /// The <c>.bak</c> last-good sidecar this store once kept has been retired (see the
 /// data-backup conventions): the atomic write below is the durability floor against a
 /// torn write, and point-in-time history a user can be recovered from now lives in the
 /// startup backup archives under <c>~/.scriptdock/backups/</c>. An unreadable live file
-/// simply falls back to defaults.
+/// is never left in place for a later <see cref="Save"/> to silently overwrite — the
+/// storage-path conventions' forbidden path — so it is quarantined aside first and
+/// defaults proceed; the live file reappears the next time it is (re)created.
 /// </remarks>
 /// <remarks>
 /// Caller responsibilities: this store does not impose any ordering or
@@ -93,10 +97,38 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         }
         catch (Exception ex)
         {
-            // The file exists but will not parse — unexpected, yet recoverable (the
-            // caller falls back to defaults), so warn rather than error.
-            Log.Warn("store: file unreadable", ex, new { label = _label, path = filePath });
+            // The file exists but will not parse — unexpected, yet recoverable. Per the
+            // storage-path conventions, a present-but-corrupt managed file is quarantined
+            // (moved aside, never left for a later Save to silently overwrite) rather than
+            // discarded in place; defaults proceed from here.
+            Quarantine(filePath, ex);
             return false;
+        }
+    }
+
+    // Moves the unreadable file aside to <stem>-<millisecond-utc-stamp>.invalid, in the same
+    // directory, per the derived-filename grammar — a plain rename, so the original bytes are
+    // preserved exactly rather than copied or rewritten. One warning names both the original and
+    // the quarantine path. If the move itself cannot complete (e.g. a permission error, a
+    // colliding name), the load failure is still warned so it is never silently lost, and the
+    // corrupt file is left where it was rather than risking a half-done move.
+    private void Quarantine(string filePath, Exception loadException)
+    {
+        var directory = Path.GetDirectoryName(filePath) ?? string.Empty;
+        var stem = Path.GetFileNameWithoutExtension(filePath);
+        var quarantinePath = Path.Combine(
+            directory, $"{stem}-{TimestampConventions.FileStampMillis(DateTimeOffset.UtcNow)}.invalid");
+
+        try
+        {
+            File.Move(filePath, quarantinePath);
+            Log.Warn("store: file unreadable, quarantined", loadException,
+                new { label = _label, path = filePath, quarantine = quarantinePath });
+        }
+        catch (Exception moveEx)
+        {
+            Log.Warn("store: file unreadable, could not quarantine", moveEx,
+                new { label = _label, path = filePath, loadError = loadException.Message });
         }
     }
 
@@ -108,10 +140,9 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
     {
         // <stem>-<discriminator>.tmp, in the same directory as the live file — per the
         // derived-filename grammar, never a suffix dot-appended after the full file name.
-        // No nanoid utility exists in this app yet, so the discriminator stays a GUID.
         var directory = Path.GetDirectoryName(_filePath) ?? string.Empty;
         var stem = Path.GetFileNameWithoutExtension(_filePath);
-        var tempPath = Path.Combine(directory, $"{stem}-{Guid.NewGuid():N}.tmp");
+        var tempPath = Path.Combine(directory, $"{stem}-{NanoId.New()}.tmp");
 
         try
         {

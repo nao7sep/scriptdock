@@ -20,6 +20,10 @@ public static class HomeRootExclusions
     /// <item><c>logs/</c> — per-session logs, recreatable and noisy.</item>
     /// <item><c>backups/</c> — the feature's own archives and index; backing them up would recurse.</item>
     /// <item><c>*.tmp</c> — atomic-write temporaries (they never outlive a write, but a crash can leave one).</item>
+    /// <item><c>*.invalid</c> — quarantined corrupt files (<see cref="Storage.JsonStore{T}"/>'s
+    /// quarantine-then-reset fallback): diagnostic debris, not user content, and the file's last-good
+    /// contents already live in the backup archive history; matched case-insensitively, exactly as
+    /// <c>*.tmp</c> is.</item>
     /// <item><c>.DS_Store</c>, <c>Thumbs.db</c>, <c>desktop.ini</c> — OS folder-metadata a file manager
     /// drops into any directory the user opens; matched case-insensitively (the fleet floor).</item>
     /// </list>
@@ -39,7 +43,8 @@ public static class HomeRootExclusions
             return true;
         }
 
-        if (path.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
+        if (path.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) ||
+            path.EndsWith(".invalid", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }

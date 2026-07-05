@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading;
+using ScriptDock;
 using ScriptDock.Services;
 using Xunit;
 
@@ -76,7 +77,7 @@ public sealed class LogRevealTests
             Path = System.IO.Path.Combine(
                 System.IO.Path.GetTempPath(),
                 "scriptdock-logreveal-tests",
-                Guid.NewGuid().ToString("N"));
+                NanoId.New());
         }
 
         public string Path { get; }

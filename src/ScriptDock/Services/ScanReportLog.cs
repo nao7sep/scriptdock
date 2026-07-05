@@ -20,7 +20,7 @@ public static class ScanReportLog
         StorageRoot.EnsureExists();
         Directory.CreateDirectory(StorageRoot.LogsDirectory);
 
-        var path = Path.Combine(StorageRoot.LogsDirectory, $"scan-{TimestampConventions.FileStamp(report.CompletedAt)}.log");
+        var path = Path.Combine(StorageRoot.LogsDirectory, $"scan-{TimestampConventions.FileStampMillis(report.CompletedAt)}.log");
         File.WriteAllText(path, Format(report));
 
         Log.Info("scan", new
