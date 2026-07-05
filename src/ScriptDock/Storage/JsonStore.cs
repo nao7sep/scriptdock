@@ -106,7 +106,12 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
     // null and the first-write path is a plain move (see the class remarks).
     private void WriteAtomically(string json)
     {
-        var tempPath = $"{_filePath}.{Guid.NewGuid():N}.tmp";
+        // <stem>-<discriminator>.tmp, in the same directory as the live file — per the
+        // derived-filename grammar, never a suffix dot-appended after the full file name.
+        // No nanoid utility exists in this app yet, so the discriminator stays a GUID.
+        var directory = Path.GetDirectoryName(_filePath) ?? string.Empty;
+        var stem = Path.GetFileNameWithoutExtension(_filePath);
+        var tempPath = Path.Combine(directory, $"{stem}-{Guid.NewGuid():N}.tmp");
 
         try
         {

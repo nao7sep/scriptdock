@@ -22,7 +22,7 @@ public sealed class HomeRootExclusionsTests
     [InlineData("logs/20260701.log")]                           // per-session logs
     [InlineData("backups/index.json")]                          // the feature's own store
     [InlineData("backups/backup-20260701-120000-utc.zip")]
-    [InlineData("config.json.abc123.tmp")]                      // atomic-write temp
+    [InlineData("config-abc123.tmp")]                           // atomic-write temp
     [InlineData(".DS_Store")]
     [InlineData("data/.DS_Store")]                              // OS litter at any depth
     [InlineData("Thumbs.db")]

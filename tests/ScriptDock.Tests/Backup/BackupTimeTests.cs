@@ -5,7 +5,7 @@ using Xunit;
 namespace ScriptDock.Tests.Backup;
 
 /// <summary>The backup index's two time forms: a whole-second ISO stamp that round-trips, and a
-/// filename run stamp in the fleet's <c>yyyyMMdd-HHmmss-utc</c> convention.</summary>
+/// filename run stamp in the fleet's <c>yyyyMMdd-HHmmss-fff-utc</c> millisecond convention.</summary>
 public sealed class BackupTimeTests
 {
     private static readonly DateTimeOffset Instant =
@@ -41,8 +41,10 @@ public sealed class BackupTimeTests
     }
 
     [Fact]
-    public void FileStamp_Uses_The_Fleet_Convention()
+    public void FileStamp_Uses_The_Fleet_Millisecond_Convention()
     {
-        Assert.Equal("20260701-022220-utc", BackupTime.FileStamp(Instant));
+        var withMillis = Instant.AddMilliseconds(738);
+
+        Assert.Equal("20260701-022220-738-utc", BackupTime.FileStamp(withMillis));
     }
 }

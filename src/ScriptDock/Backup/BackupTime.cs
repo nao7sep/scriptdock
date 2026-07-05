@@ -6,15 +6,16 @@ namespace ScriptDock.Backup;
 /// <summary>
 /// The two time forms the backup index needs, kept beside the pure backup logic so the change decision
 /// is unit-testable without touching the app's wider timestamp machinery. The run stamp reuses the
-/// fleet-wide <c>yyyyMMdd-HHmmss-utc</c> file-stamp convention (see <see cref="TimestampConventions"/>);
-/// the stored modification time is a whole-second ISO-8601 UTC value, since it is compared with a
-/// two-second tolerance and so carries no sub-second component.
+/// fleet-wide <c>yyyyMMdd-HHmmss-fff-utc</c> millisecond file-stamp convention (see
+/// <see cref="TimestampConventions"/>) — millisecond precision so two runs in the same UTC second still
+/// get distinct archive stamps; the stored modification time is a whole-second ISO-8601 UTC value, since
+/// it is compared with a two-second tolerance and so carries no sub-second component.
 /// </summary>
 public static class BackupTime
 {
-    /// <summary>The filename-safe UTC run stamp, <c>yyyyMMdd-HHmmss-utc</c> — the archive's stem and each
-    /// index entry's <c>archivedAt</c>.</summary>
-    public static string FileStamp(DateTimeOffset value) => TimestampConventions.FileStamp(value);
+    /// <summary>The filename-safe UTC run stamp, <c>yyyyMMdd-HHmmss-fff-utc</c> — the archive's stem and
+    /// each index entry's <c>archivedAt</c>.</summary>
+    public static string FileStamp(DateTimeOffset value) => TimestampConventions.FileStampMillis(value);
 
     /// <summary>A whole-second UTC ISO-8601 stamp (<c>yyyy-MM-ddTHH:mm:ssZ</c>) for the index's stored
     /// modification time. Parses back through <see cref="TryParseIso"/>.</summary>

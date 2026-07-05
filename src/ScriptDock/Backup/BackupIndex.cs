@@ -20,8 +20,10 @@ public sealed class BackupIndex
 /// </summary>
 public sealed class BackupIndexEntry
 {
-    /// <summary>The capturing run's UTC file stamp (<c>yyyymmdd-hhmmss-utc</c>). Also the stem of that run's
-    /// archive, so the zip holding this entry is <c>backup-&lt;archivedAt&gt;.zip</c> — derived, never stored.</summary>
+    /// <summary>The capturing run's UTC file stamp (<c>yyyymmdd-hhmmss-fff-utc</c>). Also the stem of that
+    /// run's archive, so the zip holding this entry is <c>backup-&lt;archivedAt&gt;.zip</c> — derived, never
+    /// stored. Existing entries recorded before the millisecond stamp was introduced keep their
+    /// whole-second form (<c>yyyymmdd-hhmmss-utc</c>) as-is; they are not migrated or rewritten.</summary>
     public string ArchivedAt { get; set; } = string.Empty;
 
     /// <summary>The file's full entry path within the zip, e.g. <c>config.json</c>.</summary>

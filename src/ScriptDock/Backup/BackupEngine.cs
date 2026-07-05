@@ -61,8 +61,7 @@ public sealed class BackupEngine
             return new BackupReport { NothingChanged = true, Skips = skips, IndexWasReset = indexReset };
         }
 
-        var archivedAt = BackupTime.FileStamp(now);
-        var archived = WriteArchive(archivedAt, changed, skips);
+        var (archivedAt, archived) = WriteArchive(now, changed, skips);
         if (archived.Count == 0)
         {
             // Every changed file failed to read at archive time; nothing was written, so nothing is recorded.
@@ -118,7 +117,7 @@ public sealed class BackupEngine
     {
         EnsureBackupsDirectory();
         var json = JsonSerializer.Serialize(index, JsonOptions.Default);
-        var tempPath = _indexFile + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        var tempPath = TempPathFor(_indexFile);
 
         try
         {
@@ -138,14 +137,18 @@ public sealed class BackupEngine
         }
     }
 
-    /// <summary>Writes the changed files to a temp zip and renames it into place, returning the files that
-    /// were actually archived (a file unreadable at archive time is skipped, not recorded).</summary>
-    private List<BackupCandidate> WriteArchive(
-        string archivedAt, IReadOnlyList<BackupCandidate> changed, List<BackupSkip> skips)
+    /// <summary>Writes the changed files to a temp zip, then renames it into place under the winning
+    /// <c>archivedAt</c> stamp — a no-clobber create (see the data-backup conventions). If
+    /// <c>backup-&lt;archivedAt&gt;.zip</c> already exists (e.g. a second instance stamped the same
+    /// millisecond), the underlying instant is advanced one millisecond at a time until its stamp names a
+    /// free archive; that winning stamp is returned so the caller records it on every index entry. Returns
+    /// the files actually archived (a file unreadable at archive time is skipped, not recorded).</summary>
+    private (string ArchivedAt, List<BackupCandidate> Archived) WriteArchive(
+        DateTimeOffset now, IReadOnlyList<BackupCandidate> changed, List<BackupSkip> skips)
     {
         EnsureBackupsDirectory();
-        var finalPath = Path.Combine(_backupsDirectory, ArchiveFileName(archivedAt));
-        var tempPath = finalPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        var archivedAt = BackupTime.FileStamp(now);
+        var tempPath = TempPathFor(Path.Combine(_backupsDirectory, ArchiveFileName(archivedAt)));
 
         var archived = new List<BackupCandidate>();
         try
@@ -169,11 +172,19 @@ public sealed class BackupEngine
             if (archived.Count == 0)
             {
                 TryDelete(tempPath);
-                return archived;
+                return (archivedAt, archived);
             }
 
-            File.Move(tempPath, finalPath, overwrite: true);
-            return archived;
+            var finalPath = Path.Combine(_backupsDirectory, ArchiveFileName(archivedAt));
+            while (File.Exists(finalPath))
+            {
+                now = now.AddMilliseconds(1);
+                archivedAt = BackupTime.FileStamp(now);
+                finalPath = Path.Combine(_backupsDirectory, ArchiveFileName(archivedAt));
+            }
+
+            File.Move(tempPath, finalPath);
+            return (archivedAt, archived);
         }
         catch
         {
@@ -191,6 +202,16 @@ public sealed class BackupEngine
     }
 
     private static string ArchiveFileName(string archivedAt) => "backup-" + archivedAt + ".zip";
+
+    // <stem>-<discriminator>.tmp, in the same directory as the target — per the derived-filename
+    // grammar, never a suffix dot-appended after the full file name. No nanoid utility exists in
+    // this app yet, so the discriminator stays a GUID.
+    private static string TempPathFor(string targetPath)
+    {
+        var directory = Path.GetDirectoryName(targetPath) ?? string.Empty;
+        var stem = Path.GetFileNameWithoutExtension(targetPath);
+        return Path.Combine(directory, $"{stem}-{Guid.NewGuid():N}.tmp");
+    }
 
     private static void TryDelete(string path)
     {

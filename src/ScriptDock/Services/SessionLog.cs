@@ -5,21 +5,21 @@ namespace ScriptDock.Services;
 
 /// <summary>
 /// Naming and creation for per-launch log files: one fresh file per process
-/// launch, named strictly <c>yyyymmdd-hhmmss-utc.log</c> — the UTC session-start
-/// timestamp and nothing else, no uniqueness suffix. Two launches in the same UTC
-/// second collide on the name; the exclusive create then fails and the caller
-/// (see <c>Log.Start</c>) degrades to console logging, rather than the collision
-/// being engineered around.
+/// launch, named strictly <c>yyyymmdd-hhmmss-fff-utc.log</c> — the UTC session-start
+/// timestamp with millisecond precision and nothing else, no uniqueness suffix. Two
+/// launches in the same UTC millisecond collide on the name; the exclusive create then
+/// fails and the caller (see <c>Log.Start</c>) degrades to console logging, rather than
+/// the collision being engineered around.
 /// </summary>
 public static class SessionLog
 {
     /// <summary>
     /// The log file name for a launch at <paramref name="timestamp"/>. The instant
-    /// is converted to UTC (via the shared <see cref="TimestampConventions.FileStamp"/>),
+    /// is converted to UTC (via the shared <see cref="TimestampConventions.FileStampMillis"/>),
     /// so the name does not depend on the local time zone.
     /// </summary>
     public static string FileName(DateTimeOffset timestamp) =>
-        TimestampConventions.FileStamp(timestamp) + ".log";
+        TimestampConventions.FileStampMillis(timestamp) + ".log";
 
     /// <summary>The full path of the session log for a launch instant, under <paramref name="logsDirectory"/>.</summary>
     public static string PathFor(string logsDirectory, DateTimeOffset timestamp) =>

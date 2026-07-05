@@ -50,13 +50,13 @@ public sealed class BackupEngineTests : IDisposable
         Assert.Null(report.Fatal);
         Assert.False(report.NothingChanged);
         Assert.Equal(1, report.FilesArchived);
-        Assert.Equal("backup-20260701-000000-utc.zip", report.ArchiveFileName);
-        Assert.Equal(new[] { "config.json" }, ArchiveEntries("backup-20260701-000000-utc.zip"));
+        Assert.Equal("backup-20260701-000000-000-utc.zip", report.ArchiveFileName);
+        Assert.Equal(new[] { "config.json" }, ArchiveEntries("backup-20260701-000000-000-utc.zip"));
 
         // The index recorded exactly the one file, at the run's stamp, with camelCase keys.
         var index = LoadIndex();
         Assert.Single(index.Entries);
-        Assert.Equal("20260701-000000-utc", index.Entries[0].ArchivedAt);
+        Assert.Equal("20260701-000000-000-utc", index.Entries[0].ArchivedAt);
         Assert.Equal("config.json", index.Entries[0].ArchivePath);
     }
 
@@ -70,7 +70,7 @@ public sealed class BackupEngineTests : IDisposable
 
         Assert.True(report.NothingChanged);
         Assert.Null(report.ArchiveFileName);
-        Assert.False(File.Exists(Path.Combine(AppPaths.BackupsDirectory, "backup-20260701-010000-utc.zip")));
+        Assert.False(File.Exists(Path.Combine(AppPaths.BackupsDirectory, "backup-20260701-010000-000-utc.zip")));
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public sealed class BackupEngineTests : IDisposable
 
         Assert.False(report.NothingChanged);
         Assert.Equal(1, report.FilesArchived);
-        Assert.Equal(new[] { "config.json" }, ArchiveEntries("backup-20260701-010000-utc.zip"));
+        Assert.Equal(new[] { "config.json" }, ArchiveEntries("backup-20260701-010000-000-utc.zip"));
     }
 
     [Fact]
@@ -109,18 +109,41 @@ public sealed class BackupEngineTests : IDisposable
         WriteHome("config.json", "{\"a\":1}");
         WriteHome("state.json", "{\"showHidden\":true}");
         WriteHome(".DS_Store", "junk");
-        WriteHome("config.json.abc.tmp", "partial");    // an atomic-write leftover
+        WriteHome("config-abc.tmp", "partial");    // an atomic-write leftover
         WriteHome(Path.Combine("logs", "session.log"), "log line");
 
         var report = new BackupEngine().Run(Run1);
 
         Assert.Equal(1, report.FilesArchived);
-        Assert.Equal(new[] { "config.json" }, ArchiveEntries("backup-20260701-000000-utc.zip"));
+        Assert.Equal(new[] { "config.json" }, ArchiveEntries("backup-20260701-000000-000-utc.zip"));
     }
 
     // The case-insensitive entry-collision behaviour is covered by BackupRootCollectorTests.DeduplicateFolds_*,
     // which exercise the pure dedup on any filesystem — a real-file test here cannot stage two case-differing
     // names on a case-insensitive host (macOS/Windows), where they are the same file.
+
+    [Fact]
+    public void An_Existing_Archive_At_The_Stamp_Advances_To_The_Next_Free_Millisecond()
+    {
+        WriteHome("config.json", "{\"a\":1}");
+        Directory.CreateDirectory(AppPaths.BackupsDirectory);
+        File.WriteAllText(Path.Combine(AppPaths.BackupsDirectory, "backup-20260701-000000-000-utc.zip"), "occupied");
+
+        var report = new BackupEngine().Run(Run1);
+
+        Assert.Null(report.Fatal);
+        Assert.False(report.NothingChanged);
+        Assert.Equal("backup-20260701-000000-001-utc.zip", report.ArchiveFileName);
+
+        // The pre-existing archive at the would-be stamp was left untouched, not clobbered.
+        Assert.Equal("occupied", File.ReadAllText(Path.Combine(AppPaths.BackupsDirectory, "backup-20260701-000000-000-utc.zip")));
+
+        // The new archive exists at the advanced stamp, and the index records that same winning stamp.
+        Assert.Equal(new[] { "config.json" }, ArchiveEntries("backup-20260701-000000-001-utc.zip"));
+        var index = LoadIndex();
+        Assert.Single(index.Entries);
+        Assert.Equal("20260701-000000-001-utc", index.Entries[0].ArchivedAt);
+    }
 
     // --- helpers ---
 

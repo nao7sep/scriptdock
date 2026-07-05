@@ -5,8 +5,8 @@ using Xunit;
 namespace ScriptDock.Tests;
 
 /// <summary>
-/// Locks the two shared timestamp shapes: both render in UTC regardless of the input's offset, so
-/// every log writer and the storage converter agree on one timeline and one filename token.
+/// Locks the three shared timestamp shapes: all render in UTC regardless of the input's offset, so
+/// every log writer and the storage converter agree on one timeline and one pair of filename tokens.
 /// </summary>
 public sealed class TimestampConventionsTests
 {
@@ -31,5 +31,11 @@ public sealed class TimestampConventionsTests
     public void FileStamp_RendersCompactUtcTokenWithUtcMarker()
     {
         Assert.Equal("20260617-001541-utc", TimestampConventions.FileStamp(Jst));
+    }
+
+    [Fact]
+    public void FileStampMillis_RendersCompactUtcTokenWithMillisAndUtcMarker()
+    {
+        Assert.Equal("20260617-001541-123-utc", TimestampConventions.FileStampMillis(Jst));
     }
 }
