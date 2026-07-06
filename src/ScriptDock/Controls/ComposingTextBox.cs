@@ -1,21 +1,24 @@
 using System;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Input.TextInput;
 using Avalonia.Interactivity;
 
 namespace ScriptDock.Controls;
 
 /// <summary>
 /// ScriptDock's one text-entry control, IME-correct by construction so the text-input-ime-conventions
-/// hold the same way on every field — the console stdin input and the settings extension/pattern
-/// entries all use it. It owns both composition rules in a single place rather than scattering them:
+/// hold the same way on every field — the console stdin input plus the settings font,
+/// extension, and pattern entries all use it. It owns the shared behavior in one place:
 ///
 /// <para><b>Enter is a submit only when it is a real Enter.</b> A key consumed by the input method
 /// arrives as <see cref="Key.ImeProcessed"/>, so an Enter that merely commits a candidate raises
-/// nothing here. Single-line fields (<see cref="TextBox.AcceptsReturn"/> false) raise
-/// <see cref="Submitted"/>; a multiline field (AcceptsReturn true) lets Enter insert a newline.</para>
+/// nothing here. Single-line fields with <see cref="SubmitOnEnter"/> enabled raise
+/// <see cref="Submitted"/>; other fields retain normal Enter/default-button behavior, and a
+/// multiline field (AcceptsReturn true) lets Enter insert a newline.</para>
 ///
 /// <para><b><see cref="IsComposing"/> reports composition as state,</b> read from the presenter's
 /// preedit buffer. A window-level command accelerator (Cmd/Ctrl+R and the rest) is a chord the IME
@@ -31,9 +34,29 @@ public class ComposingTextBox : TextBox
 
     // The template's text presenter, which holds the live IME preedit (composition) buffer.
     private TextPresenter? _presenter;
+    private ScrollViewer? _scrollViewer;
+    private MacOsTextInputMethodClient? _macOsInputClient;
+
+    public static readonly StyledProperty<bool> SubmitOnEnterProperty =
+        AvaloniaProperty.Register<ComposingTextBox, bool>(nameof(SubmitOnEnter));
+
+    public ComposingTextBox()
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            TextInputMethodClientRequested += OnTextInputMethodClientRequested;
+        }
+    }
 
     public static readonly RoutedEvent<RoutedEventArgs> SubmittedEvent =
         RoutedEvent.Register<ComposingTextBox, RoutedEventArgs>(nameof(Submitted), RoutingStrategies.Bubble);
+
+    /// <summary>Whether a genuine Enter in a single-line field raises <see cref="Submitted"/>.</summary>
+    public bool SubmitOnEnter
+    {
+        get => GetValue(SubmitOnEnterProperty);
+        set => SetValue(SubmitOnEnterProperty, value);
+    }
 
     public event EventHandler<RoutedEventArgs> Submitted
     {
@@ -58,8 +81,41 @@ public class ComposingTextBox : TextBox
 
     protected override void OnApplyTemplate(TemplateAppliedEventArgs e)
     {
+        if (_scrollViewer is not null)
+        {
+            _scrollViewer.ScrollChanged -= OnScrollChanged;
+        }
+
         base.OnApplyTemplate(e);
         _presenter = e.NameScope.Find<TextPresenter>("PART_TextPresenter");
+        _scrollViewer = e.NameScope.Find<ScrollViewer>("PART_ScrollViewer");
+
+        if (OperatingSystem.IsMacOS() && _scrollViewer is not null)
+        {
+            // The adapter deliberately reports this TextBox as its coordinate visual. Preserve the
+            // presenter's lost transform notification by explicitly refreshing the cursor on scroll.
+            _scrollViewer.ScrollChanged += OnScrollChanged;
+        }
+    }
+
+    private void OnScrollChanged(object? sender, ScrollChangedEventArgs e) =>
+        _macOsInputClient?.NotifyCursorRectangleChanged();
+
+    private void OnTextInputMethodClientRequested(
+        object? sender,
+        TextInputMethodClientRequestedEventArgs e)
+    {
+        if (e.Client is null || ReferenceEquals(e.Client, _macOsInputClient))
+        {
+            return;
+        }
+
+        if (_macOsInputClient?.Wraps(e.Client) != true)
+        {
+            _macOsInputClient = new MacOsTextInputMethodClient(e.Client, this);
+        }
+
+        e.Client = _macOsInputClient;
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
@@ -71,7 +127,7 @@ public class ComposingTextBox : TextBox
             return;
         }
 
-        if (e.Key == Key.Enter && !AcceptsReturn)
+        if (e.Key == Key.Enter && !AcceptsReturn && SubmitOnEnter)
         {
             RaiseEvent(new RoutedEventArgs(SubmittedEvent));
             e.Handled = true;

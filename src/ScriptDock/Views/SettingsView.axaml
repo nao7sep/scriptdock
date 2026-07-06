@@ -12,7 +12,7 @@
              read-only output console keeps its own monospace font and is unaffected by this. -->
         <StackPanel Spacing="6">
             <TextBlock Text="UI font" Classes="cardHeader"/>
-            <TextBox Text="{Binding UiFontFamily}" PlaceholderText="Inter"/>
+            <ctl:ComposingTextBox Text="{Binding UiFontFamily}" PlaceholderText="Inter"/>
             <TextBlock Text="Comma-separated; the first installed family is used. Blank uses the default (Inter)."
                        Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
         </StackPanel>
@@ -37,7 +37,7 @@
             <DockPanel>
                 <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemoveExtClick"/>
                 <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddExtClick"/>
-                <ctl:ComposingTextBox x:Name="ExtEntry" PlaceholderText=".command" Submitted="OnExtSubmitted"/>
+                <ctl:ComposingTextBox x:Name="ExtEntry" PlaceholderText=".command" SubmitOnEnter="True" Submitted="OnExtSubmitted"/>
             </DockPanel>
             <TextBlock Text="{Binding ExtensionError}" Foreground="{StaticResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"
                        IsVisible="{Binding ExtensionError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
@@ -51,7 +51,7 @@
             <DockPanel>
                 <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemovePatternClick"/>
                 <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddPatternClick"/>
-                <ctl:ComposingTextBox x:Name="PatternEntry" PlaceholderText="/node_modules/" Submitted="OnPatternSubmitted"/>
+                <ctl:ComposingTextBox x:Name="PatternEntry" PlaceholderText="/node_modules/" SubmitOnEnter="True" Submitted="OnPatternSubmitted"/>
             </DockPanel>
             <TextBlock Text="{Binding PatternError}" Foreground="{StaticResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"
                        IsVisible="{Binding PatternError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>

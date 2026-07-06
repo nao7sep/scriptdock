@@ -216,7 +216,7 @@
                         </Border>
                         <!-- Interactive input: a line typed here is sent to the selected running script's stdin
                              on Enter. Enabled only while that run is running and accepts input. -->
-                        <ctl:ComposingTextBox x:Name="ConsoleInput" Classes="stdin" DockPanel.Dock="Bottom" Margin="10,0,10,10"
+                        <ctl:ComposingTextBox x:Name="ConsoleInput" Classes="stdin" DockPanel.Dock="Bottom" Margin="10,0,10,10" SubmitOnEnter="True"
                                  IsEnabled="{Binding CanSendInput}"
                                  PlaceholderText="Type input and press Enter to send to the running script…"
                                  Submitted="OnConsoleInputSubmitted"/>
