@@ -51,12 +51,23 @@ public sealed class JsonStoreTests : IDisposable
 
     public void Dispose()
     {
+        // Close the write-through backup store's process-wide singleton so the file handle on this
+        // throwaway root's backups.sqlite3 is released before the directory is deleted, and so the next
+        // test re-opens against its own SCRIPTDOCK_HOME rather than reusing a stale connection.
+        BackupStore.Close();
         Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, _previousHome);
         try { Directory.Delete(_root, recursive: true); }
         catch { /* best-effort cleanup */ }
     }
 
     private string PathOf(string fileName) => Path.Combine(_root, fileName);
+
+    // The write-through backup store (backups.sqlite3, plus its WAL -wal/-shm sidecars) is a normal
+    // artifact under the root; a test asserting the root's *managed-text* contents must exclude it.
+    private static bool IsStoreFile(string fileName) =>
+        fileName == BackupStore.FileName ||
+        fileName == BackupStore.FileName + "-wal" ||
+        fileName == BackupStore.FileName + "-shm";
 
     [Fact]
     public void SaveThenLoad_RoundTripsValue()
@@ -201,7 +212,10 @@ public sealed class JsonStoreTests : IDisposable
         store.Save(new SampleDoc { Name = "two" });
         store.Save(new SampleDoc { Name = "three" });
 
-        var files = Directory.EnumerateFiles(_root).Select(Path.GetFileName).ToList();
+        var files = Directory.EnumerateFiles(_root)
+            .Select(Path.GetFileName)
+            .Where(name => name is not null && !IsStoreFile(name))
+            .ToList();
 
         Assert.Equal(["doc.json"], files);
     }

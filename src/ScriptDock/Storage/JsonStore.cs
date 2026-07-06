@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using ScriptDock.Services;
 
@@ -16,9 +17,10 @@ namespace ScriptDock.Storage;
 /// <remarks>
 /// The <c>.bak</c> last-good sidecar this store once kept has been retired (see the
 /// data-backup conventions): the atomic write below is the durability floor against a
-/// torn write, and point-in-time history a user can be recovered from now lives in the
-/// startup backup archives under <c>~/.scriptdock/backups/</c>. An unreadable live file
-/// is never left in place for a later <see cref="Save"/> to silently overwrite — the
+/// torn write, and the point-in-time history a user can be recovered from now lives in
+/// the write-through <see cref="BackupStore"/> (<c>~/.scriptdock/backups.sqlite3</c>),
+/// which this store feeds strictly after each rename lands. An unreadable live file is
+/// never left in place for a later <see cref="Save"/> to silently overwrite — the
 /// storage-path conventions' forbidden path — so it is quarantined aside first and
 /// defaults proceed; the live file reappears the next time it is (re)created.
 /// </remarks>
@@ -69,7 +71,11 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         {
             StorageRoot.EnsureExists();
             var json = JsonSerializer.Serialize(value, JsonOptions.Default);
-            WriteAtomically(json);
+            // Encode once to raw bytes and write those exact bytes, so the copy the backup records is
+            // byte-identical to what lands on disk (no re-encode, no BOM surprise). UTF-8 without a BOM,
+            // matching File.WriteAllText's default so the on-disk shape is unchanged from before.
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(json);
+            WriteAtomically(bytes);
             Log.Info("store: saved", new { label = _label, path = _filePath });
         }
         catch (Exception ex)
@@ -132,11 +138,19 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         }
     }
 
-    // Write-to-temp-then-rename: the temp holds the full new content before it ever
-    // replaces the live file, so a crash mid-write leaves the old file intact rather
-    // than a torn one. No .bak sidecar is produced — File.Replace's backup argument is
-    // null and the first-write path is a plain move (see the class remarks).
-    private void WriteAtomically(string json)
+    // The single managed-text atomic-write choke point (data-backup conventions). Write-to-temp-then-
+    // rename: the temp holds the full new content before it ever replaces the live file, so a crash
+    // mid-write leaves the old file intact rather than a torn one. No .bak sidecar is produced —
+    // File.Replace's backup argument is null and the first-write path is a plain move (see the class
+    // remarks). A managed-text write that bypasses this helper is a silent backup gap; there is
+    // deliberately no second atomic-write path for the app's own managed text.
+    //
+    // The data-backup record fires strictly AFTER the rename lands. Recording before the rename would
+    // risk a "backup of a save that never happened": if the rename then failed, the history would hold a
+    // version that never reached disk. So: rename lands, *then* record the exact bytes just written — the
+    // same buffer already in hand, never a re-read of the file. The record is best-effort and silent; it
+    // never throws back into this write and never affects the save's success (see BackupStore.Record).
+    private void WriteAtomically(byte[] bytes)
     {
         // <stem>-<discriminator>.tmp, in the same directory as the live file — per the
         // derived-filename grammar, never a suffix dot-appended after the full file name.
@@ -146,7 +160,7 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
 
         try
         {
-            File.WriteAllText(tempPath, json);
+            File.WriteAllBytes(tempPath, bytes);
 
             if (File.Exists(_filePath))
             {
@@ -162,5 +176,10 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
             if (File.Exists(tempPath))
                 File.Delete(tempPath);
         }
+
+        // After the rename: the file is exactly where it belongs, so record the bytes we just wrote.
+        // Best-effort — Record catches, logs once, and swallows every failure, so a backup problem can
+        // never break the save that already succeeded above.
+        BackupStore.Record(_filePath, bytes);
     }
 }

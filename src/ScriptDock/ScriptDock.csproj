@@ -23,5 +23,13 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.5" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.5" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!-- The write-through data-backup store (data-backup conventions). Microsoft.Data.Sqlite is
+         the lowest-friction .NET SQLite binding: a managed ADO.NET provider bundling native SQLite
+         through SQLitePCLRaw, so it needs no separate native rebuild step. The .Core package is the
+         provider without a pinned native bundle; SQLitePCLRaw.bundle_e_sqlite3 3.x supplies the
+         native e_sqlite3 — a direct reference so the fixed 3.x line wins over the older 2.1.x that
+         Microsoft.Data.Sqlite would otherwise pin transitively (GHSA-2m69-gcr7-jv3q). -->
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.9" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
   </ItemGroup>
 </Project>
