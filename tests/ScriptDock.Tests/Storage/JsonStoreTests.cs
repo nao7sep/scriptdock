@@ -100,7 +100,7 @@ public sealed class JsonStoreTests : IDisposable
     {
         // The .bak sidecar is retired: an unreadable live file is quarantined aside (see the
         // dedicated quarantine tests below) rather than a sidecar being consulted; earlier content
-        // is recovered, if ever needed, from the quarantine file or the startup backup archives.
+        // is recovered, if ever needed, from the quarantine file or backups.sqlite3.
         var store = new JsonStore<SampleDoc>("doc.json", "doc");
         store.Save(new SampleDoc { Name = "one" });
         store.Save(new SampleDoc { Name = "two" });
