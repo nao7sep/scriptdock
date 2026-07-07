@@ -1,0 +1,21 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+publish/
+publish-win/
+dist/
+
+# Test results (dotnet test --logger trx, coverage, etc.)
+[Tt]est[Rr]esults/
+*.trx
+
+# IDE and editor
+.vs/
+.idea/
+*.user
+
+# macOS
+.DS_Store
+
+# Coverage reports (generated)
+coverage/

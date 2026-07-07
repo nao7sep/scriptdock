@@ -1,0 +1,282 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ScriptDock.ViewModels"
+        xmlns:models="using:ScriptDock.Models"
+        xmlns:ctl="using:ScriptDock.Controls"
+        x:Class="ScriptDock.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="ScriptDock"
+        Icon="/Assets/icon.png"
+        Width="1100" Height="720"
+        WindowStartupLocation="CenterScreen"
+        KeyDown="OnWindowKeyDown"
+        Background="{StaticResource AppBackgroundBrush}"
+        RequestedThemeVariant="Dark"><!-- ScriptDock is dark-only; setting the variant on the
+        Window itself (not just App) makes its ActualThemeVariant Dark, which Avalonia's macOS
+        backend uses to paint the native NSWindow title bar dark regardless of the system
+        appearance. The native bar's color can't be verified headlessly — VISUALLY VERIFY on a
+        light-mode Mac. If it still renders light, the documented follow-up is to force
+        NSApplication.appearance = NSAppearanceNameDarkAqua at startup (deliberately not done
+        here, to avoid risky untested interop). The MinWidth/MinHeight are intentionally NOT set
+        here: they are derived from the layout in WindowMetrics and assigned in OnLoaded. -->
+
+    <Window.Resources>
+        <!-- Content-sized script chip: slightly raised from the dark list well. A newly-found script is
+             flagged by an orange dot;
+             removed → red text, hidden → gray text; green dot when running. The 1px border is transparent
+             by default (the selected-chip style colours it, so selection never shifts the layout). -->
+        <DataTemplate x:Key="ScriptTile" x:DataType="models:ScriptItem">
+            <Border Classes="chip"
+                    Background="{StaticResource ChipBackgroundBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6" Padding="12,7" Margin="3">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Ellipse Width="7" Height="7" Fill="{StaticResource ScriptNewBrush}" VerticalAlignment="Center" IsVisible="{Binding IsNew}"/>
+                    <Ellipse Width="7" Height="7" Fill="{StaticResource RunningBrush}" VerticalAlignment="Center" IsVisible="{Binding IsRunning}"/>
+                    <TextBlock Text="{Binding DisplayName}"
+                               Foreground="{Binding Converter={StaticResource ScriptColor}}"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Window.Styles>
+        <!-- A 3px list inset plus each chip's 3px margin makes the outer inset and the
+             6px gaps between neighbouring chips visually equal. -->
+        <Style Selector="ListBox#ScriptsList">
+            <Setter Property="Padding" Value="3"/>
+        </Style>
+        <!-- Scripts list renders content-sized chips in a WrapPanel: strip the Fluent item
+             chrome (large default padding and min height) so the tiles pack tightly and each
+             tile's own padding and margin control the look. -->
+        <Style Selector="ListBox#ScriptsList ListBoxItem">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="CornerRadius" Value="6"/>
+        </Style>
+        <!-- The chip owns hover/selection emphasis through its reserved 1px border. Do not let the
+             ListBoxItem background show through the chip's 3px margin as a thicker outer ring. -->
+        <Style Selector="ListBox#ScriptsList ListBoxItem:pointerover /template/ ContentPresenter,
+                         ListBox#ScriptsList ListBoxItem:selected /template/ ContentPresenter,
+                         ListBox#ScriptsList ListBoxItem:selected:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="ListBox#ScriptsList ListBoxItem:pointerover Border.chip">
+            <Setter Property="Background" Value="{StaticResource ChipHoverBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        </Style>
+        <!-- Selected chip gets an accent ring (the chip reserves a transparent 1px border for this). -->
+        <Style Selector="ListBox#ScriptsList ListBoxItem:selected Border.chip">
+            <Setter Property="Background" Value="{StaticResource ChipSelectedBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+        </Style>
+        <Style Selector="ListBox#RecentList ListBoxItem:selected TextBlock.recentMeta">
+            <Setter Property="Foreground" Value="{StaticResource SelectionSecondaryBrush}"/>
+        </Style>
+    </Window.Styles>
+
+    <!-- Header / body / status bar each get their own track so the status bar is reserved chrome
+         and the body's MinHeight can never overlap it (a DockPanel fill child would). Row order is
+         visual top-to-bottom: header, fill body, status bar. -->
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- Flat header: wordmark + hamburger, with a single bottom border. -->
+        <Border Grid.Row="0" Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="14,10">
+            <DockPanel>
+                <!-- Hamburger docked right; the wordmark is the last (fill) child so it stays left. -->
+                <Button Classes="tool" DockPanel.Dock="Right" Padding="8,4">
+                    <Path Width="18" Height="18" Stretch="None" Fill="{StaticResource TextPrimaryBrush}"
+                          Data="M1,3 H17 V5 H1 Z M1,8 H17 V10 H1 Z M1,13 H17 V15 H1 Z"/>
+                    <Button.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                            <MenuItem Header="Reveal Logs" Click="OnRevealLogsClick"/>
+                            <MenuItem Header="Settings" Click="OnSettingsClick"/>
+                            <MenuItem Header="Keyboard Shortcuts" Click="OnShortcutsClick"/>
+                            <MenuItem Header="About" Click="OnAboutClick"/>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+                <TextBlock Text="ScriptDock" FontWeight="Bold" FontSize="15" VerticalAlignment="Center"/>
+            </DockPanel>
+        </Border>
+
+        <!-- Status bar in its own bottom track so it stays reserved at every window size. Two zones:
+             left is the transient activity/result, coloured by severity (StatusBrush — secondary,
+             accent while busy, danger on failure); right is the persistent fact cluster (total scripts,
+             hidden when any, and running with a green dot when something is live). -->
+        <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="14,6">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ScriptCount, StringFormat='{}{0} scripts'}" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <TextBlock Text="·" Foreground="{StaticResource BorderBrush}" IsVisible="{Binding HasHidden}"/>
+                    <TextBlock Text="{Binding HiddenCount, StringFormat='{}{0} hidden'}" Foreground="{StaticResource TextSecondaryBrush}" IsVisible="{Binding HasHidden}"/>
+                    <TextBlock Text="·" Foreground="{StaticResource BorderBrush}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Ellipse Width="7" Height="7" Fill="{StaticResource RunningBrush}" VerticalAlignment="Center" IsVisible="{Binding HasRunning}"/>
+                        <TextBlock Text="{Binding RunningCount, StringFormat='{}{0} running'}" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    </StackPanel>
+                </StackPanel>
+                <TextBlock Text="{Binding Status}" Foreground="{Binding StatusBrush}" VerticalAlignment="Center"/>
+            </DockPanel>
+        </Border>
+
+        <!-- Body: a left column (Scripts above Output, parted by a row splitter) beside a full-height
+             Recent column (parted by a column splitter). The left column fills (*) and each pane shrinks
+             to its MinWidth/MinHeight under window pressure; the Recent column and the console row are
+             fixed pixel sizes the user drags (and which persist), each floored by its MinWidth/MinHeight.
+             The window's own minimum (derived in WindowMetrics) reserves every pane min; because a
+             fixed-pixel track does not shrink on its own, OnLoaded re-derives the Recent width and console
+             height on every resize (ClampPanesToWindow) so neither can spill past the shrinking window. -->
+        <Grid x:Name="BodyGrid" Grid.Row="1" Margin="12">
+            <!-- Both body columns carry a real minimum width; WindowMetrics sums these (read from the
+                 live columns) to derive the window MinWidth and to back the restore clamp. These XAML
+                 values are a floor: OnLoaded measures the Scripts and Recent header button rows and
+                 raises each column minimum to fit them, so the right-aligned buttons can never overlap
+                 a section title (a font-dependent width the header itself dictates). The Recent column
+                 is the fixed-width right pane; the column splitter sits between the two in its own 6px
+                 column and spans the full body height. -->
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="360"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="340" MinWidth="260"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left column: Scripts above Output. The Scripts row fills (*) and shrinks to its MinHeight
+                 under window pressure; the console row is a fixed pixel height the user sizes with the row
+                 splitter (and which persists), floored by its MinHeight. -->
+            <Grid x:Name="LeftPanesGrid" Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" MinHeight="200"/>
+                    <RowDefinition Height="6"/>
+                    <!-- 160 = section header (~40) + stdin input (~46) + the well's margin and a few
+                         readable lines; below this the console well collapses to nothing. -->
+                    <RowDefinition Height="220" MinHeight="160"/>
+                </Grid.RowDefinitions>
+
+                <!-- Scripts (content-sized tiles); Rescan + Show-hidden act on this list. -->
+                <Border Grid.Row="0" Classes="card" Padding="0">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Top" Classes="sectionHeader" x:Name="ScriptsHeader">
+                            <DockPanel>
+                                <TextBlock Text="Scripts" Classes="cardHeader" VerticalAlignment="Center"/>
+                                <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <!-- Selection actions (act on the selected chip). -->
+                                    <Button Content="Run" Classes="tool" Command="{Binding RunScriptCommand}" CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
+                                    <!-- Label tracks the selected script: "Hide" for a visible one, "Show" for a hidden one. -->
+                                    <Button Content="{Binding ToggleHiddenLabel}" Classes="tool" Command="{Binding ToggleHiddenCommand}" CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
+                                    <!-- List-level controls (act on the whole Scripts list). "Show hidden" is the one
+                                         checkbox+label pair, so it carries extra horizontal margin to set that pair apart
+                                         from the Hide button on its left and the Rescan button on its right — its tight
+                                         internal box-to-label gap then reads as the connected unit. -->
+                                    <CheckBox Content="Show hidden" IsChecked="{Binding ShowHidden}" Margin="10,0" VerticalAlignment="Center"/>
+                                    <Button Content="Rescan" Classes="tool" Command="{Binding RescanCommand}"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Grid Margin="10">
+                            <ListBox x:Name="ScriptsList" ItemsSource="{Binding Scripts}"
+                                     SelectedItem="{Binding SelectedScript, Mode=TwoWay}"
+                                     ItemTemplate="{StaticResource ScriptTile}"
+                                     DoubleTapped="OnScriptDoubleTapped" KeyDown="OnScriptKeyDown">
+                                <ListBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ListBox.ItemsPanel>
+                            </ListBox>
+                            <TextBlock Text="No scripts found. Add a root directory in Settings, then Rescan."
+                                       IsVisible="{Binding NoScripts}" IsHitTestVisible="False"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       TextAlignment="Center" TextWrapping="Wrap" MaxWidth="260"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                        </Grid>
+                    </DockPanel>
+                </Border>
+
+                <GridSplitter x:Name="ConsoleSplitter" Grid.Row="1" Height="6" Background="Transparent" ResizeDirection="Rows" HorizontalAlignment="Stretch"/>
+
+                <!-- Console: the selected Recent item's output (auto-scrolls when pinned to the bottom). -->
+                <Border Grid.Row="2" Classes="card" Padding="0">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Top" Classes="sectionHeader">
+                            <DockPanel>
+                                <!-- The selected script's name as a colored pill, floated right, so the
+                                     console makes clear whose output it is shown only when a run is selected. -->
+                                <Border DockPanel.Dock="Right" VerticalAlignment="Center" Margin="8,0,0,0"
+                                        Background="{StaticResource SelectionBrush}" CornerRadius="10" Padding="10,3"
+                                        IsVisible="{Binding HasSelection}">
+                                    <TextBlock Text="{Binding SelectedRecentEntry.DisplayName}" FontSize="12" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
+                                </Border>
+                                <TextBlock Text="Output" Classes="cardHeader" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Border>
+                        <!-- Interactive input: a line typed here is sent to the selected running script's stdin
+                             on Enter. Enabled only while that run is running and accepts input. -->
+                        <ctl:ComposingTextBox x:Name="ConsoleInput" Classes="stdin" DockPanel.Dock="Bottom" Margin="10,0,10,10" SubmitOnEnter="True"
+                                 IsEnabled="{Binding CanSendInput}"
+                                 PlaceholderText="Type input and press Enter to send to the running script…"
+                                 Submitted="OnConsoleInputSubmitted"/>
+                        <!-- Recessed terminal-like field so the log reads as its own surface, not part of the header. -->
+                        <Border Margin="10" Background="{StaticResource ContentWellBrush}"
+                                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="8">
+                            <ScrollViewer x:Name="ConsoleScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                                <SelectableTextBlock Text="{Binding SelectedOutput}" TextWrapping="NoWrap"
+                                                     FontFamily="Menlo,Consolas,monospace" FontSize="12"/>
+                            </ScrollViewer>
+                        </Border>
+                    </DockPanel>
+                </Border>
+            </Grid>
+
+            <GridSplitter x:Name="RecentSplitter" Grid.Column="1" Width="6" Background="Transparent" ResizeDirection="Columns"/>
+
+            <!-- Recent (running + recently-run, dismissible); the full-height right column. -->
+            <Border Grid.Column="2" Classes="card" Padding="0">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Classes="sectionHeader" x:Name="RecentHeader">
+                        <DockPanel>
+                            <TextBlock Text="Recent" Classes="cardHeader" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <Button Content="Run" Classes="tool" Command="{Binding RunOrRestartCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
+                                <Button Content="Stop" Classes="tool" Command="{Binding StopEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
+                                <Button Content="Dismiss" Classes="tool" Command="{Binding DismissEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+                    <Grid Margin="10">
+                        <ListBox x:Name="RecentList" ItemsSource="{Binding Recent}"
+                                 SelectedItem="{Binding SelectedRecentEntry, Mode=TwoWay}"
+                                 DoubleTapped="OnRecentDoubleTapped" KeyDown="OnRecentKeyDown">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:RecentEntry">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding LastRanDisplay}" Classes="recentMeta" FontSize="11"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <!-- State pill: colour distinguishes running / done / failed / idle at a glance. -->
+                                        <Border Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0"
+                                                Background="{Binding StatePillBrush}" CornerRadius="10" Padding="9,2">
+                                            <TextBlock Text="{Binding StatePillText}" FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource AppBackgroundBrush}"/>
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <TextBlock Text="No recent runs. Double-click a script to run it."
+                                   IsVisible="{Binding NoRecent}" IsHitTestVisible="False"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   TextAlignment="Center" TextWrapping="Wrap" MaxWidth="240"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                    </Grid>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

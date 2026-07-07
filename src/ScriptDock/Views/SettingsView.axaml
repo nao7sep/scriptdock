@@ -1,0 +1,70 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ScriptDock.ViewModels"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:ctl="using:ScriptDock.Controls"
+             x:Class="ScriptDock.Views.SettingsView"
+             x:DataType="vm:SettingsDialogViewModel"
+             Width="480">
+    <StackPanel Spacing="14">
+
+        <!-- Appearance: the UI (chrome) font leads, set apart from the scanning/process settings. The
+             read-only output console keeps its own monospace font and is unaffected by this. -->
+        <StackPanel Spacing="6">
+            <TextBlock Text="UI font" Classes="cardHeader"/>
+            <ctl:ComposingTextBox Text="{Binding UiFontFamily}" PlaceholderText="Inter"/>
+            <TextBlock Text="Comma-separated; the first installed family is used. Blank uses the default (Inter)."
+                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- Root directories: chosen with the native folder picker, not typed — they are
+             directories that exist on disk, so picking beats hand-entering a path. -->
+        <StackPanel Spacing="6">
+            <TextBlock Text="Root directories" Classes="cardHeader"/>
+            <ListBox x:Name="RootList" ItemsSource="{Binding RootDirs}" Height="96"
+                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
+            <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+                <Button Content="Add…" Classes="tool" Click="OnAddRootClick"/>
+                <Button Content="Remove" Classes="tool" Click="OnRemoveRootClick"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Extensions -->
+        <StackPanel Spacing="6">
+            <TextBlock Text="Extensions" Classes="cardHeader"/>
+            <ListBox x:Name="ExtList" ItemsSource="{Binding Extensions}" Height="80"
+                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
+            <DockPanel>
+                <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemoveExtClick"/>
+                <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddExtClick"/>
+                <ctl:ComposingTextBox x:Name="ExtEntry" PlaceholderText=".command" SubmitOnEnter="True" Submitted="OnExtSubmitted"/>
+            </DockPanel>
+            <TextBlock Text="{Binding ExtensionError}" Foreground="{StaticResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"
+                       IsVisible="{Binding ExtensionError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
+        </StackPanel>
+
+        <!-- Ignore patterns -->
+        <StackPanel Spacing="6">
+            <TextBlock Text="Ignore patterns (regex over full path)" Classes="cardHeader"/>
+            <ListBox x:Name="PatternList" ItemsSource="{Binding IgnorePatterns}" Height="96"
+                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
+            <DockPanel>
+                <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemovePatternClick"/>
+                <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddPatternClick"/>
+                <ctl:ComposingTextBox x:Name="PatternEntry" PlaceholderText="/node_modules/" SubmitOnEnter="True" Submitted="OnPatternSubmitted"/>
+            </DockPanel>
+            <TextBlock Text="{Binding PatternError}" Foreground="{StaticResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"
+                       IsVisible="{Binding PatternError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
+        </StackPanel>
+
+        <!-- Process lifecycle -->
+        <StackPanel Spacing="6">
+            <TextBlock Text="Processes" Classes="cardHeader"/>
+            <CheckBox Content="Terminate running scripts when ScriptDock quits"
+                      IsChecked="{Binding KillProcessesOnClose}"/>
+            <CheckBox Content="Reattach to scripts left running, on next launch"
+                      IsChecked="{Binding RecaptureProcessesOnLaunch}"/>
+        </StackPanel>
+
+    </StackPanel>
+</UserControl>

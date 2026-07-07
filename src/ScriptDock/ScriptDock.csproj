@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Windows: embeds icon.ico into the .exe. macOS uses macOS/icon.icns (classic,
+         CFBundleIconFile) and macOS/Assets.car (Liquid Glass, CFBundleIconName) instead;
+         see scripts/rebuild.command. Icon provenance: company/assets/scriptdock/icons. -->
+    <ApplicationIcon>icon.ico</ApplicationIcon>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <AssemblyTitle>ScriptDock</AssemblyTitle>
+    <Description>A desktop launcher that finds the scripts across your projects and runs and restarts them as processes it owns.</Description>
+    <RuntimeIdentifiers>osx-arm64;osx-x64;win-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.0.5" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.0.1" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.5" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.5" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.5" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!-- The write-through data-backup store (data-backup conventions). Microsoft.Data.Sqlite is
+         the lowest-friction .NET SQLite binding: a managed ADO.NET provider bundling native SQLite
+         through SQLitePCLRaw, so it needs no separate native rebuild step. The .Core package is the
+         provider without a pinned native bundle; SQLitePCLRaw.bundle_e_sqlite3 3.x supplies the
+         native e_sqlite3 — a direct reference so the fixed 3.x line wins over the older 2.1.x that
+         Microsoft.Data.Sqlite would otherwise pin transitively (GHSA-2m69-gcr7-jv3q). -->
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.9" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+  </ItemGroup>
+</Project>
