@@ -19,7 +19,7 @@ Prebuilt builds for **macOS (Apple Silicon)** and **Windows (x64)** are on the [
 - **.NET 10 SDK** only if you build from source; the prebuilt downloads need nothing installed.
 - The scripts ScriptDock launches run as **child processes it owns**. By default, quitting ScriptDock **leaves running scripts alive** and recaptures them on the next launch (matched by PID and start-time), so an accidental quit won't kill your in-progress work; you can configure it to terminate everything on quit instead (when that's on, quitting with scripts still running asks for confirmation first). Either way, a restart-while-running cleanly kills the whole process tree so dev servers free their ports.
 
-## Getting started
+## Run from source
 
 Run `scripts/run-dev.command` (double-click in Finder, or run it from a shell) — the fastest way to try it. On first launch ScriptDock creates `~/.scriptdock/` and seeds sensible defaults. Add your project root directory (e.g. `~/code`) and adjust extensions and ignore patterns from the Settings dialog, then Rescan.
 
