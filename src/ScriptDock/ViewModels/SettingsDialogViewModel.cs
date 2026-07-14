@@ -171,6 +171,33 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     public void RemoveExtension(string value) => Extensions.Remove(value);
     public void RemoveIgnorePattern(string value) => IgnorePatterns.Remove(value);
 
+    /// <summary>
+    /// Replaces the draft extension and ignore-pattern lists wholesale with the current built-in
+    /// defaults from <see cref="ConfigDefaults"/> — the config-seeding-conventions' <em>restore to
+    /// latest defaults</em>, so a later version's improved defaults reach a user who has already
+    /// launched. It reseeds from the same source as first run, so what it produces is exactly what a
+    /// fresh install would get. Root directories are left untouched: they are personal, seeded with no
+    /// default, so there is nothing to restore. This mutates only the draft — it applies on Save and is
+    /// undone by Cancel, which is the discardable-draft form of the convention's warning (no blocking
+    /// confirm needed). Any pending validation errors are cleared, since the lists no longer reflect a
+    /// rejected entry.
+    /// </summary>
+    public void ResetListsToDefaults()
+    {
+        var defaults = ConfigDefaults.CreateSeededConfig();
+
+        Extensions.Clear();
+        foreach (var extension in defaults.Extensions)
+            Extensions.Add(extension);
+
+        IgnorePatterns.Clear();
+        foreach (var pattern in defaults.IgnorePatterns)
+            IgnorePatterns.Add(pattern);
+
+        ExtensionError = string.Empty;
+        PatternError = string.Empty;
+    }
+
     private static bool IsValidRegex(string pattern)
     {
         try

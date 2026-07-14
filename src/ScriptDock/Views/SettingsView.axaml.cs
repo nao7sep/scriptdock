@@ -56,6 +56,10 @@ public partial class SettingsView : UserControl
     private void OnAddExtClick(object? sender, RoutedEventArgs e) => AddExtension();
     private void OnAddPatternClick(object? sender, RoutedEventArgs e) => AddPattern();
 
+    // Refills the draft extension and ignore-pattern lists from the current built-in defaults; a draft
+    // mutation, so Save applies it and Cancel discards it (config-seeding-conventions' reset to latest).
+    private void OnResetDefaultsClick(object? sender, RoutedEventArgs e) => Vm?.ResetListsToDefaults();
+
     private void OnRemoveRootClick(object? sender, RoutedEventArgs e)
     {
         if (Vm is not null && RootList.SelectedItem is string value)

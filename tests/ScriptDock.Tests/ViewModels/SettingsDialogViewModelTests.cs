@@ -185,4 +185,39 @@ public sealed class SettingsDialogViewModelTests
 
         Assert.False(vm.IsDirty);
     }
+
+    [Fact]
+    public void ResetListsToDefaults_RefillsBothListsFromBuiltIns_LeavesRootsAndDirties()
+    {
+        var vm = new SettingsDialogViewModel(Seed()); // roots: /code, ext: .command, patterns: /node_modules/
+        var defaults = ConfigDefaults.CreateSeededConfig();
+
+        vm.ResetListsToDefaults();
+
+        // Both seeded lists are replaced wholesale with the current built-in defaults, matching
+        // exactly what a first-run seed would produce (config-seeding-conventions' restore to latest).
+        Assert.Equal(defaults.Extensions, vm.Extensions);
+        Assert.Equal(defaults.IgnorePatterns, vm.IgnorePatterns);
+
+        // Root directories are personal, seeded with no default, so the reset leaves them alone.
+        Assert.Contains("/code", vm.RootDirs);
+
+        // The draft differs from the seeded config (the seed had a single ignore pattern), so Save enables.
+        Assert.True(vm.IsDirty);
+    }
+
+    [Fact]
+    public void ResetListsToDefaults_ClearsPendingValidationErrors()
+    {
+        var vm = new SettingsDialogViewModel(Seed());
+        Assert.False(vm.AddExtension(".com mand"));      // leaves an extension error
+        Assert.False(vm.AddIgnorePattern("["));          // leaves a pattern error
+        Assert.NotEqual(string.Empty, vm.ExtensionError);
+        Assert.NotEqual(string.Empty, vm.PatternError);
+
+        vm.ResetListsToDefaults();
+
+        Assert.Equal(string.Empty, vm.ExtensionError);
+        Assert.Equal(string.Empty, vm.PatternError);
+    }
 }
