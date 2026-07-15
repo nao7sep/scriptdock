@@ -57,17 +57,6 @@
                        IsVisible="{Binding PatternError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
         </StackPanel>
 
-        <!-- Reset the seeded lists (extensions + ignore patterns) to the current built-in defaults, so a
-             later version's improved defaults reach an existing user (config-seeding-conventions). It
-             mutates only the draft, so Save applies it and Cancel discards it — the discardable-draft form
-             of the convention's warning, which the hint states rather than a blocking confirm. -->
-        <StackPanel Spacing="6">
-            <TextBlock Text="Defaults" Classes="cardHeader"/>
-            <Button Content="Reset to latest defaults" Classes="tool" HorizontalAlignment="Left" Click="OnResetDefaultsClick"/>
-            <TextBlock Text="Replaces the extension and ignore-pattern lists with the latest built-in defaults. Applies on Save; Cancel to keep your current lists."
-                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
-        </StackPanel>
-
         <!-- Process lifecycle -->
         <StackPanel Spacing="6">
             <TextBlock Text="Processes" Classes="cardHeader"/>
