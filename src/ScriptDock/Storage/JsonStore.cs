@@ -115,9 +115,9 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
     // Moves the unreadable file aside to <stem>-<millisecond-utc-stamp>.invalid, in the same
     // directory, per the derived-filename grammar — a plain rename, so the original bytes are
     // preserved exactly rather than copied or rewritten. One warning names both the original and
-    // the quarantine path. If the move itself cannot complete (e.g. a permission error, a
-    // colliding name), the load failure is still warned so it is never silently lost, and the
-    // corrupt file is left where it was rather than risking a half-done move.
+    // the quarantine path. The move either lands or its failure propagates: falling through to
+    // defaults with the corrupt file still in place would let the next Save overwrite the very
+    // bytes quarantine exists to preserve (storage-path conventions).
     private void Quarantine(string filePath, Exception loadException)
     {
         var directory = Path.GetDirectoryName(filePath) ?? string.Empty;
@@ -135,6 +135,7 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         {
             Log.Warn("store: file unreadable, could not quarantine", moveEx,
                 new { label = _label, path = filePath, loadError = loadException.Message });
+            throw;
         }
     }
 

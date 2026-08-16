@@ -14,7 +14,15 @@ public static class ConfigBootstrap
     public static AppConfig LoadOrSeed(IJsonStore<AppConfig> store)
     {
         if (store.Exists)
-            return store.Load();
+        {
+            var loaded = store.Load();
+            // Re-check absence AFTER the load: a corrupt file is quarantined away
+            // during Load(), and a launch recovered that way must get the seeded
+            // defaults below, not an empty config (storage-path conventions — the
+            // seeding check runs after the quarantine, not before the load).
+            if (store.Exists)
+                return loaded;
+        }
 
         var seeded = ConfigDefaults.CreateSeededConfig();
         store.Save(seeded);
