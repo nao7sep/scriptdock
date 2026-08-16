@@ -1,3 +1,4 @@
+using System;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
@@ -24,9 +25,32 @@ public partial class App : Application
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            // A store that is unreadable AND cannot be set aside throws out of the composition root:
+            // ScriptDock must not reset over bytes it failed to preserve, so it halts. A halt has to
+            // reach the user, and before a main window exists the report becomes the main window —
+            // a silent exit is not a halt (storage-path conventions).
+            MainWindowViewModel viewModel;
+            try
+            {
+                viewModel = CreateMainViewModel();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("startup: a settings file could not be read or set aside", ex);
+                desktop.MainWindow = NoticeDialog.CreateStartupFailure(
+                    "ScriptDock could not start",
+                    "A settings file could not be read, and ScriptDock could not set it aside either — so it has "
+                    + "been left exactly where it is rather than risk overwriting it.\n\n"
+                    + ex.Message
+                    + "\n\nYour scripts are not affected. Repair or move the file under the ScriptDock data "
+                    + "folder, then start ScriptDock again.");
+                base.OnFrameworkInitializationCompleted();
+                return;
+            }
+
             var mainWindow = new MainWindow
             {
-                DataContext = CreateMainViewModel(),
+                DataContext = viewModel,
             };
             desktop.MainWindow = mainWindow;
 
