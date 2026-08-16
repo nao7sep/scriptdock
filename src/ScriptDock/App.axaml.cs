@@ -25,10 +25,7 @@ public partial class App : Application
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            // A store that is unreadable AND cannot be set aside throws out of the composition root:
-            // ScriptDock must not reset over bytes it failed to preserve, so it halts. A halt has to
-            // reach the user, and before a main window exists the report becomes the main window —
-            // a silent exit is not a halt (storage-path conventions).
+            // If an unreadable store cannot be set aside, stop before defaults can overwrite it.
             MainWindowViewModel viewModel;
             try
             {
@@ -54,10 +51,7 @@ public partial class App : Application
             };
             desktop.MainWindow = mainWindow;
 
-            // Report any quarantine the startup loads performed: the store was
-            // set aside with its bytes preserved and defaults took over — the
-            // user hears it from a dialog, never only from the log
-            // (storage-path conventions: both branches report).
+            // Report material recovery once the main window can own the dialog.
             mainWindow.Opened += async (_, _) =>
             {
                 var quarantined = Storage.QuarantineJournal.Drain();
