@@ -130,6 +130,7 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
             File.Move(filePath, quarantinePath);
             Log.Warn("store: file unreadable, quarantined", loadException,
                 new { label = _label, path = filePath, quarantine = quarantinePath });
+            QuarantineJournal.Record(quarantinePath);
         }
         catch (Exception moveEx)
         {
