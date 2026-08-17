@@ -15,21 +15,14 @@ namespace ScriptDock.Storage;
 /// returned in its place — see <see cref="TryLoadFile"/>.
 /// </summary>
 /// <remarks>
-/// The <c>.bak</c> last-good sidecar this store once kept has been retired (see the
-/// data-backup conventions): the atomic write below is the durability floor against a
-/// torn write, and the point-in-time history a user can be recovered from now lives in
-/// the write-through <see cref="BackupStore"/> (<c>~/.scriptdock/backups.sqlite3</c>),
-/// which this store feeds strictly after each rename lands. An unreadable live file is
-/// never left in place for a later <see cref="Save"/> to silently overwrite — the
-/// storage-path conventions' forbidden path — so it is quarantined aside first and
-/// defaults proceed; the live file reappears the next time it is (re)created.
+/// The app's single managed-text atomic-write choke point, and so the one place the
+/// data-backup hook lives: each save feeds <see cref="BackupStore"/>
+/// (<c>~/.scriptdock/backups.sqlite3</c>) strictly after its rename lands.
 /// </remarks>
 /// <remarks>
-/// Caller responsibilities: this store does not impose any ordering or
-/// canonicalisation on the value it receives. If on-disk ordering matters
-/// (for diff stability or hand-editing), the caller must sort before
-/// calling <see cref="Save"/> — and should sort a copy rather than the
-/// live in-memory collection to avoid surprising callers that share it.
+/// The store imposes no ordering on the value it receives. If on-disk ordering
+/// matters (diff stability, hand-editing), the caller sorts a copy before
+/// <see cref="Save"/>.
 /// </remarks>
 public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
 {
@@ -103,21 +96,16 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         }
         catch (Exception ex)
         {
-            // The file exists but will not parse — unexpected, yet recoverable. Per the
-            // storage-path conventions, a present-but-corrupt managed file is quarantined
-            // (moved aside, never left for a later Save to silently overwrite) rather than
-            // discarded in place; defaults proceed from here.
+            // Present but unparseable: quarantine aside (bytes preserved) before defaults proceed.
             Quarantine(filePath, ex);
             return false;
         }
     }
 
-    // Moves the unreadable file aside to <stem>-<millisecond-utc-stamp>.invalid, in the same
-    // directory, per the derived-filename grammar — a plain rename, so the original bytes are
-    // preserved exactly rather than copied or rewritten. One warning names both the original and
-    // the quarantine path. The move either lands or its failure propagates: falling through to
-    // defaults with the corrupt file still in place would let the next Save overwrite the very
-    // bytes quarantine exists to preserve (storage-path conventions).
+    // Moves the unreadable file aside to its timestamped same-directory .invalid name, preserving
+    // the bytes, and logs one warning naming both paths. The move either lands or its failure
+    // propagates — falling through to defaults with the corrupt file still in place would let the
+    // next Save overwrite the very bytes quarantine exists to preserve.
     private void Quarantine(string filePath, Exception loadException)
     {
         var directory = Path.GetDirectoryName(filePath) ?? string.Empty;
