@@ -45,7 +45,7 @@ public static class UiFont
             }
         }
 
-        return new FontFamily(AppConfig.DefaultUiFontFamily);
+        return new FontFamily(AppConfig.BundledUiFontUri);
     }
 
     private static bool IsInstalled(string name)

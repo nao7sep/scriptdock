@@ -98,7 +98,8 @@
         <!-- The app-wide UI (chrome) font. The default is the bundled Inter; the view model overrides
              this resource at runtime from the configured UI font, and the Window style below binds it
              via DynamicResource so the change applies live across every window. -->
-        <FontFamily x:Key="AppFontFamily">Inter</FontFamily>
+        <!-- The collection URI, not the bare name: bare "Inter" falls back to the platform font. -->
+        <FontFamily x:Key="AppFontFamily">fonts:Inter#Inter</FontFamily>
     </Application.Resources>
 
     <Application.Styles>
@@ -139,11 +140,13 @@
         <Style Selector="Button">
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Padding" Value="12,6"/>
+            <!-- One radius for every button; a class that omits it must not fall back to
+                 the theme's smaller default, which reads as square beside these. -->
+            <Setter Property="CornerRadius" Value="6"/>
         </Style>
         <Style Selector="Button.accent">
             <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource AccentForegroundBrush}"/>
-            <Setter Property="CornerRadius" Value="6"/>
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
@@ -170,7 +173,6 @@
         <Style Selector="Button.destructive">
             <Setter Property="Background" Value="{StaticResource DangerBrush}"/>
             <Setter Property="Foreground" Value="White"/>
-            <Setter Property="CornerRadius" Value="6"/>
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>

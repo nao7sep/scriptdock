@@ -23,5 +23,11 @@ namespace ScriptDock.Tests;
 public static class TestAppBuilder
 {
     public static AppBuilder BuildAvaloniaApp() =>
-        AppBuilder.Configure<App>().UseHeadless(new AvaloniaHeadlessPlatformOptions());
+        // WithInterFont matches the real builder in Program.cs: without it, headless
+        // resolves the app's "Inter" to Avalonia's BareMinimum stub and every
+        // text-measuring test measures a font the app never renders.
+        AppBuilder.Configure<App>()
+            .UseSkia()
+            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+            .WithInterFont();
 }
