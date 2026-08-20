@@ -194,7 +194,7 @@
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
         </Style>
         <Style Selector="Button.tool">
-            <Setter Property="Padding" Value="8,3"/>
+            <Setter Property="Padding" Value="12,6"/>
             <Setter Property="FontSize" Value="12"/>
         </Style>
 
