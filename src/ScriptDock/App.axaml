@@ -130,6 +130,13 @@
         </Style>
 
         <!-- Dialog accent (commit) button -->
+        <!-- Avalonia Fluent's default button padding is 8,5,8,6 — one pixel taller at the
+             bottom, which lands the label a pixel high on every button that does not
+             override it. Set a symmetric default so centring is correct by construction
+             rather than per-style. Measured, not eyeballed: ButtonCenteringTests. -->
+        <Style Selector="Button">
+            <Setter Property="Padding" Value="12,6"/>
+        </Style>
         <Style Selector="Button.accent">
             <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource AccentForegroundBrush}"/>
