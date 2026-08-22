@@ -22,17 +22,26 @@ public sealed class ProcessRunner : IProcessRunner
 {
     // Grace for a process tree to die after a tree-kill. Ownership is retained if the grace
     // expires: starting a replacement while the old tree is alive would create a duplicate.
-    private static readonly TimeSpan RestartGrace = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan DefaultTerminationGrace = TimeSpan.FromSeconds(10);
 
     private readonly List<ScriptProcess> _processes = new();
     private readonly object _gate = new();
     private readonly string _runsDirectory;
+    private readonly TimeSpan _terminationGrace;
+    private readonly Action<Process> _killProcess;
     private int _nextId;
 
     /// <param name="runsDirectory">Where per-run log files are written; defaults to
     /// <see cref="RunLog.DefaultDirectory"/>. Injected so tests stay isolated.</param>
-    public ProcessRunner(string? runsDirectory = null) =>
+    public ProcessRunner(string? runsDirectory = null)
+        : this(runsDirectory, DefaultTerminationGrace, process => process.Kill(entireProcessTree: true)) { }
+
+    internal ProcessRunner(string? runsDirectory, TimeSpan terminationGrace, Action<Process> killProcess)
+    {
         _runsDirectory = runsDirectory ?? RunLog.DefaultDirectory;
+        _terminationGrace = terminationGrace;
+        _killProcess = killProcess;
+    }
 
     /// <summary>Raised when a process is started, restarted, or dismissed.</summary>
     public event EventHandler? ProcessesChanged;
@@ -104,30 +113,48 @@ public sealed class ProcessRunner : IProcessRunner
 
     public async Task<bool> TerminateAsync(ScriptProcess handle)
     {
-        handle.MarkTerminating();
-
         var process = handle.Process;
-        if (process is not null)
+        if (process is null)
+            return handle.State != RunState.Running;
+
+        try
         {
-            try
+            if (process.HasExited)
             {
-                if (!process.HasExited)
-                    process.Kill(entireProcessTree: true);
-            }
-            catch (Exception ex)
-            {
-                Log.Warn("run: terminate failed", ex, new { id = handle.Id });
-                return false;
+                handle.Complete();
+                return true;
             }
         }
+        catch (Exception ex)
+        {
+            Log.Warn("run: could not inspect process before termination", ex, new { id = handle.Id });
+            return false;
+        }
 
-        var exited = await handle.WaitForExitAsync(RestartGrace).ConfigureAwait(false);
+        if (!handle.BeginTerminationAttempt())
+            return handle.State != RunState.Running;
+        try
+        {
+            _killProcess(process);
+        }
+        catch (Exception ex)
+        {
+            handle.CancelTerminationAttempt();
+            Log.Warn("run: terminate failed", ex, new { id = handle.Id });
+            return false;
+        }
+
+        var exited = await handle.WaitForExitAsync(_terminationGrace).ConfigureAwait(false);
         if (!exited)
         {
+            // The process is still owned and usable. A failed attempt must not poison its stdin
+            // channel or make a later natural exit look like a confirmed ScriptDock termination.
+            handle.CancelTerminationAttempt();
             Log.Warn("run: termination grace elapsed; retaining ownership", new { id = handle.Id, script = handle.ScriptPath });
             return false;
         }
 
+        handle.ConfirmTerminationAttempt();
         Log.Info("run: terminated", new { id = handle.Id, script = handle.ScriptPath });
         return true;
     }
@@ -272,14 +299,17 @@ public sealed class ProcessRunner : IProcessRunner
 
     private static void RequestTermination(ScriptProcess handle)
     {
-        handle.MarkTerminating();
+        if (!handle.BeginTerminationAttempt())
+            return;
         try
         {
             if (handle.Process is { HasExited: false } process)
                 process.Kill(entireProcessTree: true);
+            handle.ConfirmTerminationAttempt();
         }
         catch (Exception ex)
         {
+            handle.CancelTerminationAttempt();
             Log.Warn("run: terminate failed during shutdown; retaining ownership", ex, new { id = handle.Id });
         }
     }

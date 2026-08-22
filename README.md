@@ -21,7 +21,9 @@ Prebuilt builds for **macOS (Apple Silicon)** and **Windows (x64)** are on the [
 
 ScriptDock supervises the shell process tree it launches while that tree remains attached. A script
 that deliberately daemonizes, double-forks, or otherwise escapes that tree is outside ScriptDock's
-supervision boundary; manage such a background service with its own service manager.
+supervision boundary; manage such a background service with its own service manager. Leaving a script
+alive on quit preserves its OS process, but ScriptDock's owned redirected stdin pipe still closes with
+the app; a script waiting for console input may observe EOF and exit rather than remain recapturable.
 
 ## Run from source
 

@@ -163,6 +163,57 @@ public sealed class ProcessRunnerTests : IDisposable
     }
 
     [MacOnlyFact]
+    public async Task TerminateAsync_KillFailureKeepsInputUsableAndNaturalExitIsNotTerminated()
+    {
+        var script = WriteExecutableScript("kill-fails.command", "read line\necho got:$line\n");
+        var runner = new ProcessRunner(
+            _runsDir,
+            TimeSpan.FromMilliseconds(50),
+            _ => throw new InvalidOperationException("injected kill failure"));
+        var handle = runner.Start(script);
+
+        Assert.False(await runner.TerminateAsync(handle));
+        Assert.True(handle.AcceptsInput);
+        Assert.True(await handle.SendInputAsync("still-owned"));
+        Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+        Assert.Equal(RunState.Exited, handle.State);
+        Assert.Contains("got:still-owned", handle.ReadOutput());
+    }
+
+    [MacOnlyFact]
+    public async Task TerminateAsync_NaturalExitDuringFailedKillIsFinalizedAsExited()
+    {
+        var script = WriteExecutableScript("exit-during-kill.command", "read line\n");
+        var runner = new ProcessRunner(
+            _runsDir,
+            TimeSpan.FromMilliseconds(50),
+            process =>
+            {
+                process.StandardInput.WriteLine("finish");
+                Assert.True(process.WaitForExit(20_000));
+                throw new InvalidOperationException("injected failure after natural exit");
+            });
+        var handle = runner.Start(script);
+
+        Assert.False(await runner.TerminateAsync(handle));
+        Assert.Equal(RunState.Exited, handle.State);
+    }
+
+    [MacOnlyFact]
+    public async Task TerminateAsync_TimeoutRollsBackAttemptAndNaturalExitRemainsExited()
+    {
+        var script = WriteExecutableScript("kill-times-out.command", "sleep 0.3\nread line\necho got:$line\n");
+        var runner = new ProcessRunner(_runsDir, TimeSpan.FromMilliseconds(20), _ => { });
+        var handle = runner.Start(script);
+
+        Assert.False(await runner.TerminateAsync(handle));
+        Assert.True(await handle.SendInputAsync("after-timeout"));
+        Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+        Assert.Equal(RunState.Exited, handle.State);
+        Assert.Contains("got:after-timeout", handle.ReadOutput());
+    }
+
+    [MacOnlyFact]
     public async Task RestartAsync_StopsTheOldRun_AndStartsAFreshOne()
     {
         var script = WriteExecutableScript("sleeper.command", "echo started\nsleep 60\n");

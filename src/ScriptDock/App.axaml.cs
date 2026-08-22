@@ -1,7 +1,9 @@
 using System;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using ScriptDock.Models;
 using ScriptDock.Services;
 using ScriptDock.Storage;
@@ -30,6 +32,7 @@ public partial class App : Application
             if (StartupFailureMessage is { } startupFailure)
             {
                 desktop.MainWindow = NoticeDialog.CreateStartupFailure("ScriptDock could not start", startupFailure);
+                RegisterOwnerActivation(desktop.MainWindow);
                 base.OnFrameworkInitializationCompleted();
                 return;
             }
@@ -50,6 +53,7 @@ public partial class App : Application
                     + ex.Message
                     + "\n\nYour scripts are not affected. Repair or move the file under the ScriptDock data "
                     + "folder, then start ScriptDock again.");
+                RegisterOwnerActivation(desktop.MainWindow);
                 base.OnFrameworkInitializationCompleted();
                 return;
             }
@@ -59,6 +63,7 @@ public partial class App : Application
                 DataContext = viewModel,
             };
             desktop.MainWindow = mainWindow;
+            RegisterOwnerActivation(mainWindow);
 
             // Report material recovery once the main window can own the dialog.
             mainWindow.Opened += async (_, _) =>
@@ -77,6 +82,21 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static void RegisterOwnerActivation(Window window)
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        SingleInstanceLease.RegisterOwnerActivationHandler(() => Dispatcher.UIThread.Post(() =>
+        {
+            if (window.WindowState == WindowState.Minimized)
+                window.WindowState = WindowState.Normal;
+            if (!window.IsVisible)
+                window.Show();
+            window.Activate();
+        }));
     }
 
     /// <summary>

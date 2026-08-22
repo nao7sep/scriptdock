@@ -27,4 +27,27 @@ public sealed class PathIdentityTests : IDisposable
 
         Assert.True(PathIdentity.Same(script, Path.Combine(alias, "run.command")));
     }
+
+    [Fact]
+    public void Same_UsesTheMountedFilesystemsActualCaseSemantics()
+    {
+        var lower = Path.Combine(_root, "case.command");
+        var upper = Path.Combine(_root, "CASE.command");
+        File.WriteAllText(lower, "lower");
+
+        if (File.Exists(upper))
+        {
+            // This volume is case-insensitive: both spellings identify the existing file.
+            Assert.True(PathIdentity.Same(lower, upper));
+        }
+        else
+        {
+            // This volume is case-sensitive: both files can exist and must remain distinct.
+            File.WriteAllText(upper, "upper");
+            Assert.False(PathIdentity.Same(lower, upper));
+        }
+
+        if (!OperatingSystem.IsWindows())
+            Assert.False(PathIdentity.Comparer.Equals("case.command", "CASE.command"));
+    }
 }

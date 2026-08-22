@@ -19,7 +19,9 @@ public sealed class ScriptProcess : IDisposable
 {
     private int _finalized;
     private int _disposed;
-    private bool _terminating;
+    private readonly object _lifecycleGate = new();
+    private TerminationDisposition _terminationDisposition;
+    private bool _exitObserved;
     private string? _failureMessage;
     private readonly SemaphoreSlim _inputGate = new(1, 1);
     private readonly CancellationTokenSource _inputLifetime = new();
@@ -185,22 +187,85 @@ public sealed class ScriptProcess : IDisposable
         return true;
     }
 
-    internal void MarkTerminating()
+    internal bool BeginTerminationAttempt()
     {
-        _terminating = true;
-        _inputLifetime.Cancel();
+        lock (_lifecycleGate)
+        {
+            if (_finalized == 1)
+                return false;
+            _terminationDisposition = TerminationDisposition.Pending;
+            return true;
+        }
+    }
+
+    internal void ConfirmTerminationAttempt()
+    {
+        var finalize = false;
+        lock (_lifecycleGate)
+        {
+            if (_finalized == 1)
+                return;
+            _terminationDisposition = TerminationDisposition.Confirmed;
+            if (_exitObserved)
+            {
+                _finalized = 1;
+                finalize = true;
+            }
+        }
+
+        if (finalize)
+            FinalizeRun(RunState.Terminated);
+    }
+
+    internal void CancelTerminationAttempt()
+    {
+        var finalize = false;
+        lock (_lifecycleGate)
+        {
+            if (_finalized == 1)
+                return;
+            _terminationDisposition = TerminationDisposition.None;
+            if (_exitObserved)
+            {
+                _finalized = 1;
+                finalize = true;
+            }
+        }
+
+        if (finalize)
+            FinalizeRun(RunState.Exited);
     }
 
     internal void Complete()
     {
-        if (Interlocked.Exchange(ref _finalized, 1) == 1)
-            return;
+        RunState state;
+        lock (_lifecycleGate)
+        {
+            if (_finalized == 1)
+                return;
+            if (_terminationDisposition == TerminationDisposition.Pending)
+            {
+                // The process exited while a kill call or bounded wait was unresolved. Defer the
+                // public terminal state until the caller confirms whether that attempt succeeded.
+                _exitObserved = true;
+                return;
+            }
+            _finalized = 1;
+            state = _terminationDisposition == TerminationDisposition.Confirmed
+                ? RunState.Terminated
+                : RunState.Exited;
+        }
 
+        FinalizeRun(state);
+    }
+
+    private void FinalizeRun(RunState state)
+    {
         _inputLifetime.Cancel();
         try { ExitCode = Process?.ExitCode; }
         catch { /* process state unavailable; leave ExitCode null */ }
 
-        SetState(_terminating ? RunState.Terminated : RunState.Exited);
+        SetState(state);
     }
 
     internal void Fail(string message)
@@ -208,8 +273,12 @@ public sealed class ScriptProcess : IDisposable
         // Honour the once-only finalisation latch, exactly as Complete does: a run is finalised
         // once, so a Fail after the process has already Exited (or vice versa) cannot overwrite the
         // real terminal state or re-raise StateChanged.
-        if (Interlocked.Exchange(ref _finalized, 1) == 1)
-            return;
+        lock (_lifecycleGate)
+        {
+            if (_finalized == 1)
+                return;
+            _finalized = 1;
+        }
 
         _inputLifetime.Cancel();
         _failureMessage = message;
@@ -233,5 +302,12 @@ public sealed class ScriptProcess : IDisposable
 
         _inputLifetime.Cancel();
         Process?.Dispose();
+    }
+
+    private enum TerminationDisposition
+    {
+        None,
+        Pending,
+        Confirmed,
     }
 }

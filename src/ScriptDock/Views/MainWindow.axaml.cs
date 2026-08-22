@@ -18,6 +18,7 @@ namespace ScriptDock.Views;
 
 public partial class MainWindow : Window
 {
+    private readonly ConsoleInputSubmission _consoleInputSubmission = new();
     // Within this many pixels of the bottom counts as "pinned": new output then auto-scrolls.
     private const double ConsolePinThreshold = 24;
 
@@ -387,9 +388,12 @@ public partial class MainWindow : Window
     {
         if (sender is ComposingTextBox box)
         {
-            var text = box.Text ?? string.Empty;
-            if (ViewModel is { } vm && await vm.SendInputAsync(text))
-                box.Text = string.Empty;
+            if (!_consoleInputSubmission.TryBegin(box.Text ?? string.Empty, out var snapshot))
+                return; // a re-entrant Enter leaves the newly typed text untouched for the next send
+
+            box.Text = string.Empty;
+            var sent = ViewModel is { } vm && await vm.SendInputAsync(snapshot);
+            box.Text = _consoleInputSubmission.Complete(snapshot, sent, box.Text ?? string.Empty);
         }
     }
 }
