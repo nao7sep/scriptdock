@@ -4,8 +4,7 @@
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:ctl="using:ScriptDock.Controls"
              x:Class="ScriptDock.Views.SettingsView"
-             x:DataType="vm:SettingsDialogViewModel"
-             Width="480">
+             x:DataType="vm:SettingsDialogViewModel">
     <StackPanel Spacing="14">
 
         <!-- Appearance: the UI (chrome) font leads, set apart from the scanning/process settings. The
