@@ -21,6 +21,8 @@ public static class ScanReportLog
         Directory.CreateDirectory(StorageRoot.LogsDirectory);
 
         var path = Path.Combine(StorageRoot.LogsDirectory, $"scan-{TimestampConventions.FileStampMillis(report.CompletedAt)}.log");
+        // not recorded: this is a generated diagnostic report under logs/, not managed
+        // user data; the user's durable scan settings remain in recorded config.json.
         File.WriteAllText(path, Format(report));
 
         Log.Info("scan", new
