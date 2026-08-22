@@ -12,6 +12,8 @@ namespace ScriptDock;
 
 public partial class App : Application
 {
+    internal static string? StartupFailureMessage { get; set; }
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -25,6 +27,13 @@ public partial class App : Application
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            if (StartupFailureMessage is { } startupFailure)
+            {
+                desktop.MainWindow = NoticeDialog.CreateStartupFailure("ScriptDock could not start", startupFailure);
+                base.OnFrameworkInitializationCompleted();
+                return;
+            }
+
             // If an unreadable store cannot be set aside, stop before defaults can overwrite it.
             MainWindowViewModel viewModel;
             try

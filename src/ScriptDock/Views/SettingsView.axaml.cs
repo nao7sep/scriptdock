@@ -11,6 +11,8 @@ public partial class SettingsView : UserControl
 {
     public SettingsView() => InitializeComponent();
 
+    public Control InitialFocusControl => UiFontEntry;
+
     private SettingsDialogViewModel? Vm => DataContext as SettingsDialogViewModel;
 
     // Enter adds the typed value. The IME guard lives in ComposingTextBox, which raises Submitted only
@@ -44,7 +46,7 @@ public partial class SettingsView : UserControl
             foreach (var folder in folders)
             {
                 if (folder.TryGetLocalPath() is { } path)
-                    Vm.AddRootDir(path);
+                    Vm.AddPickedRootDir(path);
             }
         }
         catch (Exception ex)

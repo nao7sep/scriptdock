@@ -43,6 +43,8 @@ public sealed class ScriptScanner
         var roots = rootDirs
             .Where(r => !string.IsNullOrWhiteSpace(r))
             .Select(Path.GetFullPath)
+            .GroupBy(PathIdentity.Key, PathIdentity.Comparer)
+            .Select(group => group.First())
             .ToList();
 
         var stack = new Stack<string>();
@@ -74,12 +76,13 @@ public sealed class ScriptScanner
 
             foreach (var subDir in subDirs)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (IsSymbolicLink(subDir))
                     continue;
 
                 // Append a separator so a slash-wrapped pattern matches the directory
                 // itself, not only files beneath it.
-                var match = rules.FirstMatch(subDir + Path.DirectorySeparatorChar);
+                var match = rules.FirstMatchCancellable(subDir + Path.DirectorySeparatorChar, cancellationToken);
                 if (match is not null)
                     prunedDirectories.Add(new IgnoredEntry(subDir, match));
                 else
@@ -88,10 +91,11 @@ public sealed class ScriptScanner
 
             foreach (var file in files)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!extensionSet.Contains(Path.GetExtension(file)))
                     continue;
 
-                var match = rules.FirstMatch(file);
+                var match = rules.FirstMatchCancellable(file, cancellationToken);
                 if (match is not null)
                     skippedFiles.Add(new IgnoredEntry(file, match));
                 else
@@ -127,9 +131,9 @@ public sealed class ScriptScanner
     private static IReadOnlyList<string> SortedPaths(List<string> values)
     {
         // Distinct: overlapping or nested roots (e.g. /code and /code/proj) enumerate the same file
-        // under more than one walk, so dedup by ordinal path — otherwise a script shows as a duplicate
+        // under more than one walk, so dedup by physical identity — otherwise a script shows as a duplicate
         // tile and the status-bar total/hidden counts (derived from Found.Count) are inflated.
-        var distinct = values.Distinct(StringComparer.Ordinal).ToList();
+        var distinct = values.DistinctBy(PathIdentity.Key, PathIdentity.Comparer).ToList();
         distinct.Sort(StringComparer.Ordinal);
         return distinct;
     }

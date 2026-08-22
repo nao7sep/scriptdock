@@ -88,6 +88,16 @@ public sealed class SettingsDialogViewModelTests
     }
 
     [Fact]
+    public void AddPickedRootDir_PreservesLegalLeadingAndTrailingSpaces()
+    {
+        var vm = new SettingsDialogViewModel(Seed());
+        var picked = Path.Combine(Path.GetTempPath(), " scriptdock-picked ");
+
+        Assert.True(vm.AddPickedRootDir(picked));
+        Assert.Contains(Path.GetFullPath(picked), vm.RootDirs);
+    }
+
+    [Fact]
     public void AddExtension_NormalisesLeadingDot()
     {
         var vm = new SettingsDialogViewModel(Seed());

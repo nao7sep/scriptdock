@@ -91,6 +91,8 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         {
             var json = File.ReadAllText(filePath);
             value = JsonSerializer.Deserialize<T>(json, JsonOptions.Default) ?? new T();
+            if (value is IJsonNormalizable normalizable)
+                normalizable.NormalizeAfterLoad();
             Log.Info("store: loaded", new { label = _label, path = filePath });
             return true;
         }

@@ -23,25 +23,27 @@ public static class RecentListBuilder
         IReadOnlyDictionary<string, string> labels)
     {
         var byPath = active
-            .GroupBy(p => p.ScriptPath, StringComparer.Ordinal)
+            .GroupBy(p => PathIdentity.Key(p.ScriptPath), PathIdentity.Comparer)
             .ToDictionary(
                 g => g.Key,
                 g => g.FirstOrDefault(p => p.State == RunState.Running) ?? g.OrderByDescending(p => p.StartedAt).First(),
-                StringComparer.Ordinal);
+                PathIdentity.Comparer);
 
         var entries = new List<RecentEntry>(recents.Count);
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new HashSet<string>(PathIdentity.Comparer);
         foreach (var run in recents) // RecentRuns keeps this newest-first
         {
-            seen.Add(run.Path);
-            byPath.TryGetValue(run.Path, out var process);
+            var key = PathIdentity.Key(run.Path);
+            if (!seen.Add(key))
+                continue;
+            byPath.TryGetValue(key, out var process);
             entries.Add(new RecentEntry(run.Path, ScriptLabels.LabelFor(labels, run.Path), run.RanAt, process));
         }
 
         // Append any live process the recent list didn't account for, newest run first, so a
         // recaptured (or otherwise un-listed) running script is still shown and controllable.
         foreach (var process in byPath.Values
-                     .Where(p => !seen.Contains(p.ScriptPath))
+                     .Where(p => !seen.Contains(PathIdentity.Key(p.ScriptPath)))
                      .OrderByDescending(p => p.StartedAt))
         {
             entries.Add(new RecentEntry(

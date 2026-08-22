@@ -12,6 +12,17 @@ sealed class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        if (!SingleInstanceLease.TryAcquire(out var instanceLease))
+        {
+            Console.Error.WriteLine("ScriptDock is already running.");
+            return 0;
+        }
+        using (instanceLease)
+            return Run(args);
+    }
+
+    private static int Run(string[] args)
+    {
         // Resolve and create the storage root before anything else reads or writes it.
         // An unusable SCRIPTDOCK_HOME (or an unwritable home) is a startup error we report
         // and STOP on — never a silent fallback that lets the app run unable to persist.
@@ -24,8 +35,12 @@ sealed class Program
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine(
-                "ScriptDock cannot start: its storage location could not be created. " + ex.Message);
+            App.StartupFailureMessage =
+                "ScriptDock cannot use its storage location, so it has not opened your scripts or changed any settings.\n\n"
+                + ex.Message
+                + "\n\nRepair the SCRIPTDOCK_HOME location or its permissions, then start ScriptDock again.";
+            Console.Error.WriteLine("ScriptDock cannot start: its storage location could not be created. " + ex.Message);
+            _ = BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
             return 1;
         }
 

@@ -105,13 +105,13 @@ public static class ShortcutCatalog
             Command(ShortcutGroup.Focus, "Console input", cmd, cmdLabel, Key.D3, "3", ShortcutAction.FocusConsole),
 
             // Scripts — running the selection is owned by the tile (pointer + keys), listed for discoverability.
-            Display(ShortcutGroup.Scripts, "Run or restart the selected script", "Double-click / Enter / Space"),
+            Display(ShortcutGroup.Scripts, "Run or restart the selected script", "Double-click/Enter/Space"),
 
             // Recent — Delete is owned by the Recent list while it has focus.
-            Display(ShortcutGroup.Recent, "Stop or dismiss the selected run", "Delete"),
+            Display(ShortcutGroup.Recent, "Stop or dismiss the selected run", "Delete/Backspace"),
 
             // Navigation — native list selection.
-            Display(ShortcutGroup.Navigation, "Move between items in the focused list", "Up / Down"),
+            Display(ShortcutGroup.Navigation, "Move between items in the focused list", "Up/Down"),
         };
     }
 

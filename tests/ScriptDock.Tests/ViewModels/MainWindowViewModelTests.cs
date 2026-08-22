@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using ScriptDock.Models;
 using ScriptDock.Services;
@@ -117,6 +118,23 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task DismissEntry_WhenTerminationIsUnconfirmed_RetainsOwnershipAndRecentEntry()
+    {
+        var state = new AppState { RecentlyRun = [new RecentRun { Path = "/x/live.command", RanAt = DateTimeOffset.UtcNow }] };
+        var (vm, runner) = BuildVm(state: state);
+        runner.TerminateResult = false;
+        var process = runner.AddRunning("/x/live.command");
+        vm.ConfirmHandler = new ConfirmSpy(result: true).Handle;
+
+        await vm.DismissEntryCommand.ExecuteAsync(
+            new RecentEntry("/x/live.command", "live.command", DateTimeOffset.UtcNow, process));
+
+        Assert.Same(process, Assert.Single(runner.TerminateCalls));
+        Assert.Empty(runner.DismissCalls);
+        Assert.Contains(state.RecentlyRun, run => run.Path == "/x/live.command");
+    }
+
+    [Fact]
     public async Task RunScript_AlreadyRunning_DeclinedConfirm_DoesNotRestart()
     {
         var (vm, runner) = BuildVm();
@@ -141,6 +159,62 @@ public sealed class MainWindowViewModelTests
         await vm.RunScriptCommand.ExecuteAsync(item);
 
         Assert.Same(process, Assert.Single(runner.RestartCalls));
+    }
+
+    [Fact]
+    public async Task RunScript_WhenOldTreeDoesNotExit_DoesNotRecordOrLaunchReplacement()
+    {
+        var state = new AppState();
+        var (vm, runner) = BuildVm(state: state);
+        runner.RestartResult = false;
+        runner.AddRunning("/x/dev.command");
+        vm.ConfirmHandler = new ConfirmSpy(result: true).Handle;
+
+        await vm.RunScriptCommand.ExecuteAsync(new ScriptItem("/x/dev.command") { DisplayName = "dev" });
+
+        Assert.Empty(runner.StartCalls);
+        Assert.Empty(state.RecentlyRun);
+        Assert.Contains("no replacement", vm.Status, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TryApplySettings_SaveFailureDoesNotPublishCandidate()
+    {
+        var config = new AppConfig { RootDirs = ["/old"], UiFontFamily = "Inter" };
+        var configStore = new FakeJsonStore<AppConfig> { Value = config, ThrowOnSave = true };
+        var stateStore = new FakeJsonStore<AppState>();
+        var vm = new MainWindowViewModel(
+            configStore, stateStore, config, new AppState(), new ScriptScanner(), new FakeProcessRunner());
+        var draft = vm.CreateSettingsDraft();
+        draft.RootDirs.Clear();
+        draft.RootDirs.Add("/new");
+        draft.UiFontFamily = "Iosevka";
+
+        Assert.False(vm.TryApplySettings(draft));
+        Assert.Equal(["/old"], config.RootDirs);
+        Assert.Equal("Inter", config.UiFontFamily);
+    }
+
+    [Fact]
+    public void PersistRunningSnapshot_RetriesAfterFailureAndKeysFullIdentity()
+    {
+        var configStore = new FakeJsonStore<AppConfig>();
+        var stateStore = new FakeJsonStore<AppState> { ThrowOnSave = true };
+        var runner = new FakeProcessRunner();
+        var process = runner.AddRunning("/x/run.command");
+        process.Process = Process.GetCurrentProcess();
+        process.LogFilePath = "/logs/first.log";
+        var vm = new MainWindowViewModel(
+            configStore, stateStore, configStore.Value, stateStore.Value, new ScriptScanner(), runner);
+
+        Assert.ThrowsAny<Exception>(vm.PersistRunningSnapshot);
+        stateStore.ThrowOnSave = false;
+        vm.PersistRunningSnapshot();
+        Assert.Equal(1, stateStore.SaveCount);
+
+        process.LogFilePath = "/logs/second.log";
+        vm.PersistRunningSnapshot();
+        Assert.Equal(2, stateStore.SaveCount);
     }
 
     [Fact]

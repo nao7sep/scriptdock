@@ -19,7 +19,7 @@ public static class RecentRuns
     public static List<RecentRun> Add(IReadOnlyList<RecentRun> existing, string path, DateTimeOffset ranAt, int max = DefaultMax)
     {
         var result = new List<RecentRun> { new() { Path = path, RanAt = ranAt } };
-        result.AddRange(existing.Where(r => !string.Equals(r.Path, path, StringComparison.Ordinal)));
+        result.AddRange(existing.Where(r => !PathIdentity.Same(r.Path, path)));
 
         if (result.Count > max)
             result.RemoveRange(max, result.Count - max);

@@ -19,8 +19,8 @@ public interface IProcessRunner
     IReadOnlyList<ScriptProcess> Active { get; }
 
     ScriptProcess Start(string scriptPath);
-    void Terminate(ScriptProcess handle);
-    Task<ScriptProcess> RestartAsync(ScriptProcess handle);
+    Task<bool> TerminateAsync(ScriptProcess handle);
+    Task<ScriptProcess?> RestartAsync(ScriptProcess handle);
     void Dismiss(ScriptProcess handle);
     void ShutdownAll(bool kill);
     void Recapture(IReadOnlyList<PersistedProcess> records);

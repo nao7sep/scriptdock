@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ScriptDock.Models;
 using ScriptDock.Storage;
+using ScriptDock.Services;
 
 namespace ScriptDock.ViewModels;
 
@@ -36,6 +37,9 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
 
     [ObservableProperty]
     private string _patternError = string.Empty;
+
+    [ObservableProperty]
+    private string _saveError = string.Empty;
 
     // UI (chrome) font family. Family only; blank = the bundled default.
     [ObservableProperty]
@@ -90,7 +94,21 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         // relative entry to the home directory, never the working directory, so it
         // cannot later resolve against cwd in the scanner (storage-path-conventions).
         var resolved = ResolveRoot(trimmed);
-        if (RootDirs.Contains(resolved))
+        if (RootDirs.Any(root => PathIdentity.Same(root, resolved)))
+            return false;
+
+        RootDirs.Add(resolved);
+        return true;
+    }
+
+    /// <summary>Adds a path returned by the native picker without trimming legal filename bytes.</summary>
+    public bool AddPickedRootDir(string value)
+    {
+        if (value.Length == 0)
+            return false;
+
+        var resolved = ResolveRoot(value);
+        if (RootDirs.Any(root => PathIdentity.Same(root, resolved)))
             return false;
 
         RootDirs.Add(resolved);

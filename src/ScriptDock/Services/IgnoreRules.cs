@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace ScriptDock.Services;
 
@@ -16,26 +17,37 @@ public sealed class IgnoreRules
 {
     private static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(1);
 
-    private readonly IReadOnlyList<(string Pattern, Regex Regex)> _rules;
+    private sealed class Rule(string pattern, Regex regex)
+    {
+        public string Pattern { get; } = pattern;
+        public Regex Regex { get; } = regex;
+        public bool Disabled { get; set; }
+    }
 
-    public IReadOnlyList<string> InvalidPatterns { get; }
+    private readonly IReadOnlyList<Rule> _rules;
+    private readonly List<string> _invalidPatterns;
 
-    private IgnoreRules(IReadOnlyList<(string, Regex)> rules, IReadOnlyList<string> invalidPatterns)
+    public IReadOnlyList<string> InvalidPatterns => _invalidPatterns;
+
+    private IgnoreRules(IReadOnlyList<Rule> rules, List<string> invalidPatterns)
     {
         _rules = rules;
-        InvalidPatterns = invalidPatterns;
+        _invalidPatterns = invalidPatterns;
     }
 
     public static IgnoreRules Compile(IEnumerable<string> patterns)
+        => Compile(patterns, MatchTimeout);
+
+    internal static IgnoreRules Compile(IEnumerable<string> patterns, TimeSpan matchTimeout)
     {
-        var rules = new List<(string, Regex)>();
+        var rules = new List<Rule>();
         var invalid = new List<string>();
 
         foreach (var pattern in patterns)
         {
             try
             {
-                rules.Add((pattern, new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, MatchTimeout)));
+                rules.Add(new Rule(pattern, new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeout)));
             }
             catch (ArgumentException)
             {
@@ -50,21 +62,26 @@ public sealed class IgnoreRules
     /// Returns the first pattern that matches <paramref name="path"/>, or <c>null</c> if
     /// none do. Backslashes are normalised to forward slashes before matching.
     /// </summary>
-    public string? FirstMatch(string path)
+    public string? FirstMatch(string path) => FirstMatchCancellable(path, CancellationToken.None);
+
+    internal string? FirstMatchCancellable(string path, CancellationToken cancellationToken)
     {
         var normalised = path.Replace('\\', '/');
 
-        foreach (var (pattern, regex) in _rules)
+        foreach (var rule in _rules)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (rule.Disabled)
+                continue;
             try
             {
-                if (regex.IsMatch(normalised))
-                    return pattern;
+                if (rule.Regex.IsMatch(normalised))
+                    return rule.Pattern;
             }
             catch (RegexMatchTimeoutException)
             {
-                // A pattern that times out on this path is treated as non-matching; the
-                // scan continues rather than failing wholesale.
+                rule.Disabled = true;
+                _invalidPatterns.Add(rule.Pattern);
             }
         }
 

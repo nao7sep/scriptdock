@@ -18,8 +18,12 @@ namespace ScriptDock.Services;
 public sealed class ScriptProcess : IDisposable
 {
     private int _finalized;
+    private int _disposed;
     private bool _terminating;
     private string? _failureMessage;
+    private readonly SemaphoreSlim _inputGate = new(1, 1);
+    private readonly CancellationTokenSource _inputLifetime = new();
+    private static readonly TimeSpan InputTimeout = TimeSpan.FromSeconds(2);
 
     public ScriptProcess(int id, string scriptPath, DateTimeOffset startedAt)
     {
@@ -103,24 +107,43 @@ public sealed class ScriptProcess : IDisposable
 
     /// <summary>Sends a line to the running script's stdin. No-op unless this run accepts input
     /// (see <see cref="AcceptsInput"/>) and is still alive. Never throws.</summary>
-    public void SendInput(string line)
+    public Task<bool> SendInputAsync(string line) => SendInputAsync(line, InputTimeout);
+
+    internal async Task<bool> SendInputAsync(string line, TimeSpan timeout)
     {
         var process = Process;
         if (process is null || !AcceptsInput)
-            return;
+            return false;
 
+        using var timeoutCts = new CancellationTokenSource(timeout);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, _inputLifetime.Token);
+        var entered = false;
         try
         {
+            await _inputGate.WaitAsync(cts.Token).ConfigureAwait(false);
+            entered = true;
             if (!process.HasExited)
             {
-                process.StandardInput.WriteLine(line);
-                process.StandardInput.Flush();
+                await process.StandardInput.WriteLineAsync(line.AsMemory(), cts.Token).ConfigureAwait(false);
+                await process.StandardInput.FlushAsync(cts.Token).ConfigureAwait(false);
+                return true;
             }
+        }
+        catch (OperationCanceledException)
+        {
+            Log.Warn("run: send input timed out or was cancelled", new { id = Id });
         }
         catch (Exception ex)
         {
             Log.Warn("run: send input failed", ex, new { id = Id });
         }
+        finally
+        {
+            if (entered)
+                _inputGate.Release();
+        }
+
+        return false;
     }
 
     /// <summary>Blocks until the process exits or the timeout elapses; returns whether it
@@ -162,13 +185,18 @@ public sealed class ScriptProcess : IDisposable
         return true;
     }
 
-    internal void MarkTerminating() => _terminating = true;
+    internal void MarkTerminating()
+    {
+        _terminating = true;
+        _inputLifetime.Cancel();
+    }
 
     internal void Complete()
     {
         if (Interlocked.Exchange(ref _finalized, 1) == 1)
             return;
 
+        _inputLifetime.Cancel();
         try { ExitCode = Process?.ExitCode; }
         catch { /* process state unavailable; leave ExitCode null */ }
 
@@ -183,6 +211,7 @@ public sealed class ScriptProcess : IDisposable
         if (Interlocked.Exchange(ref _finalized, 1) == 1)
             return;
 
+        _inputLifetime.Cancel();
         _failureMessage = message;
         SetState(RunState.Failed);
     }
@@ -197,5 +226,12 @@ public sealed class ScriptProcess : IDisposable
     /// the run leaves ScriptDock's active set (dismiss/restart). The cached <see cref="State"/> and
     /// <see cref="ExitCode"/> and the on-disk run log remain valid afterwards, so a finished run that
     /// is still shown reads correctly; disposing does not terminate the OS process.</summary>
-    public void Dispose() => Process?.Dispose();
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+            return;
+
+        _inputLifetime.Cancel();
+        Process?.Dispose();
+    }
 }

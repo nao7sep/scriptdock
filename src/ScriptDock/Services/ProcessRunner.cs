@@ -20,9 +20,8 @@ namespace ScriptDock.Services;
 /// </summary>
 public sealed class ProcessRunner : IProcessRunner
 {
-    // Grace for a restart's old process tree to die after a tree-kill before the replacement is
-    // launched anyway. A tree-kill is reliable, so this only bounds a wedged child; the wait is
-    // asynchronous, so it never blocks the UI thread.
+    // Grace for a process tree to die after a tree-kill. Ownership is retained if the grace
+    // expires: starting a replacement while the old tree is alive would create a duplicate.
     private static readonly TimeSpan RestartGrace = TimeSpan.FromSeconds(10);
 
     private readonly List<ScriptProcess> _processes = new();
@@ -45,6 +44,18 @@ public sealed class ProcessRunner : IProcessRunner
 
     public ScriptProcess Start(string scriptPath)
     {
+        List<ScriptProcess> stale;
+        lock (_gate)
+        {
+            stale = _processes
+                .Where(p => p.State != RunState.Running && PathIdentity.Same(p.ScriptPath, scriptPath))
+                .ToList();
+            foreach (var process in stale)
+                _processes.Remove(process);
+        }
+        foreach (var process in stale)
+            process.Dispose();
+
         var id = Interlocked.Increment(ref _nextId);
         var startedAt = DateTimeOffset.UtcNow;
         var handle = new ScriptProcess(id, scriptPath, startedAt);
@@ -91,7 +102,7 @@ public sealed class ProcessRunner : IProcessRunner
         return handle;
     }
 
-    public void Terminate(ScriptProcess handle)
+    public async Task<bool> TerminateAsync(ScriptProcess handle)
     {
         handle.MarkTerminating();
 
@@ -106,21 +117,28 @@ public sealed class ProcessRunner : IProcessRunner
             catch (Exception ex)
             {
                 Log.Warn("run: terminate failed", ex, new { id = handle.Id });
+                return false;
             }
         }
 
+        var exited = await handle.WaitForExitAsync(RestartGrace).ConfigureAwait(false);
+        if (!exited)
+        {
+            Log.Warn("run: termination grace elapsed; retaining ownership", new { id = handle.Id, script = handle.ScriptPath });
+            return false;
+        }
+
         Log.Info("run: terminated", new { id = handle.Id, script = handle.ScriptPath });
+        return true;
     }
 
     /// <summary>Stops the process and launches the same script afresh — the restart primitive. The
     /// old handle is terminated and dismissed; the new one is returned. The wait for the old tree to
     /// die is asynchronous, so a restart never blocks the UI thread even when a child is slow to exit.</summary>
-    public async Task<ScriptProcess> RestartAsync(ScriptProcess handle)
+    public async Task<ScriptProcess?> RestartAsync(ScriptProcess handle)
     {
-        Terminate(handle);
-        var exited = await handle.WaitForExitAsync(RestartGrace).ConfigureAwait(false);
-        if (!exited)
-            Log.Warn("run: restart grace elapsed before exit", new { id = handle.Id, script = handle.ScriptPath });
+        if (!await TerminateAsync(handle).ConfigureAwait(false))
+            return null;
 
         Dismiss(handle);
         var started = Start(handle.ScriptPath);
@@ -155,7 +173,7 @@ public sealed class ProcessRunner : IProcessRunner
         }
 
         foreach (var handle in Active)
-            Terminate(handle);
+            RequestTermination(handle);
     }
 
     /// <summary>
@@ -247,10 +265,24 @@ public sealed class ProcessRunner : IProcessRunner
         }
     }
 
-    // Two records identify the same OS process when their start-times agree within a small
-    // tolerance (clock/precision slack); a reused PID will differ by far more.
+    // JSON persistence retains Unix-millisecond precision, so accepting a wider window can
+    // mistake a quickly reused PID for the process ScriptDock launched.
     internal static bool StartTimesMatch(DateTimeOffset persisted, DateTimeOffset actual) =>
-        (actual - persisted).Duration() <= TimeSpan.FromSeconds(2);
+        persisted.ToUnixTimeMilliseconds() == actual.ToUnixTimeMilliseconds();
+
+    private static void RequestTermination(ScriptProcess handle)
+    {
+        handle.MarkTerminating();
+        try
+        {
+            if (handle.Process is { HasExited: false } process)
+                process.Kill(entireProcessTree: true);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("run: terminate failed during shutdown; retaining ownership", ex, new { id = handle.Id });
+        }
+    }
 
     // The working directory a launched script runs in: its containing folder. A bare
     // filename (no directory) and a filesystem root both yield "" — Process treats an

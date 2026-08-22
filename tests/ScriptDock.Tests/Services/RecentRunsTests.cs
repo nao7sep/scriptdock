@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.IO;
 using ScriptDock.Models;
 using ScriptDock.Services;
 using Xunit;
@@ -8,6 +9,34 @@ namespace ScriptDock.Tests.Services;
 
 public sealed class RecentRunsTests
 {
+    [MacOnlyFact]
+    public void Add_DeduplicatesPhysicalSymlinkAliases()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "scriptdock-recent-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var physical = Directory.CreateDirectory(Path.Combine(root, "physical"));
+            var script = Path.Combine(physical.FullName, "run.command");
+            File.WriteAllText(script, "exit 0");
+            var alias = Path.Combine(root, "alias");
+            Directory.CreateSymbolicLink(alias, physical.FullName);
+            var oldAlias = Path.Combine(alias, "run.command");
+
+            var result = RecentRuns.Add(
+                [new RecentRun { Path = oldAlias, RanAt = DateTimeOffset.UtcNow.AddMinutes(-1) }],
+                script,
+                DateTimeOffset.UtcNow);
+
+            Assert.Single(result);
+            Assert.Equal(script, result[0].Path);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
     private static RecentRun Run(string path, int minute) =>
         new() { Path = path, RanAt = new DateTimeOffset(2026, 6, 17, 0, minute, 0, TimeSpan.Zero) };
 

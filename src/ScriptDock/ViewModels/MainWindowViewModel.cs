@@ -186,7 +186,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // Record the live running set so a relaunch can recapture it (see ProcessRunner.Recapture).
     // Called whenever the running set may have changed and on shutdown — but only writes when it
     // actually did, since this is driven by every process event (RebuildFromProcesses).
-    private void PersistRunningSnapshot()
+    internal void PersistRunningSnapshot()
     {
         var running = _runner.Active
             .Where(p => p.State == RunState.Running)
@@ -194,13 +194,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             .OfType<PersistedProcess>()
             .ToList();
 
-        var signature = string.Join("|", running.Select(p => $"{p.Pid}:{p.ScriptPath}"));
+        var signature = string.Join("|", running.Select(p =>
+            $"{p.Pid}:{p.OsStartedAt.ToUnixTimeMilliseconds()}:{p.LaunchedAt.ToUnixTimeMilliseconds()}:{p.ScriptPath}:{p.LogFilePath}"));
         if (signature == _persistedRunningSignature)
             return;
 
-        _persistedRunningSignature = signature;
         _state.RunningProcesses = running;
         _stateStore.Save(_state);
+        _persistedRunningSignature = signature;
     }
 
     private static PersistedProcess? ToPersisted(ScriptProcess process)
@@ -220,24 +221,56 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public SettingsDialogViewModel CreateSettingsDraft() => new(_config);
 
-    public void ApplySettings(SettingsDialogViewModel draft) => Guard("apply settings", () =>
+    public bool TryApplySettings(SettingsDialogViewModel draft)
     {
-        _config.RootDirs = draft.RootDirs.ToList();
-        _config.Extensions = draft.Extensions.ToList();
-        _config.IgnorePatterns = draft.IgnorePatterns.ToList();
-        _config.KillProcessesOnClose = draft.KillProcessesOnClose;
-        _config.RecaptureProcessesOnLaunch = draft.RecaptureProcessesOnLaunch;
-        _config.UiFontFamily = draft.UiFontFamily.Trim();
-        _configStore.Save(_config);
+        var candidate = new AppConfig
+        {
+            RootDirs = draft.RootDirs.ToList(),
+            Extensions = draft.Extensions.ToList(),
+            IgnorePatterns = draft.IgnorePatterns.ToList(),
+            Hidden = _config.Hidden.ToList(),
+            KillProcessesOnClose = draft.KillProcessesOnClose,
+            RecaptureProcessesOnLaunch = draft.RecaptureProcessesOnLaunch,
+            UiFontFamily = draft.UiFontFamily.Trim(),
+        };
+
+        try
+        {
+            _configStore.Save(candidate);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("ui: apply settings failed", ex);
+            SetStatus("Couldn’t save settings.", StatusKind.Error);
+            return false;
+        }
+
+        _config.RootDirs = candidate.RootDirs;
+        _config.Extensions = candidate.Extensions;
+        _config.IgnorePatterns = candidate.IgnorePatterns;
+        _config.Hidden = candidate.Hidden;
+        _config.KillProcessesOnClose = candidate.KillProcessesOnClose;
+        _config.RecaptureProcessesOnLaunch = candidate.RecaptureProcessesOnLaunch;
+        _config.UiFontFamily = candidate.UiFontFamily;
         ApplyUiFont();
         SetStatus("Configuration changed — Rescan to apply.");
-    });
+        return true;
+    }
 
     /// <summary>Sends a line to the selected running script's stdin (from the console input field).</summary>
-    public void SendInput(string text) => Guard("send input", () =>
+    public async Task<bool> SendInputAsync(string text)
     {
-        SelectedRecentEntry?.Process?.SendInput(text);
-    });
+        try
+        {
+            return SelectedRecentEntry?.Process is { } process && await process.SendInputAsync(text);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("ui: send input failed", ex);
+            SetStatus("Couldn’t send input.", StatusKind.Error);
+            return false;
+        }
+    }
 
     [RelayCommand]
     private async Task RescanAsync()
@@ -262,7 +295,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
             var diff = ScanDiff.Compute(report.Found, _state.KnownPaths);
             _lastFound = report.Found;
-            _newPaths = new HashSet<string>(diff.Added, StringComparer.Ordinal);
+            _newPaths = new HashSet<string>(diff.Added.Select(PathIdentity.Key), PathIdentity.Comparer);
             _removed = diff.Removed;
 
             RebuildScripts();
@@ -318,7 +351,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         if (!await ConfirmAsync("Stop Script", $"“{entry.DisplayName}” is running. Stop it?", "Stop"))
             return;
 
-        _runner.Terminate(entry.Process);
+        if (!await _runner.TerminateAsync(entry.Process))
+            SetStatus("The script did not stop; ScriptDock is still tracking it.", StatusKind.Error);
     });
 
     [RelayCommand]
@@ -338,13 +372,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         if (entry.Process is not null)
         {
-            if (entry.Process.State == RunState.Running)
-                _runner.Terminate(entry.Process);
+            if (entry.Process.State == RunState.Running && !await _runner.TerminateAsync(entry.Process))
+            {
+                SetStatus("The script did not stop; it was not dismissed.", StatusKind.Error);
+                return;
+            }
             _runner.Dismiss(entry.Process);
         }
 
         _state.RecentlyRun = _state.RecentlyRun
-            .Where(r => !string.Equals(r.Path, entry.Path, StringComparison.Ordinal))
+            .Where(r => !PathIdentity.Same(r.Path, entry.Path))
             .ToList();
         _stateStore.Save(_state);
         Log.Info("ui: dismiss", new { script = entry.Path });
@@ -361,7 +398,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         if (item is null)
             return;
 
-        var nowHidden = !_config.Hidden.Remove(item.Path);
+        var removedHidden = _config.Hidden.RemoveAll(path => PathIdentity.Same(path, item.Path));
+        var nowHidden = removedHidden == 0;
         if (nowHidden)
             _config.Hidden.Add(item.Path);
 
@@ -389,14 +427,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private async Task RunByPath(string path, string displayName)
     {
         var running = _runner.Active.FirstOrDefault(p =>
-            string.Equals(p.ScriptPath, path, StringComparison.Ordinal) && p.State == RunState.Running);
+            PathIdentity.Same(p.ScriptPath, path) && p.State == RunState.Running);
 
         if (running is not null)
         {
             // Running an already-running script restarts it — that kills the live run, so confirm.
             if (!await ConfirmAsync("Restart Script", $"“{displayName}” is already running. Restart it?", "Restart"))
                 return;
-            await _runner.RestartAsync(running);
+            if (await _runner.RestartAsync(running) is null)
+            {
+                SetStatus("The existing script did not stop; no replacement was launched.", StatusKind.Error);
+                return;
+            }
         }
         else
         {
@@ -409,7 +451,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         // Surface the just-run script: select its Recent entry so its output shows in the console
         // immediately (selection re-pins the console to the bottom).
-        SelectedRecentEntry = Recent.FirstOrDefault(e => string.Equals(e.Path, path, StringComparison.Ordinal));
+        SelectedRecentEntry = Recent.FirstOrDefault(e => PathIdentity.Same(e.Path, path));
 
         // A freshly started/restarted run owns a stdin pipe, so move keyboard focus to the console
         // input for immediate typing. Gated on CanSendInput so a non-input run never steals focus.
@@ -446,7 +488,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         foreach (var entry in RecentListBuilder.Build(_state.RecentlyRun, _runner.Active, BuildLabels()))
             Recent.Add(entry);
 
-        SelectedRecentEntry = Recent.FirstOrDefault(e => string.Equals(e.Path, selectedPath, StringComparison.Ordinal));
+        SelectedRecentEntry = selectedPath is null ? null : Recent.FirstOrDefault(e => PathIdentity.Same(e.Path, selectedPath));
         RunningCount = _runner.Active.Count(p => p.State == RunState.Running);
         OnPropertyChanged(nameof(NoRecent));
         RefreshOutput();
@@ -481,10 +523,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private void RebuildScripts(bool selectNeighbourIfGone = false)
     {
-        var hidden = new HashSet<string>(_config.Hidden, StringComparer.Ordinal);
+        var hidden = new HashSet<string>(_config.Hidden.Select(PathIdentity.Key), PathIdentity.Comparer);
         var running = new HashSet<string>(
-            _runner.Active.Where(p => p.State == RunState.Running).Select(p => p.ScriptPath),
-            StringComparer.Ordinal);
+            _runner.Active.Where(p => p.State == RunState.Running).Select(p => PathIdentity.Key(p.ScriptPath)),
+            PathIdentity.Comparer);
 
         var items = ScriptListBuilder.BuildScripts(_lastFound, _removed, hidden, _newPaths, running, BuildLabels(), ShowHidden);
 
@@ -502,14 +544,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         // Setting SelectedScript drives both the ListBox selection and the Hide/Show button label.
         var restored = selectedPath is null
             ? null
-            : Scripts.FirstOrDefault(s => string.Equals(s.Path, selectedPath, StringComparison.Ordinal));
+            : Scripts.FirstOrDefault(s => PathIdentity.Same(s.Path, selectedPath));
         if (restored is null && selectNeighbourIfGone && selectedIndex >= 0 && Scripts.Count > 0)
             restored = Scripts[Math.Min(selectedIndex, Scripts.Count - 1)];
         SelectedScript = restored;
 
         // Status-bar facts: total found, and how many of those are hidden.
         ScriptCount = _lastFound.Count;
-        HiddenCount = _lastFound.Count(hidden.Contains);
+        HiddenCount = _lastFound.Count(path => hidden.Contains(PathIdentity.Key(path)));
         OnPropertyChanged(nameof(NoScripts));
     }
 

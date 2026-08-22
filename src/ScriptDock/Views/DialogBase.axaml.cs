@@ -67,6 +67,9 @@ public partial class DialogBase : Window
     /// </summary>
     protected virtual bool HasUnsavedChanges => false;
 
+    /// <summary>Lets a dialog durably validate or commit before its primary button closes it.</summary>
+    protected virtual bool TryCommit(string tag) => true;
+
     /// <summary>Discard-confirmation copy used when a dirty dialog is dismissed.</summary>
     protected virtual (string Title, string Message) DiscardPrompt =>
         ("Discard Changes", "You have unsaved changes. Discard them and close?");
@@ -120,6 +123,9 @@ public partial class DialogBase : Window
 
     private void OnOpened(object? sender, EventArgs e)
     {
+        if (Screens.ScreenFromWindow(this) is { } screen)
+            MaxHeight = screen.WorkingArea.Height / RenderScaling * 0.85;
+
         var target = _initialFocusControl;
         if (target is null)
             return;
@@ -140,7 +146,11 @@ public partial class DialogBase : Window
         if (sender is not Button button)
             return;
 
-        ResultTag = button.Tag as string;
+        var tag = button.Tag as string;
+        if (_commitButtons.Contains(button) && (tag is null || !TryCommit(tag)))
+            return;
+
+        ResultTag = tag;
         if (_commitButtons.Contains(button))
             _bypassCloseGuard = true;
 

@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Linq;
+using ScriptDock.Storage;
 
 namespace ScriptDock.Models;
 
@@ -12,7 +14,7 @@ namespace ScriptDock.Models;
 /// <c>ConfigBootstrap</c> only when no config file exists yet. Adding to this model
 /// later is forward-compatible — no field declared here is expected to be removed.
 /// </remarks>
-public sealed class AppConfig
+public sealed class AppConfig : IJsonNormalizable
 {
     /// <summary>The bundled default UI (chrome) font, registered via <c>.WithInterFont()</c>.</summary>
     public const string DefaultUiFontFamily = "Inter";
@@ -52,4 +54,13 @@ public sealed class AppConfig
     /// <summary>When true (default), a relaunch re-attaches to scripts left running by a previous
     /// session, matched by PID and OS start-time; otherwise those are treated as no longer running.</summary>
     public bool RecaptureProcessesOnLaunch { get; set; } = true;
+
+    public void NormalizeAfterLoad()
+    {
+        UiFontFamily ??= DefaultUiFontFamily;
+        RootDirs = RootDirs?.OfType<string>().ToList() ?? [];
+        Extensions = Extensions?.OfType<string>().ToList() ?? [];
+        IgnorePatterns = IgnorePatterns?.OfType<string>().ToList() ?? [];
+        Hidden = Hidden?.OfType<string>().ToList() ?? [];
+    }
 }

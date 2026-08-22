@@ -86,7 +86,9 @@
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="14,10">
             <DockPanel>
                 <!-- Hamburger docked right; the wordmark is the last (fill) child so it stays left. -->
-                <Button Classes="tool" DockPanel.Dock="Right" Padding="8,4">
+                <Button Classes="tool" DockPanel.Dock="Right" Padding="8,4"
+                        AutomationProperties.Name="Application menu"
+                        ToolTip.Tip="Application menu">
                     <Path Width="18" Height="18" Stretch="None" Fill="{StaticResource TextPrimaryBrush}"
                           Data="M1,3 H17 V5 H1 Z M1,8 H17 V10 H1 Z M1,13 H17 V15 H1 Z"/>
                     <Button.Flyout>

@@ -174,7 +174,7 @@ public partial class MainWindow : Window
 
             // Quitting with Kill-on-close on terminates running work, so confirm it first: cancel this
             // close, ask, and only close for real on a yes (mirrors the dialog discard guard).
-            if (!_quitConfirmed && vm.ShouldConfirmQuit())
+            if (!_quitConfirmed && MainWindowCloseGuard.ShouldConfirmQuit(e.CloseReason, vm.ShouldConfirmQuit()))
             {
                 e.Cancel = true;
                 var proceed = await ConfirmDialog.ConfirmDestructiveAsync(
@@ -312,8 +312,7 @@ public partial class MainWindow : Window
                 return;
 
             var draft = vm.CreateSettingsDraft();
-            if (await SettingsDialog.EditAsync(this, draft))
-                vm.ApplySettings(draft);
+            await SettingsDialog.EditAsync(this, draft, vm.TryApplySettings);
         }
         catch (Exception ex)
         {
@@ -353,7 +352,8 @@ public partial class MainWindow : Window
 
     private void OnScriptKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key is Key.Enter or Key.Space && sender is ListBox { SelectedItem: ScriptItem item })
+        if (e.KeyModifiers == KeyModifiers.None &&
+            e.Key is Key.Enter or Key.Space && sender is ListBox { SelectedItem: ScriptItem item })
         {
             e.Handled = true;
             ViewModel?.RunScriptCommand.Execute(item);
@@ -368,8 +368,9 @@ public partial class MainWindow : Window
 
     private void OnRecentKeyDown(object? sender, KeyEventArgs e)
     {
-        // Delete and Backspace (with or without Cmd/Ctrl) all remove the selected entry.
-        if (e.Key is Key.Delete or Key.Back && sender is ListBox { SelectedItem: RecentEntry item })
+        // Only the documented unmodified Delete and Backspace gestures act on the selected entry.
+        if (e.KeyModifiers == KeyModifiers.None &&
+            e.Key is Key.Delete or Key.Back && sender is ListBox { SelectedItem: RecentEntry item })
         {
             e.Handled = true;
             if (item.IsRunning)
@@ -382,12 +383,13 @@ public partial class MainWindow : Window
     // Send the typed line to the selected running script's stdin. Submitted is raised by
     // ComposingTextBox only on a real Enter — never the IME's candidate-commit — per the
     // text-input-ime-conventions, so a composed Enter no longer sends a half-finished line.
-    private void OnConsoleInputSubmitted(object? sender, RoutedEventArgs e)
+    private async void OnConsoleInputSubmitted(object? sender, RoutedEventArgs e)
     {
         if (sender is ComposingTextBox box)
         {
-            ViewModel?.SendInput(box.Text ?? string.Empty);
-            box.Text = string.Empty;
+            var text = box.Text ?? string.Empty;
+            if (ViewModel is { } vm && await vm.SendInputAsync(text))
+                box.Text = string.Empty;
         }
     }
 }

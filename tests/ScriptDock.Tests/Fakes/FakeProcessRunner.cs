@@ -22,6 +22,8 @@ public sealed class FakeProcessRunner : IProcessRunner
     public List<ScriptProcess> RestartCalls { get; } = new();
     public List<ScriptProcess> DismissCalls { get; } = new();
     public List<PersistedProcess> RecaptureCalls { get; } = new();
+    public bool TerminateResult { get; set; } = true;
+    public bool RestartResult { get; set; } = true;
 
     public event EventHandler? ProcessesChanged { add { } remove { } }
 
@@ -43,13 +45,19 @@ public sealed class FakeProcessRunner : IProcessRunner
         return AddRunning(scriptPath, acceptsInput: true); // the real Start owns the run's stdin pipe
     }
 
-    public void Terminate(ScriptProcess handle) => TerminateCalls.Add(handle);
+    public Task<bool> TerminateAsync(ScriptProcess handle)
+    {
+        TerminateCalls.Add(handle);
+        return Task.FromResult(TerminateResult);
+    }
 
-    public Task<ScriptProcess> RestartAsync(ScriptProcess handle)
+    public Task<ScriptProcess?> RestartAsync(ScriptProcess handle)
     {
         RestartCalls.Add(handle);
+        if (!RestartResult)
+            return Task.FromResult<ScriptProcess?>(null);
         _active.Remove(handle);
-        return Task.FromResult(AddRunning(handle.ScriptPath, acceptsInput: true));
+        return Task.FromResult<ScriptProcess?>(AddRunning(handle.ScriptPath, acceptsInput: true));
     }
 
     public void Dismiss(ScriptProcess handle)

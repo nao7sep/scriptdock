@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Data;
@@ -15,19 +16,23 @@ namespace ScriptDock.Views;
 public sealed class SettingsDialog : DialogBase
 {
     private readonly SettingsDialogViewModel _draft;
+    private readonly Func<SettingsDialogViewModel, bool> _trySave;
 
-    public SettingsDialog(SettingsDialogViewModel draft)
+    public SettingsDialog(SettingsDialogViewModel draft, Func<SettingsDialogViewModel, bool> trySave)
     {
         _draft = draft;
+        _trySave = trySave;
         Title = "Settings";
         Width = 520;
 
-        SetContent(new SettingsView { DataContext = draft });
+        var content = new SettingsView { DataContext = draft };
+        SetContent(content);
+        SetInitialFocus(content.InitialFocusControl);
 
         var buttons = SetButtons(
         [
             new DialogButton("Cancel", "cancel"),
-            new DialogButton("Save", "save", DialogButtonKind.Primary),
+            new DialogButton("Save", "save", DialogButtonKind.Primary) { IsDefault = true },
         ]);
 
         // Commit gating: Save is enabled only when the draft differs from the saved config.
@@ -40,9 +45,25 @@ public sealed class SettingsDialog : DialogBase
 
     protected override bool HasUnsavedChanges => _draft.IsDirty;
 
-    public static async Task<bool> EditAsync(Window owner, SettingsDialogViewModel draft)
+    protected override bool TryCommit(string tag)
     {
-        var dialog = new SettingsDialog(draft);
+        if (tag != "save")
+            return true;
+
+        _draft.SaveError = string.Empty;
+        if (_trySave(_draft))
+            return true;
+
+        _draft.SaveError = "Settings could not be saved. Nothing was changed; check the log and try again.";
+        return false;
+    }
+
+    public static async Task<bool> EditAsync(
+        Window owner,
+        SettingsDialogViewModel draft,
+        Func<SettingsDialogViewModel, bool> trySave)
+    {
+        var dialog = new SettingsDialog(draft, trySave);
         await dialog.ShowDialog(owner);
         return dialog.Saved;
     }

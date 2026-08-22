@@ -70,4 +70,14 @@ public sealed class ShortcutCatalogTests
             Assert.Equal(item.Gesture.KeyModifiers.HasFlag(KeyModifiers.Shift), item.Label.Contains("Shift+"));
         }
     }
+
+    [AvaloniaFact]
+    public void Display_rows_name_every_unmodified_alternative_with_canonical_formatting()
+    {
+        var (items, _) = BuildCatalog();
+
+        Assert.Contains(items, item => item.Group == ShortcutGroup.Scripts && item.Label == "Double-click/Enter/Space");
+        Assert.Contains(items, item => item.Group == ShortcutGroup.Recent && item.Label == "Delete/Backspace");
+        Assert.Contains(items, item => item.Group == ShortcutGroup.Navigation && item.Label == "Up/Down");
+    }
 }

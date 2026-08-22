@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -81,7 +82,7 @@ public sealed class ProcessRunnerTests : IDisposable
     }
 
     [MacOnlyFact]
-    public void Start_AcceptsStdinInput_AndScriptReadsIt()
+    public async Task Start_AcceptsStdinInput_AndScriptReadsIt()
     {
         var script = WriteExecutableScript("echoer.command", "read line\necho \"got:$line\"\nexit 0\n");
         var runner = new ProcessRunner(_runsDir);
@@ -90,19 +91,62 @@ public sealed class ProcessRunnerTests : IDisposable
         try
         {
             Assert.True(handle.AcceptsInput);
-            handle.SendInput("hello-stdin");
+            Assert.True(await handle.SendInputAsync("hello-stdin"));
 
             Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
             Assert.Contains(handle.ReadOutput(), line => line.Contains("got:hello-stdin"));
         }
         finally
         {
-            runner.Terminate(handle);
+            await runner.TerminateAsync(handle);
         }
     }
 
     [MacOnlyFact]
-    public void Terminate_StopsALongRunningScript()
+    public async Task SendInputAsync_ConcurrentLinesStayOrdered()
+    {
+        var script = WriteExecutableScript(
+            "ordered.command",
+            "read first\nread second\nprintf '%s|%s\\n' \"$first\" \"$second\"\n");
+        var runner = new ProcessRunner(_runsDir);
+        var handle = runner.Start(script);
+        try
+        {
+            var first = handle.SendInputAsync("one");
+            var second = handle.SendInputAsync("two");
+            Assert.All(await Task.WhenAll(first, second), Assert.True);
+
+            Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+            Assert.Contains("one|two", handle.ReadOutput());
+        }
+        finally
+        {
+            await runner.TerminateAsync(handle);
+        }
+    }
+
+    [MacOnlyFact]
+    public async Task SendInputAsync_UnreadPipeIsBoundedAndCancellationPreservesFailure()
+    {
+        var script = WriteExecutableScript("no-read.command", "sleep 60\n");
+        var runner = new ProcessRunner(_runsDir);
+        var handle = runner.Start(script);
+        try
+        {
+            var line = new string('x', 8 * 1024 * 1024);
+            var stopwatch = Stopwatch.StartNew();
+
+            Assert.False(await handle.SendInputAsync(line, TimeSpan.FromMilliseconds(100)));
+            Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            await runner.TerminateAsync(handle);
+        }
+    }
+
+    [MacOnlyFact]
+    public async Task Terminate_StopsALongRunningScript()
     {
         var script = WriteExecutableScript("sleeper.command", "echo started\nsleep 60\n");
         var runner = new ProcessRunner(_runsDir);
@@ -114,8 +158,7 @@ public sealed class ProcessRunnerTests : IDisposable
             Thread.Sleep(50);
         Assert.Contains("started", handle.ReadOutput());
 
-        runner.Terminate(handle);
-        Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+        Assert.True(await runner.TerminateAsync(handle));
         Assert.Equal(RunState.Terminated, handle.State);
     }
 
@@ -133,6 +176,7 @@ public sealed class ProcessRunnerTests : IDisposable
         Assert.NotNull(first.Pid);
 
         var second = await runner.RestartAsync(first);
+        Assert.NotNull(second);
         try
         {
             Assert.NotEqual(first.Id, second.Id);                  // a genuinely new run
@@ -142,20 +186,39 @@ public sealed class ProcessRunnerTests : IDisposable
         }
         finally
         {
-            runner.Terminate(second);
-            second.WaitForExit(TimeSpan.FromSeconds(20));
+            await runner.TerminateAsync(second);
+        }
+    }
+
+    [MacOnlyFact]
+    public async Task Start_ReplacesTerminalHandleForSamePhysicalScript()
+    {
+        var script = WriteExecutableScript("once.command", "exit 0\n");
+        var runner = new ProcessRunner(_runsDir);
+        var first = runner.Start(script);
+        Assert.True(first.WaitForExit(TimeSpan.FromSeconds(20)));
+
+        var second = runner.Start(script);
+        try
+        {
+            Assert.DoesNotContain(first, runner.Active);
+            Assert.Same(second, Assert.Single(runner.Active));
+        }
+        finally
+        {
+            await runner.TerminateAsync(second);
         }
     }
 
     [Fact]
-    public void StartTimesMatch_TrueWithinTolerance_FalseBeyond()
+    public void StartTimesMatch_UsesPersistedUnixMillisecondPrecision()
     {
         var t = new DateTimeOffset(2026, 6, 19, 1, 2, 3, TimeSpan.Zero);
 
         Assert.True(ProcessRunner.StartTimesMatch(t, t));
-        Assert.True(ProcessRunner.StartTimesMatch(t, t.AddSeconds(1)));
-        Assert.True(ProcessRunner.StartTimesMatch(t, t.AddSeconds(-2)));
-        Assert.False(ProcessRunner.StartTimesMatch(t, t.AddSeconds(5)));
+        Assert.True(ProcessRunner.StartTimesMatch(t.AddTicks(1), t.AddTicks(9_999)));
+        Assert.False(ProcessRunner.StartTimesMatch(t, t.AddMilliseconds(1)));
+        Assert.False(ProcessRunner.StartTimesMatch(t, t.AddSeconds(-1)));
         Assert.False(ProcessRunner.StartTimesMatch(t, t.AddMinutes(1)));
     }
 
@@ -171,7 +234,7 @@ public sealed class ProcessRunnerTests : IDisposable
     }
 
     [MacOnlyFact]
-    public void Recapture_ReattachesRunningProcess_ByPidAndStartTime()
+    public async Task Recapture_ReattachesRunningProcess_ByPidAndStartTime()
     {
         var script = WriteExecutableScript("sleeper.command", "echo started\nsleep 60\n");
         var runner = new ProcessRunner(_runsDir);
@@ -218,8 +281,7 @@ public sealed class ProcessRunnerTests : IDisposable
         }
         finally
         {
-            runner.Terminate(handle);
-            handle.WaitForExit(TimeSpan.FromSeconds(20));
+            await runner.TerminateAsync(handle);
         }
     }
 }

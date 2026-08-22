@@ -25,23 +25,25 @@ public static class ScriptListBuilder
         bool showHidden)
     {
         var items = new List<ScriptItem>();
+        static bool ContainsIdentity(ISet<string> paths, string path) =>
+            paths.Contains(path) || paths.Contains(PathIdentity.Key(path));
 
         // Build every tile through one factory so a new ScriptItem field can't be set on the found
         // path and forgotten on the removed one — the only difference between the two is the flag.
         ScriptItem Tile(string path, ScriptFlag flag) => new(path)
         {
             DisplayName = ScriptLabels.LabelFor(labels, path),
-            IsHidden = hidden.Contains(path),
-            IsRunning = runningPaths.Contains(path),
+            IsHidden = ContainsIdentity(hidden, path),
+            IsRunning = ContainsIdentity(runningPaths, path),
             Flag = flag,
         };
 
         foreach (var path in found)
         {
-            if (hidden.Contains(path) && !showHidden)
+            if (ContainsIdentity(hidden, path) && !showHidden)
                 continue;
 
-            items.Add(Tile(path, newPaths.Contains(path) ? ScriptFlag.New : ScriptFlag.None));
+            items.Add(Tile(path, ContainsIdentity(newPaths, path) ? ScriptFlag.New : ScriptFlag.None));
         }
 
         // Removed scripts are surfaced regardless of the hidden filter so a disappearance is noticed.

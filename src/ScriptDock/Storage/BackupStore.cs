@@ -68,8 +68,7 @@ public static class BackupStore
     /// <summary>
     /// Open and initialize the store once (create the table if absent, switch on WAL and a busy timeout).
     /// Best-effort: on any failure it logs ONE warn, leaves recording disabled for the session, and never
-    /// throws. WAL is what lets the tolerated two-instance case (two ScriptDock windows writing at once)
-    /// serialize safely without a cross-process lock.
+    /// throws. WAL keeps backup reads and writes robust while ScriptDock owns the store exclusively.
     /// </summary>
     private static SqliteConnection? EnsureOpen()
     {
@@ -98,9 +97,7 @@ public static class BackupStore
             {
                 pragmas.CommandText = "PRAGMA journal_mode = WAL;";
                 pragmas.ExecuteNonQuery();
-                // busy_timeout: under the tolerated two-instance case, a contended write waits up to this
-                // long for SQLite's write lock instead of immediately failing with SQLITE_BUSY and dropping
-                // that record.
+                // busy_timeout also covers short contention with external backup inspection tools.
                 pragmas.CommandText = "PRAGMA busy_timeout = 5000;";
                 pragmas.ExecuteNonQuery();
             }

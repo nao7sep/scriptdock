@@ -17,7 +17,10 @@
                     Margin="0,20,0,0"/>
 
         <!-- Content area -->
-        <ContentPresenter x:Name="DialogContent"/>
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <ContentPresenter x:Name="DialogContent"/>
+        </ScrollViewer>
     </DockPanel>
 
 </Window>

@@ -12,7 +12,7 @@
              read-only output console keeps its own monospace font and is unaffected by this. -->
         <StackPanel Spacing="6">
             <TextBlock Text="UI font" Classes="cardHeader"/>
-            <ctl:ComposingTextBox Text="{Binding UiFontFamily}" PlaceholderText="Inter"/>
+            <ctl:ComposingTextBox x:Name="UiFontEntry" Text="{Binding UiFontFamily}" PlaceholderText="Inter"/>
             <TextBlock Text="Comma-separated; the first installed family is used. Blank uses the default (Inter)."
                        Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
         </StackPanel>
@@ -65,6 +65,12 @@
             <CheckBox Content="Reattach to scripts left running, on next launch"
                       IsChecked="{Binding RecaptureProcessesOnLaunch}"/>
         </StackPanel>
+
+        <TextBlock Text="{Binding SaveError}"
+                   Foreground="{StaticResource DangerTextBrush}"
+                   FontSize="12"
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding SaveError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
 
     </StackPanel>
 </UserControl>

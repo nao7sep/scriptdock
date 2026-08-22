@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Linq;
+using ScriptDock.Storage;
 
 namespace ScriptDock.Models;
 
@@ -10,7 +12,7 @@ namespace ScriptDock.Models;
 /// Phase 1 adds the recently-run list; <see cref="KnownPaths"/> is used by the Phase 2
 /// scanner to compute the new/removed diff.
 /// </remarks>
-public sealed class AppState
+public sealed class AppState : IJsonNormalizable
 {
     /// <summary>Whether hidden scripts are currently shown.</summary>
     public bool ShowHidden { get; set; }
@@ -31,4 +33,16 @@ public sealed class AppState
     /// <summary>Snapshot of the scripts that were running when this state was last saved, recorded
     /// so a relaunch can recapture them by PID + start-time. Replaced whenever the running set changes.</summary>
     public List<PersistedProcess> RunningProcesses { get; set; } = [];
+
+    public void NormalizeAfterLoad()
+    {
+        KnownPaths = KnownPaths?.OfType<string>().ToList() ?? [];
+        RecentlyRun = RecentlyRun?.OfType<RecentRun>()
+            .Where(run => !string.IsNullOrEmpty(run.Path)).ToList() ?? [];
+        RunningProcesses = RunningProcesses?.OfType<PersistedProcess>()
+            .Where(process => process.Pid > 0 && !string.IsNullOrEmpty(process.ScriptPath))
+            .ToList() ?? [];
+        foreach (var process in RunningProcesses)
+            process.LogFilePath ??= string.Empty;
+    }
 }
