@@ -81,6 +81,21 @@ public sealed class ProcessRunnerTests : IDisposable
         Assert.Equal(3, handle.ExitCode);
     }
 
+    [WindowsOnlyFact]
+    public void Start_WindowsPreservesScriptExitCodeAndOutput()
+    {
+        var script = Path.Combine(_dir, "exit-code.ps1");
+        File.WriteAllText(script, "Write-Output 'windows-output'\nexit 7\n");
+        var runner = new ProcessRunner(_runsDir);
+
+        var handle = runner.Start(script);
+        Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+
+        Assert.Equal(RunState.Exited, handle.State);
+        Assert.Equal(7, handle.ExitCode);
+        Assert.Contains("windows-output", handle.ReadOutput());
+    }
+
     [MacOnlyFact]
     public async Task Start_AcceptsStdinInput_AndScriptReadsIt()
     {

@@ -38,7 +38,9 @@ public readonly record struct ShellCommand(string FileName, IReadOnlyList<string
     public static ShellCommand ForRun(string scriptPath, string logPath, ScriptPlatform platform)
     {
         if (platform == ScriptPlatform.Windows)
-            return new ShellCommand("pwsh", ["-NoLogo", "-Command", $"& {PwshQuote(scriptPath)} *> {PwshQuote(logPath)}"]);
+            return new ShellCommand(
+                "pwsh",
+                ["-NoLogo", "-Command", $"& {PwshQuote(scriptPath)} *> {PwshQuote(logPath)}; exit $LASTEXITCODE"]);
 
         return new ShellCommand("zsh", ["-l", "-c", $"{ShellQuote(scriptPath)} > {ShellQuote(logPath)} 2>&1"]);
     }

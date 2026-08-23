@@ -32,7 +32,9 @@ public sealed class ShellCommandTests
         var command = ShellCommand.ForRun(@"C:\x\run-dev.ps1", @"C:\logs\run.log", ScriptPlatform.Windows);
 
         Assert.Equal("pwsh", command.FileName);
-        Assert.Equal(["-NoLogo", "-Command", @"& 'C:\x\run-dev.ps1' *> 'C:\logs\run.log'"], command.Arguments);
+        Assert.Equal(
+            ["-NoLogo", "-Command", @"& 'C:\x\run-dev.ps1' *> 'C:\logs\run.log'; exit $LASTEXITCODE"],
+            command.Arguments);
     }
 
     [Fact]
@@ -43,7 +45,9 @@ public sealed class ShellCommandTests
         var command = ShellCommand.ForRun(@"C:\x\task.bat", @"C:\logs\run.log", ScriptPlatform.Windows);
 
         Assert.Equal("pwsh", command.FileName);
-        Assert.Equal(["-NoLogo", "-Command", @"& 'C:\x\task.bat' *> 'C:\logs\run.log'"], command.Arguments);
+        Assert.Equal(
+            ["-NoLogo", "-Command", @"& 'C:\x\task.bat' *> 'C:\logs\run.log'; exit $LASTEXITCODE"],
+            command.Arguments);
     }
 
     [Fact]
@@ -53,6 +57,8 @@ public sealed class ShellCommandTests
         var command = ShellCommand.ForRun(@"C:\scripts\%PATH%.bat", @"C:\logs\run.log", ScriptPlatform.Windows);
 
         Assert.Equal("pwsh", command.FileName);
-        Assert.Equal(@"& 'C:\scripts\%PATH%.bat' *> 'C:\logs\run.log'", command.Arguments[2]);
+        Assert.Equal(
+            @"& 'C:\scripts\%PATH%.bat' *> 'C:\logs\run.log'; exit $LASTEXITCODE",
+            command.Arguments[2]);
     }
 }
