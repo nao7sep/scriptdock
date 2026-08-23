@@ -41,12 +41,13 @@ public sealed class SettingsDialogViewModelTests
     public void AddRootDir_TrimsDedupsAndDirties()
     {
         var vm = new SettingsDialogViewModel(Seed());
+        var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "scriptdock-more"));
 
-        Assert.True(vm.AddRootDir("  /more  "));
-        Assert.Contains("/more", vm.RootDirs);
+        Assert.True(vm.AddRootDir($"  {root}  "));
+        Assert.Contains(root, vm.RootDirs);
         Assert.True(vm.IsDirty);
 
-        Assert.False(vm.AddRootDir("/more"));   // duplicate
+        Assert.False(vm.AddRootDir(root));      // duplicate
         Assert.False(vm.AddRootDir("   "));     // empty
     }
 
