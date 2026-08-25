@@ -8,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using ScriptDock.Controls;
 using ScriptDock.Models;
@@ -40,6 +41,13 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        if (OperatingSystem.IsWindows())
+        {
+            using var iconStream = AssetLoader.Open(new Uri("avares://ScriptDock/Assets/icon-win.png"));
+            Icon = new WindowIcon(iconStream);
+        }
+
         Loaded += OnLoaded;
         Closing += OnClosing;
         ConsoleScroll.ScrollChanged += OnConsoleScrollChanged;
