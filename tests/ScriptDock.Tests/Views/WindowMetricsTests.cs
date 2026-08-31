@@ -66,6 +66,20 @@ public sealed class WindowMetricsTests
     }
 
     [Fact]
+    public void MinHeight_UsesLiveChromeAndReservesPersistentErrorRow()
+    {
+        const double measuredHeader = 56;
+        const double measuredStatus = 35;
+        const double errorRow = 38;
+        var expected = measuredHeader + measuredStatus + errorRow
+            + 2 * WindowMetrics.BodyMargin + WindowMetrics.RowSplitter + RowMinHeights.Sum();
+
+        Assert.Equal(
+            expected,
+            WindowMetrics.MinHeightFor(RowMinHeights, measuredHeader, measuredStatus, errorRow));
+    }
+
+    [Fact]
     public void MinHeight_ReservesEveryPanePlusChrome_SoNoPaneCanBeHidden()
     {
         // Beyond the exact-sum identity, the invariant the conventions care about: the minimum is
@@ -115,6 +129,36 @@ public sealed class WindowMetricsTests
         // A short window: the cap never drops below the console's own minimum (so it can't be hidden,
         // and the window minimum keeps the whole body — including the status bar — visible).
         Assert.Equal(consoleMin, WindowMetrics.MaxConsoleHeight(400, scriptsMin, consoleMin));
+    }
+
+    [Fact]
+    public void MaxConsoleHeight_UsesTheSameLiveChromeAsTheNativeMinimum()
+    {
+        const double windowHeight = 900;
+        const double scriptsMin = 200;
+        const double consoleMin = 160;
+        const double header = 56;
+        const double status = 35;
+        const double errorRow = 38;
+
+        Assert.Equal(
+            windowHeight - (header + status + errorRow + scriptsMin
+                + WindowMetrics.RowSplitter + 2 * WindowMetrics.BodyMargin),
+            WindowMetrics.MaxConsoleHeight(
+                windowHeight, scriptsMin, consoleMin, header, status, errorRow));
+    }
+
+    [Fact]
+    public void MainWindow_DeclaresIndependentAssertiveOperationalErrorChrome()
+    {
+        var axaml = ReadMainWindowAxaml();
+
+        Assert.Contains("x:Name=\"OperationalErrorBar\"", axaml);
+        Assert.Contains("AutomationProperties.LiveSetting=\"Assertive\"", axaml);
+        Assert.Contains("Text=\"Error\"", axaml);
+        Assert.Contains("Command=\"{Binding DismissOperationalErrorCommand}\"", axaml);
+        Assert.Contains("x:Name=\"HeaderBar\"", axaml);
+        Assert.Contains("x:Name=\"StatusBar\"", axaml);
     }
 
     [Fact]

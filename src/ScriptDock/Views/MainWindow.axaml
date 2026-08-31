@@ -76,13 +76,13 @@
         </Style>
     </Window.Styles>
 
-    <!-- Header / body / status bar each get their own track so the status bar is reserved chrome
-         and the body's MinHeight can never overlap it (a DockPanel fill child would). Row order is
-         visual top-to-bottom: header, fill body, status bar. -->
-    <Grid RowDefinitions="Auto,*,Auto">
+    <!-- Header, persistent operational error, body, and status bar each get their own track. The
+         error track collapses while healthy; when present it is measured into the native minimum,
+         so persistent failure feedback never steals the content floor. -->
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
 
         <!-- Flat header: wordmark + hamburger, with a single bottom border. -->
-        <Border Grid.Row="0" Background="{StaticResource SurfaceBrush}"
+        <Border x:Name="HeaderBar" Grid.Row="0" Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="14,10">
             <DockPanel>
                 <!-- Hamburger docked right; the wordmark is the last (fill) child so it stays left. -->
@@ -104,11 +104,44 @@
             </DockPanel>
         </Border>
 
+        <!-- Operational failures are independent from the replaceable activity line. One keyed
+             failure is shown at a time; the count preserves additional unresolved failures and
+             Dismiss reveals the next. The heading + drawn warning icon make severity non-colour-only,
+             and assertive live semantics announce newly actionable failures. -->
+        <Border x:Name="OperationalErrorBar" Grid.Row="1"
+                IsVisible="{Binding HasOperationalError}"
+                Background="#2B171B" BorderBrush="{StaticResource DangerTextBrush}"
+                BorderThickness="0,0,0,1" Padding="14,7"
+                AutomationProperties.LiveSetting="Assertive">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="8">
+                <Path Grid.Column="0" Width="16" Height="16" Stretch="Uniform"
+                      Stroke="{StaticResource DangerTextBrush}" StrokeThickness="1.8"
+                      StrokeLineCap="Round" StrokeJoin="Round"
+                      Data="M8,1.5 L15,14.5 H1 Z M8,5 V9 M8,12 V12.1"/>
+                <TextBlock Grid.Column="1" Text="Error" FontWeight="SemiBold"
+                           Foreground="{StaticResource DangerTextBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="2" Text="{Binding OperationalError}"
+                           Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"/>
+                <TextBlock Grid.Column="3" Text="{Binding OperationalErrorCountText}"
+                           IsVisible="{Binding HasMultipleOperationalErrors}"
+                           Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                <Button Grid.Column="4" Classes="tool" Padding="5,3"
+                        Command="{Binding DismissOperationalErrorCommand}"
+                        AutomationProperties.Name="Dismiss error" ToolTip.Tip="Dismiss error">
+                    <Path Width="12" Height="12" Stretch="Uniform"
+                          Stroke="{StaticResource DangerTextBrush}" StrokeThickness="1.8"
+                          StrokeLineCap="Round"
+                          Data="M1,1 L11,11 M11,1 L1,11"/>
+                </Button>
+            </Grid>
+        </Border>
+
         <!-- Status bar in its own bottom track so it stays reserved at every window size. Two zones:
-             left is the transient activity/result, coloured by severity (StatusBrush — secondary,
-             accent while busy, danger on failure); right is the persistent fact cluster (total scripts,
+             left is the replaceable ordinary activity/result (secondary, or accent while busy); right is
+             the persistent fact cluster (total scripts,
              hidden when any, and running with a green dot when something is live). -->
-        <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}"
+        <Border x:Name="StatusBar" Grid.Row="3" Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="14,6">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -132,7 +165,7 @@
              The window's own minimum (derived in WindowMetrics) reserves every pane min; because a
              fixed-pixel track does not shrink on its own, OnLoaded re-derives the Recent width and console
              height on every resize (ClampPanesToWindow) so neither can spill past the shrinking window. -->
-        <Grid x:Name="BodyGrid" Grid.Row="1" Margin="12">
+        <Grid x:Name="BodyGrid" Grid.Row="2" Margin="12">
             <!-- Both body columns carry a real minimum width; WindowMetrics sums these (read from the
                  live columns) to derive the window MinWidth and to back the restore clamp. These XAML
                  values are a floor: OnLoaded measures the Scripts and Recent header button rows and

@@ -37,6 +37,11 @@ public partial class MainWindow : Window
     // ActualWidth, which may have been clamped down by a small window).
     private double? _recentWidthIntent;
     private double? _consoleHeightIntent;
+    private double _scriptsColumnFloor;
+    private double _recentColumnFloor;
+    private double _headerChromeHeight = WindowMetrics.HeaderHeight;
+    private double _statusChromeHeight = WindowMetrics.StatusBarHeight;
+    private double _operationalErrorChromeHeight;
 
     public MainWindow()
     {
@@ -62,30 +67,12 @@ public partial class MainWindow : Window
             if (vm is null)
                 return;
 
-            // Reserve each list pane's header button row. The right-aligned actions (Run/Hide/Show-hidden/
-            // Rescan on Scripts; Run/Stop/Dismiss on Recent) overlap the section title once the body column
-            // is narrower than the header needs, so measure each header's natural width and raise the
-            // column minimum to fit it. The width is font-dependent, so it's measured, not guessed. The
-            // Output header (in the left column) carries no widening buttons — its name pill trims — so the
-            // left column's minimum is governed by the Scripts header alone.
-            ScriptsHeader.Measure(Size.Infinity);
-            RecentHeader.Measure(Size.Infinity);
-            BodyGrid.ColumnDefinitions[0].MinWidth =
-                Math.Max(BodyGrid.ColumnDefinitions[0].MinWidth, ScriptsHeader.DesiredSize.Width);
-            BodyGrid.ColumnDefinitions[2].MinWidth =
-                Math.Max(BodyGrid.ColumnDefinitions[2].MinWidth, RecentHeader.DesiredSize.Width);
-
-            // Derive the window minimum from the live grids plus fixed chrome (see WindowMetrics)
-            // rather than a hand-typed constant, so the window can never be shrunk small enough to
-            // hide a pane or overlap the status bar — and so changing a column/row minimum (or the
-            // measured header width above) moves the window minimum with it. Width comes from the two
-            // body columns (the Scripts/Output stack and Recent); height from the left column's two
-            // rows (Scripts and the console). The status bar sits in its own reserved track, so the
-            // body fill can't cover it.
-            MinWidth = WindowMetrics.MinWidthFor(
-                BodyGrid.ColumnDefinitions.Select(c => c.MinWidth));
-            MinHeight = WindowMetrics.MinHeightFor(
-                LeftPanesGrid.RowDefinitions.Select(r => r.MinHeight));
+            // Preserve the XAML pane floors separately from the font-dependent measured header widths.
+            // Every remeasure starts from these values, so changing from a wide font back to a narrower
+            // one may shrink the native minimum again instead of retaining the historical maximum.
+            _scriptsColumnFloor = BodyGrid.ColumnDefinitions[0].MinWidth;
+            _recentColumnFloor = BodyGrid.ColumnDefinitions[2].MinWidth;
+            RecalculateMinimums();
 
             // Seed the user's pane INTENT from the persisted values (pixels), defaulting to the
             // XAML's own size when nothing is saved yet. The on-screen size is derived from this
@@ -115,6 +102,7 @@ public partial class MainWindow : Window
 
             vm.PropertyChanged += OnViewModelPropertyChanged;
             vm.ConsoleInputFocusRequested += OnConsoleInputFocusRequested;
+            vm.UiFontChanged += OnUiFontChanged;
             vm.ConfirmHandler = request =>
                 ConfirmDialog.ConfirmDestructiveAsync(this, request.Title, request.Message, request.ConfirmLabel);
 
@@ -134,6 +122,49 @@ public partial class MainWindow : Window
         if (e.Property == ClientSizeProperty || e.Property == BoundsProperty)
             ClampPanesToWindow();
     }
+
+    // Measure every font-dependent piece of fixed chrome against the CURRENT app font. The pane
+    // headers drive minimum width; the actual top/status/error bars drive minimum height. This runs
+    // at load and after a saved live font change or an operational-error row appears/disappears.
+    private void RecalculateMinimums()
+    {
+        ScriptsHeader.InvalidateMeasure();
+        RecentHeader.InvalidateMeasure();
+        HeaderBar.InvalidateMeasure();
+        StatusBar.InvalidateMeasure();
+        OperationalErrorBar.InvalidateMeasure();
+
+        ScriptsHeader.Measure(Size.Infinity);
+        RecentHeader.Measure(Size.Infinity);
+        HeaderBar.Measure(Size.Infinity);
+        StatusBar.Measure(Size.Infinity);
+        OperationalErrorBar.Measure(Size.Infinity);
+
+        BodyGrid.ColumnDefinitions[0].MinWidth =
+            Math.Max(_scriptsColumnFloor, ScriptsHeader.DesiredSize.Width);
+        BodyGrid.ColumnDefinitions[2].MinWidth =
+            Math.Max(_recentColumnFloor, RecentHeader.DesiredSize.Width);
+
+        _headerChromeHeight = Math.Max(WindowMetrics.HeaderHeight, HeaderBar.DesiredSize.Height);
+        _statusChromeHeight = Math.Max(WindowMetrics.StatusBarHeight, StatusBar.DesiredSize.Height);
+        _operationalErrorChromeHeight = ViewModel?.HasOperationalError == true
+            ? OperationalErrorBar.DesiredSize.Height
+            : 0;
+
+        MinWidth = WindowMetrics.MinWidthFor(BodyGrid.ColumnDefinitions.Select(c => c.MinWidth));
+        MinHeight = WindowMetrics.MinHeightFor(
+            LeftPanesGrid.RowDefinitions.Select(r => r.MinHeight),
+            _headerChromeHeight,
+            _statusChromeHeight,
+            _operationalErrorChromeHeight);
+        ClampPanesToWindow();
+    }
+
+    // DynamicResource propagation and binding visibility settle on the next dispatcher turn; measure
+    // then, rather than measuring the old font or the pre-change collapsed error row.
+    private void ScheduleMinimumRemeasure() => Dispatcher.UIThread.Post(RecalculateMinimums);
+
+    private void OnUiFontChanged(object? sender, EventArgs e) => ScheduleMinimumRemeasure();
 
     // Set the fixed-pixel Recent column and console row to the size the current window can fit for the
     // user's stored INTENT: WindowMetrics.DisplayFromIntent(intent, min, maxFit). A fixed track doesn't
@@ -156,7 +187,12 @@ public partial class MainWindow : Window
         {
             var consoleRow = LeftPanesGrid.RowDefinitions[2];
             var maxConsole = WindowMetrics.MaxConsoleHeight(
-                Height, LeftPanesGrid.RowDefinitions[0].MinHeight, consoleRow.MinHeight);
+                Height,
+                LeftPanesGrid.RowDefinitions[0].MinHeight,
+                consoleRow.MinHeight,
+                _headerChromeHeight,
+                _statusChromeHeight,
+                _operationalErrorChromeHeight);
             consoleRow.Height = new GridLength(
                 WindowMetrics.DisplayFromIntent(consoleIntent, consoleRow.MinHeight, maxConsole), GridUnitType.Pixel);
         }
@@ -225,6 +261,10 @@ public partial class MainWindow : Window
         else if (e.PropertyName == nameof(MainWindowViewModel.SelectedOutput) && _consolePinnedToBottom)
         {
             _scrollConsolePending = true; // follow new output — but only after it has been laid out
+        }
+        else if (e.PropertyName == nameof(MainWindowViewModel.HasOperationalError))
+        {
+            ScheduleMinimumRemeasure();
         }
     }
 

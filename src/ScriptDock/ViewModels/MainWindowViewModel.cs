@@ -51,6 +51,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private bool _showHidden;
     [ObservableProperty] private bool _isScanning;
     [ObservableProperty] private string _status = "Ready.";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasOperationalError))]
+    private string _operationalError = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasMultipleOperationalErrors))]
+    [NotifyPropertyChangedFor(nameof(OperationalErrorCountText))]
+    private int _operationalErrorCount;
     [ObservableProperty] private RecentEntry? _selectedRecentEntry;
     [ObservableProperty] private string _selectedOutput = string.Empty;
 
@@ -67,6 +75,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     // Severity of the current status message, driving the status-bar text colour (see StatusBrush).
     private StatusKind _statusKind = StatusKind.Info;
+    private readonly List<OperationalErrorEntry> _operationalErrors = [];
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ToggleHiddenLabel))]
@@ -105,6 +114,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    public bool HasOperationalError => OperationalError.Length > 0;
+    public bool HasMultipleOperationalErrors => OperationalErrorCount > 1;
+    public string OperationalErrorCountText => $"{OperationalErrorCount} errors";
+
     public double? SavedRecentWidth => _state.RecentPaneWidth;
     public double? SavedConsoleHeight => _state.ConsoleHeight;
 
@@ -129,7 +142,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public IBrush StatusBrush => _statusKind switch
     {
         StatusKind.Busy => Palette.Brush("AccentBrush"),
-        StatusKind.Error => Palette.Brush("DangerTextBrush"),
         _ => Palette.Brush("TextSecondaryBrush"),
     };
 
@@ -141,6 +153,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// input field so the user can type immediately. Focus is a view concern, so it is signalled here
     /// rather than performed.</summary>
     public event EventHandler? ConsoleInputFocusRequested;
+
+    /// <summary>Raised after a saved UI-font change updates the dynamic app resource. The window
+    /// owns measurement and native minimum sizing, so it remeasures after the new font lays out.</summary>
+    public event EventHandler? UiFontChanged;
 
     /// <summary>Set by the view to confirm a destructive action (the view owns the dialog). Returns
     /// true to proceed. Null when no view is attached (e.g. tests), in which case the action proceeds
@@ -241,10 +257,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             Log.Error("ui: apply settings failed", ex);
-            SetStatus("Couldn’t save settings.", StatusKind.Error);
+            ReportOperationalError("settings-save", "Couldn’t save settings.");
             return false;
         }
 
+        var fontChanged = !string.Equals(_config.UiFontFamily, candidate.UiFontFamily, StringComparison.Ordinal);
         _config.RootDirs = candidate.RootDirs;
         _config.Extensions = candidate.Extensions;
         _config.IgnorePatterns = candidate.IgnorePatterns;
@@ -253,6 +270,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _config.RecaptureProcessesOnLaunch = candidate.RecaptureProcessesOnLaunch;
         _config.UiFontFamily = candidate.UiFontFamily;
         ApplyUiFont();
+        ResolveOperationalError("settings-save");
+        if (fontChanged)
+            UiFontChanged?.Invoke(this, EventArgs.Empty);
         SetStatus("Configuration changed — Rescan to apply.");
         return true;
     }
@@ -262,12 +282,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         try
         {
-            return SelectedRecentEntry?.Process is { } process && await process.SendInputAsync(text);
+            var sent = SelectedRecentEntry?.Process is { } process && await process.SendInputAsync(text);
+            if (sent)
+                ResolveOperationalError("send-input");
+            return sent;
         }
         catch (Exception ex)
         {
             Log.Error("ui: send input failed", ex);
-            SetStatus("Couldn’t send input.", StatusKind.Error);
+            ReportOperationalError("send-input", "Couldn’t send input.");
             return false;
         }
     }
@@ -303,6 +326,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             _state.KnownPaths = report.Found.ToList();
             _stateStore.Save(_state);
 
+            ResolveOperationalError("scan");
             SetStatus(ScanResultMessage(diff));
         }
         catch (OperationCanceledException)
@@ -312,7 +336,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             Log.Error("ui: rescan failed", ex);
-            SetStatus("Scan failed — see logs.", StatusKind.Error);
+            SetStatus("Scan finished.");
+            ReportOperationalError("scan", "Scan failed — see logs.");
         }
         finally
         {
@@ -352,7 +377,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
 
         if (!await _runner.TerminateAsync(entry.Process))
-            SetStatus("The script did not stop; ScriptDock is still tracking it.", StatusKind.Error);
+            ReportOperationalError("stop", "The script did not stop; ScriptDock is still tracking it.");
+        else
+            ResolveOperationalError("stop");
     });
 
     [RelayCommand]
@@ -374,7 +401,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             if (entry.Process.State == RunState.Running && !await _runner.TerminateAsync(entry.Process))
             {
-                SetStatus("The script did not stop; it was not dismissed.", StatusKind.Error);
+                ReportOperationalError("dismiss", "The script did not stop; it was not dismissed.");
                 return;
             }
             _runner.Dismiss(entry.Process);
@@ -384,6 +411,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             .Where(r => !PathIdentity.Same(r.Path, entry.Path))
             .ToList();
         _stateStore.Save(_state);
+        ResolveOperationalError("dismiss");
         Log.Info("ui: dismiss", new { script = entry.Path });
         RebuildRecent();
 
@@ -436,9 +464,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 return;
             if (await _runner.RestartAsync(running) is null)
             {
-                SetStatus("The existing script did not stop; no replacement was launched.", StatusKind.Error);
+                ReportOperationalError("restart", "The existing script did not stop; no replacement was launched.");
                 return;
             }
+            ResolveOperationalError("restart");
         }
         else
         {
@@ -603,11 +632,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         try
         {
             body();
+            ResolveOperationalError(action);
         }
         catch (Exception ex)
         {
             Log.Error($"ui: {action} failed", ex);
-            SetStatus($"{action} failed — see logs.", StatusKind.Error);
+            ReportOperationalError(action, $"{action} failed — see logs.");
         }
     }
 
@@ -617,11 +647,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         try
         {
             await body();
+            ResolveOperationalError(action);
         }
         catch (Exception ex)
         {
             Log.Error($"ui: {action} failed", ex);
-            SetStatus($"{action} failed — see logs.", StatusKind.Error);
+            ReportOperationalError(action, $"{action} failed — see logs.");
         }
     }
 
@@ -630,7 +661,44 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private async Task<bool> ConfirmAsync(string title, string message, string confirmLabel) =>
         ConfirmHandler is null || await ConfirmHandler(new ConfirmRequest(title, message, confirmLabel));
 
-    // Set the status-bar text and its severity together (severity drives StatusBrush's colour).
+    private sealed record OperationalErrorEntry(string Key, string Message);
+
+    private void ReportOperationalError(string key, string message)
+    {
+        var index = _operationalErrors.FindIndex(error => error.Key == key);
+        if (index >= 0)
+        {
+            _operationalErrors[index] = new OperationalErrorEntry(key, message);
+        }
+        else
+        {
+            _operationalErrors.Add(new OperationalErrorEntry(key, message));
+        }
+        RefreshOperationalErrorProjection();
+    }
+
+    private void ResolveOperationalError(string key)
+    {
+        _operationalErrors.RemoveAll(error => error.Key == key);
+        RefreshOperationalErrorProjection();
+    }
+
+    [RelayCommand]
+    private void DismissOperationalError()
+    {
+        if (_operationalErrors.Count > 0)
+            _operationalErrors.RemoveAt(0);
+        RefreshOperationalErrorProjection();
+    }
+
+    private void RefreshOperationalErrorProjection()
+    {
+        OperationalError = _operationalErrors.FirstOrDefault()?.Message ?? string.Empty;
+        OperationalErrorCount = _operationalErrors.Count;
+    }
+
+    // Set the replaceable status-bar activity text and its presentation together. Operational
+    // failures use the independent persistent queue above, so an ordinary result cannot erase one.
     private void SetStatus(string text, StatusKind kind = StatusKind.Info)
     {
         _statusKind = kind;

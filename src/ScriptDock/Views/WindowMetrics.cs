@@ -49,8 +49,13 @@ public static class WindowMetrics
     /// The minimum window height: the fixed chrome (header + status bar) plus the body's
     /// vertical margin, the row splitter, and the sum of the left column's row minimum heights.
     /// </summary>
-    public static double MinHeightFor(IEnumerable<double> rowMinHeights)
-        => HeaderHeight + StatusBarHeight + BodyVerticalMargin + RowSplitter + rowMinHeights.Sum();
+    public static double MinHeightFor(
+        IEnumerable<double> rowMinHeights,
+        double headerHeight = HeaderHeight,
+        double statusBarHeight = StatusBarHeight,
+        double additionalChromeHeight = 0)
+        => headerHeight + statusBarHeight + additionalChromeHeight
+            + BodyVerticalMargin + RowSplitter + rowMinHeights.Sum();
 
     /// <summary>
     /// The widest the (fixed-size) Recent column may be at the given window width while the left
@@ -66,8 +71,15 @@ public static class WindowMetrics
     /// row's own minimum. A fixed-pixel row does not shrink on its own, so this bounds it on resize
     /// to keep it from spilling past the window over the status bar.
     /// </summary>
-    public static double MaxConsoleHeight(double windowHeight, double scriptsRowMin, double consoleRowMin)
-        => Math.Max(consoleRowMin, windowHeight - (HeaderHeight + StatusBarHeight + scriptsRowMin + RowSplitter + BodyVerticalMargin));
+    public static double MaxConsoleHeight(
+        double windowHeight,
+        double scriptsRowMin,
+        double consoleRowMin,
+        double headerHeight = HeaderHeight,
+        double statusBarHeight = StatusBarHeight,
+        double additionalChromeHeight = 0)
+        => Math.Max(consoleRowMin, windowHeight - (headerHeight + statusBarHeight
+            + additionalChromeHeight + scriptsRowMin + RowSplitter + BodyVerticalMargin));
 
     /// <summary>
     /// The pixel size a fixed pane should DISPLAY at: the user's stored <paramref name="intent"/>

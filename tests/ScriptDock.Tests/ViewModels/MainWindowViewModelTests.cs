@@ -174,7 +174,8 @@ public sealed class MainWindowViewModelTests
 
         Assert.Empty(runner.StartCalls);
         Assert.Empty(state.RecentlyRun);
-        Assert.Contains("no replacement", vm.Status, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("no replacement", vm.OperationalError, StringComparison.OrdinalIgnoreCase);
+        Assert.True(vm.HasOperationalError);
     }
 
     [Fact]
@@ -193,6 +194,53 @@ public sealed class MainWindowViewModelTests
         Assert.False(vm.TryApplySettings(draft));
         Assert.Equal(["/old"], config.RootDirs);
         Assert.Equal("Inter", config.UiFontFamily);
+        Assert.Contains("save settings", vm.OperationalError, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, vm.OperationalErrorCount);
+    }
+
+    [Fact]
+    public async Task OperationalError_SurvivesUnrelatedActivity_DeduplicatesAndDismisses()
+    {
+        var config = new AppConfig { RootDirs = [] };
+        var configStore = new FakeJsonStore<AppConfig> { Value = config, ThrowOnSave = true };
+        var stateStore = new FakeJsonStore<AppState>();
+        var vm = new MainWindowViewModel(
+            configStore, stateStore, config, stateStore.Value, new ScriptScanner(), new FakeProcessRunner());
+        var draft = vm.CreateSettingsDraft();
+        draft.UiFontFamily = "Helvetica";
+
+        Assert.False(vm.TryApplySettings(draft));
+        Assert.False(vm.TryApplySettings(draft));
+        Assert.Equal(1, vm.OperationalErrorCount); // repeated failure of the same operation is one notice
+
+        await vm.RescanCommand.ExecuteAsync(null); // ordinary successful activity updates Status only
+        Assert.True(vm.HasOperationalError);
+        Assert.Contains("save settings", vm.OperationalError, StringComparison.OrdinalIgnoreCase);
+        Assert.NotEqual(vm.OperationalError, vm.Status);
+
+        vm.DismissOperationalErrorCommand.Execute(null);
+        Assert.False(vm.HasOperationalError);
+        Assert.Equal(0, vm.OperationalErrorCount);
+    }
+
+    [Fact]
+    public void TryApplySettings_SavedFontChangeRaisesLiveRemeasureSignal()
+    {
+        var config = new AppConfig { UiFontFamily = "" };
+        var vm = new MainWindowViewModel(
+            new FakeJsonStore<AppConfig> { Value = config },
+            new FakeJsonStore<AppState>(),
+            config,
+            new AppState(),
+            new ScriptScanner(),
+            new FakeProcessRunner());
+        var fontChanges = 0;
+        vm.UiFontChanged += (_, _) => fontChanges++;
+        var draft = vm.CreateSettingsDraft();
+        draft.UiFontFamily = "Helvetica";
+
+        Assert.True(vm.TryApplySettings(draft));
+        Assert.Equal(1, fontChanges);
     }
 
     [Fact]
