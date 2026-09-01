@@ -257,7 +257,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             Log.Error("ui: apply settings failed", ex);
-            ReportOperationalError("settings-save", "Couldn’t save settings.");
             return false;
         }
 
@@ -270,7 +269,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _config.RecaptureProcessesOnLaunch = candidate.RecaptureProcessesOnLaunch;
         _config.UiFontFamily = candidate.UiFontFamily;
         ApplyUiFont();
-        ResolveOperationalError("settings-save");
         if (fontChanged)
             UiFontChanged?.Invoke(this, EventArgs.Empty);
         SetStatus("Configuration changed — Rescan to apply.");
