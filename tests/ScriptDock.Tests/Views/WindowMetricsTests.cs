@@ -169,6 +169,7 @@ public sealed class WindowMetricsTests
         Assert.DoesNotContain("{Binding Status}", axaml);
         Assert.Contains("Text=\"{Binding CatalogResult}\"", axaml);
         Assert.Contains("Text=\"{Binding RecentActionError}\"", axaml);
+        Assert.Contains("AutomationProperties.LiveSetting=\"{Binding RecentActionLiveSetting}\"", axaml);
         Assert.Contains("Command=\"{Binding DismissRecentActionErrorCommand}\"", axaml);
         Assert.Contains("AutomationProperties.LiveSetting=\"Polite\"", axaml);
     }

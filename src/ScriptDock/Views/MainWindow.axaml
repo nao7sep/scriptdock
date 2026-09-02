@@ -263,10 +263,10 @@
                         </Border>
                         <!-- Per-process action failures are owned by the selected run's detail/console.
                              They persist across selection changes and are never duplicated in global chrome. -->
-                        <Border DockPanel.Dock="Top" IsVisible="{Binding HasRecentActionError}"
+                        <Border x:Name="RecentActionErrorBar" DockPanel.Dock="Top" IsVisible="{Binding HasRecentActionError}"
                                 Background="{StaticResource ErrorSurfaceBrush}" BorderBrush="{StaticResource DangerTextBrush}"
                                 BorderThickness="0,0,0,1" Padding="10,6"
-                                AutomationProperties.LiveSetting="Assertive">
+                                AutomationProperties.LiveSetting="{Binding RecentActionLiveSetting}">
                             <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="7">
                                 <Path Grid.Column="0" Width="14" Height="14" Stretch="Uniform"
                                       Stroke="{StaticResource DangerTextBrush}" StrokeThickness="1.7"

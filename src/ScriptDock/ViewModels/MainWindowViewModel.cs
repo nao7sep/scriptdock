@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -71,6 +72,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(HasMultipleRecentActionErrors))]
     [NotifyPropertyChangedFor(nameof(RecentActionErrorCountText))]
     private int _recentActionErrorCount;
+
+    [ObservableProperty]
+    private AutomationLiveSetting _recentActionLiveSetting = AutomationLiveSetting.Off;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasRunning))]
@@ -777,7 +781,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             errors[index] = new ProcessActionErrorEntry(key, message);
         else
             errors.Add(new ProcessActionErrorEntry(key, message));
-        RefreshRecentActionErrorProjection();
+        RefreshRecentActionErrorProjection(
+            announce: SelectedRecentEntry is { } selected && PathIdentity.Same(selected.Path, path));
     }
 
     private void ResolveProcessActionError(string path, string key)
@@ -830,12 +835,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         RefreshRecentActionErrorProjection();
     }
 
-    private void RefreshRecentActionErrorProjection()
+    private void RefreshRecentActionErrorProjection(bool announce = false)
     {
         var pathKey = SelectedRecentEntry is { } selected ? PathIdentity.Key(selected.Path) : null;
         var errors = pathKey is not null && _processActionErrors.TryGetValue(pathKey, out var found)
             ? found
             : null;
+        RecentActionLiveSetting = announce && errors?.Count > 0
+            ? AutomationLiveSetting.Assertive
+            : AutomationLiveSetting.Off;
         RecentActionError = errors?.FirstOrDefault()?.Message ?? string.Empty;
         RecentActionErrorCount = errors?.Count ?? 0;
     }
