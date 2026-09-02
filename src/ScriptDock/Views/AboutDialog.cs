@@ -4,6 +4,7 @@ using Avalonia.Data;
 using System.Reflection;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -14,19 +15,65 @@ namespace ScriptDock.Views;
 public sealed class AboutDialog : DialogBase
 {
     private const string GitHubUrl = "https://github.com/nao7sep/scriptdock";
+    private readonly System.Func<string, bool> _openExternal;
+    private readonly Border _launchError;
+    private readonly TextBlock _launchErrorMessage;
 
-    public AboutDialog()
+    public AboutDialog() : this(ExternalLauncher.Open) { }
+
+    internal AboutDialog(System.Func<string, bool> openExternal)
     {
+        _openExternal = openExternal;
         Width = 420;
         Title = "About ScriptDock";
 
         var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "unknown";
 
         var githubButton = new Button { Content = ExternalLinkLabel("GitHub"), Classes = { "tool" } };
-        githubButton.Click += (_, _) => ExternalLauncher.Open(GitHubUrl);
+        githubButton.Click += (_, _) => OpenExternal(GitHubUrl, "GitHub");
 
         var issuesButton = new Button { Content = ExternalLinkLabel("Report Issue"), Classes = { "tool" } };
-        issuesButton.Click += (_, _) => ExternalLauncher.Open($"{GitHubUrl}/issues");
+        issuesButton.Click += (_, _) => OpenExternal($"{GitHubUrl}/issues", "the issue tracker");
+
+        _launchErrorMessage = new TextBlock
+        {
+            FontSize = 12,
+            Foreground = Palette.Brush("TextPrimaryBrush"),
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var launchErrorGrid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"),
+            ColumnSpacing = 7,
+            Children =
+            {
+                ErrorMark(),
+                new TextBlock
+                {
+                    Text = "Error",
+                    FontSize = 12,
+                    FontWeight = FontWeight.SemiBold,
+                    Foreground = Palette.Brush("DangerTextBrush"),
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
+                _launchErrorMessage,
+            },
+        };
+        Grid.SetColumn(launchErrorGrid.Children[1], 1);
+        Grid.SetColumn(launchErrorGrid.Children[2], 2);
+        _launchError = new Border
+        {
+            Background = Palette.Brush("ErrorSurfaceBrush"),
+            BorderBrush = Palette.Brush("DangerTextBrush"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(9, 7),
+            Margin = new Thickness(0, 0, 0, 16),
+            IsVisible = false,
+            Child = launchErrorGrid,
+        };
+        AutomationProperties.SetLiveSetting(_launchError, AutomationLiveSetting.Assertive);
 
         var panel = new StackPanel
         {
@@ -49,6 +96,7 @@ public sealed class AboutDialog : DialogBase
                     Margin = new Thickness(0, 0, 0, 16),
                     Children = { githubButton, issuesButton },
                 },
+                _launchError,
                 new TextBlock { Text = "© 2026 Yoshinao Inoguchi — MIT License", FontSize = 12, Foreground = Palette.Brush("TextSecondaryBrush") },
             },
         };
@@ -59,6 +107,30 @@ public sealed class AboutDialog : DialogBase
     }
 
     public static Task ShowAsync(Window owner) => new AboutDialog().ShowDialog(owner);
+
+    private void OpenExternal(string url, string destination)
+    {
+        if (_openExternal(url))
+        {
+            _launchError.IsVisible = false;
+            return;
+        }
+
+        _launchErrorMessage.Text = $"Couldn’t open {destination}. Check the log and try again.";
+        _launchError.IsVisible = true;
+    }
+
+    private static Shapes.Path ErrorMark() => new()
+    {
+        Width = 14,
+        Height = 14,
+        Stretch = Stretch.Uniform,
+        Stroke = Palette.Brush("DangerTextBrush"),
+        StrokeThickness = 1.7,
+        StrokeLineCap = PenLineCap.Round,
+        StrokeJoin = PenLineJoin.Round,
+        Data = Geometry.Parse("M7,1 L13,13 H1 Z M7,5 V8.5 M7,11 V11.1"),
+    };
 
     /// <summary>
     /// A button label with a trailing external-link mark drawn as a vector rather than the

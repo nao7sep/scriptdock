@@ -174,8 +174,81 @@ public sealed class MainWindowViewModelTests
 
         Assert.Empty(runner.StartCalls);
         Assert.Empty(state.RecentlyRun);
-        Assert.Contains("no replacement", vm.OperationalError, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("no replacement", vm.RecentActionError, StringComparison.OrdinalIgnoreCase);
+        Assert.True(vm.HasRecentActionError);
+        Assert.False(vm.HasOperationalError);
+    }
+
+    [Fact]
+    public async Task ProcessActionFailures_StayWithTheirPath_AndSuccessfulRetryClearsOnlyItsOperation()
+    {
+        var (vm, runner) = BuildVm();
+        runner.TerminateResult = false;
+        var process = runner.AddRunning("/x/live.command");
+        var entry = new RecentEntry("/x/live.command", "live.command", DateTimeOffset.UtcNow, process);
+        var other = new RecentEntry("/x/other.command", "other.command", DateTimeOffset.UtcNow, process: null);
+        vm.ConfirmHandler = new ConfirmSpy(result: true).Handle;
+        vm.SelectedRecentEntry = entry;
+
+        await vm.StopEntryCommand.ExecuteAsync(entry);
+        await vm.SendInputAsync("hello");
+
+        Assert.Equal(2, vm.RecentActionErrorCount);
+        Assert.True(vm.HasMultipleRecentActionErrors);
+        Assert.False(vm.HasOperationalError);
+
+        vm.SelectedRecentEntry = other;
+        Assert.False(vm.HasRecentActionError);
+        vm.SelectedRecentEntry = entry;
+        Assert.True(vm.HasRecentActionError);
+
+        vm.DismissRecentActionErrorCommand.Execute(null);
+        Assert.Equal(1, vm.RecentActionErrorCount);
+        Assert.Contains("send input", vm.RecentActionError, StringComparison.OrdinalIgnoreCase);
+
+        runner.TerminateResult = true;
+        await vm.StopEntryCommand.ExecuteAsync(entry);
+        Assert.False(vm.HasRecentActionError);
+    }
+
+    [Fact]
+    public async Task StoppingAProcess_ClearsObsoleteRuntimeErrors_ButKeepsItsIndependentHistoryFailure()
+    {
+        var config = new AppConfig();
+        var state = new AppState();
+        var runner = new FakeProcessRunner();
+        var vm = new MainWindowViewModel(
+            new FakeJsonStore<AppConfig> { Value = config },
+            new FakeJsonStore<AppState> { Value = state, ThrowOnSave = true },
+            config,
+            state,
+            new ScriptScanner(),
+            runner);
+        vm.ConfirmHandler = new ConfirmSpy(result: true).Handle;
+
+        await vm.RunScriptCommand.ExecuteAsync(new ScriptItem("/x/live.command") { DisplayName = "live.command" });
+        await vm.SendInputAsync("hello");
+        Assert.Equal(2, vm.RecentActionErrorCount);
+
+        await vm.StopEntryCommand.ExecuteAsync(vm.SelectedRecentEntry);
+
+        Assert.Equal(1, vm.RecentActionErrorCount);
+        Assert.Contains("history", vm.RecentActionError, StringComparison.OrdinalIgnoreCase);
+        Assert.False(vm.HasOperationalError);
+    }
+
+    [Fact]
+    public void ShellActionFailures_KeepIndependentKeysInTheGlobalQueue()
+    {
+        var (vm, _) = BuildVm();
+
+        vm.ReportShellActionError("open-about", "About failed.");
+        vm.ReportShellActionError("reveal-logs", "Reveal failed.");
+        vm.ResolveShellActionError("open-about");
+
         Assert.True(vm.HasOperationalError);
+        Assert.Equal(1, vm.OperationalErrorCount);
+        Assert.Equal("Reveal failed.", vm.OperationalError);
     }
 
     [Fact]
@@ -213,9 +286,23 @@ public sealed class MainWindowViewModelTests
         Assert.False(vm.TryApplySettings(draft));
         Assert.Equal(0, vm.OperationalErrorCount);
 
-        await vm.RescanCommand.ExecuteAsync(null); // ordinary successful activity updates Status only
+        await vm.RescanCommand.ExecuteAsync(null); // ordinary successful activity stays with the Scripts pane
         Assert.False(vm.HasOperationalError);
         Assert.Equal(0, vm.OperationalErrorCount);
+        Assert.True(vm.HasCatalogResult);
+    }
+
+    [Fact]
+    public void TryApplySettings_SurfacesTheRescanConsequenceAtTheCatalogOwner()
+    {
+        var (vm, _) = BuildVm();
+        var draft = vm.CreateSettingsDraft();
+        draft.UiFontFamily = "Helvetica";
+
+        Assert.True(vm.TryApplySettings(draft));
+
+        Assert.Contains("Rescan", vm.CatalogResult, StringComparison.Ordinal);
+        Assert.False(vm.HasOperationalError);
     }
 
     [Fact]

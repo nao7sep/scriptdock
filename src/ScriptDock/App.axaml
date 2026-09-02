@@ -25,6 +25,7 @@
         <Color x:Key="AccentForegroundDisabled">#B4C4C8</Color>
         <Color x:Key="Danger">#BE3455</Color>
         <Color x:Key="DangerHover">#C83A58</Color>
+        <Color x:Key="ErrorSurface">#2B171B</Color>
 
         <!-- State colours. DangerText is danger red as *text* on a dark surface (validation
              errors, removed scripts) — lighter than the danger button fill for legibility.
@@ -59,6 +60,7 @@
         <SolidColorBrush x:Key="AccentForegroundDisabledBrush" Color="{StaticResource AccentForegroundDisabled}"/>
         <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource Danger}"/>
         <SolidColorBrush x:Key="DangerHoverBrush" Color="{StaticResource DangerHover}"/>
+        <SolidColorBrush x:Key="ErrorSurfaceBrush" Color="{StaticResource ErrorSurface}"/>
 
         <SolidColorBrush x:Key="DangerTextBrush" Color="{StaticResource DangerText}"/>
         <SolidColorBrush x:Key="ScriptNewBrush" Color="{StaticResource ScriptNew}"/>
@@ -209,6 +211,10 @@
         <Style Selector="Button.tool">
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style Selector="TextBox.invalid">
+            <Setter Property="BorderBrush" Value="{StaticResource DangerTextBrush}"/>
+            <Setter Property="BorderThickness" Value="2"/>
         </Style>
 
         <!-- Lists are recessed content wells; selected rows use a quiet cyan tint, not a solid accent. -->

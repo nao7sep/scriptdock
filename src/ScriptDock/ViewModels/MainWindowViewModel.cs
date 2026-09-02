@@ -5,7 +5,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
-using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -50,7 +49,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty] private bool _showHidden;
     [ObservableProperty] private bool _isScanning;
-    [ObservableProperty] private string _status = "Ready.";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCatalogResult))]
+    private string _catalogResult = string.Empty;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasOperationalError))]
     private string _operationalError = string.Empty;
@@ -63,6 +64,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private string _selectedOutput = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasRecentActionError))]
+    private string _recentActionError = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasMultipleRecentActionErrors))]
+    [NotifyPropertyChangedFor(nameof(RecentActionErrorCountText))]
+    private int _recentActionErrorCount;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasRunning))]
     private int _runningCount;
 
@@ -73,9 +83,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(HasHidden))]
     private int _hiddenCount;
 
-    // Severity of the current status message, driving the status-bar text colour (see StatusBrush).
-    private StatusKind _statusKind = StatusKind.Info;
     private readonly List<OperationalErrorEntry> _operationalErrors = [];
+    private readonly Dictionary<string, List<ProcessActionErrorEntry>> _processActionErrors =
+        new(PathIdentity.Comparer);
+    private DispatcherTimer? _catalogResultTimer;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ToggleHiddenLabel))]
@@ -117,6 +128,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public bool HasOperationalError => OperationalError.Length > 0;
     public bool HasMultipleOperationalErrors => OperationalErrorCount > 1;
     public string OperationalErrorCountText => $"{OperationalErrorCount} errors";
+    public bool HasCatalogResult => CatalogResult.Length > 0;
+    public bool HasRecentActionError => RecentActionError.Length > 0;
+    public bool HasMultipleRecentActionErrors => RecentActionErrorCount > 1;
+    public string RecentActionErrorCountText => $"{RecentActionErrorCount} errors";
 
     public double? SavedRecentWidth => _state.RecentPaneWidth;
     public double? SavedConsoleHeight => _state.ConsoleHeight;
@@ -136,14 +151,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// state. Single-selection list, so the one button serves both directions (Hide a visible script,
     /// Show a hidden one). Defaults to "Hide" when nothing is selected.</summary>
     public string ToggleHiddenLabel => SelectedScript?.IsHidden == true ? "Show" : "Hide";
-
-    /// <summary>Status-bar text colour by the current message's severity: accent while busy, danger on
-    /// failure, secondary otherwise. Resolved from the shared palette.</summary>
-    public IBrush StatusBrush => _statusKind switch
-    {
-        StatusKind.Busy => Palette.Brush("AccentBrush"),
-        _ => Palette.Brush("TextSecondaryBrush"),
-    };
 
     /// <summary>Status-bar fact toggles: the running dot/segment and the hidden segment show only when non-zero.</summary>
     public bool HasRunning => RunningCount > 0;
@@ -189,6 +196,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public void Shutdown() => Guard("shutdown", () =>
     {
         _outputTimer?.Stop();
+        _catalogResultTimer?.Stop();
         _scanCts?.Cancel(); // don't let a slow scan keep the closing window's work alive
         _runner.ShutdownAll(_config.KillProcessesOnClose);
         PersistRunningSnapshot(); // record what is still running (or none, if killed) for next launch
@@ -271,24 +279,30 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         ApplyUiFont();
         if (fontChanged)
             UiFontChanged?.Invoke(this, EventArgs.Empty);
-        SetStatus("Configuration changed — Rescan to apply.");
+        ShowCatalogResult("Configuration changed — Rescan to apply.");
         return true;
     }
 
     /// <summary>Sends a line to the selected running script's stdin (from the console input field).</summary>
     public async Task<bool> SendInputAsync(string text)
     {
+        var entry = SelectedRecentEntry;
+        if (entry?.Process is not { } process)
+            return false;
+
         try
         {
-            var sent = SelectedRecentEntry?.Process is { } process && await process.SendInputAsync(text);
+            var sent = await process.SendInputAsync(text);
             if (sent)
-                ResolveOperationalError("send-input");
+                ResolveProcessActionError(entry.Path, "send-input");
+            else
+                ReportProcessActionError(entry.Path, "send-input", "Couldn’t send input. Try again while the script is running.");
             return sent;
         }
         catch (Exception ex)
         {
             Log.Error("ui: send input failed", ex);
-            ReportOperationalError("send-input", "Couldn’t send input.");
+            ReportProcessActionError(entry.Path, "send-input", "Couldn’t send input. Try again while the script is running.");
             return false;
         }
     }
@@ -303,7 +317,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _scanCts = cts;
 
         IsScanning = true;
-        SetStatus("Scanning…", StatusKind.Busy);
+        ShowCatalogResult("Scanning…");
         try
         {
             var roots = _config.RootDirs.ToList();
@@ -325,7 +339,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             _stateStore.Save(_state);
 
             ResolveOperationalError("scan");
-            SetStatus(ScanResultMessage(diff));
+            ShowCatalogResult(ScanResultMessage(diff), transient: true);
         }
         catch (OperationCanceledException)
         {
@@ -334,7 +348,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             Log.Error("ui: rescan failed", ex);
-            SetStatus("Scan finished.");
+            ClearCatalogResult();
             ReportOperationalError("scan", "Scan failed — see logs.");
         }
         finally
@@ -351,72 +365,98 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task RunScript(ScriptItem? item) => await GuardAsync("run", async () =>
+    private async Task RunScript(ScriptItem? item)
     {
         if (item is not null)
             await RunByPath(item.Path, item.DisplayName);
-    });
+    }
 
     [RelayCommand]
-    private async Task RunOrRestart(RecentEntry? entry) => await GuardAsync("run", async () =>
+    private async Task RunOrRestart(RecentEntry? entry)
     {
         if (entry is not null)
             await RunByPath(entry.Path, entry.DisplayName);
-    });
+    }
 
     [RelayCommand]
-    private async Task StopEntry(RecentEntry? entry) => await GuardAsync("stop", async () =>
+    private async Task StopEntry(RecentEntry? entry)
     {
         if (entry?.Process is not { State: RunState.Running })
             return;
 
-        // Stopping kills the live run, so confirm first.
-        if (!await ConfirmAsync("Stop Script", $"“{entry.DisplayName}” is running. Stop it?", "Stop"))
-            return;
+        try
+        {
+            // Stopping kills the live run, so confirm first.
+            if (!await ConfirmAsync("Stop Script", $"“{entry.DisplayName}” is running. Stop it?", "Stop"))
+                return;
 
-        if (!await _runner.TerminateAsync(entry.Process))
-            ReportOperationalError("stop", "The script did not stop; ScriptDock is still tracking it.");
-        else
-            ResolveOperationalError("stop");
-    });
+            if (!await _runner.TerminateAsync(entry.Process))
+                ReportProcessActionError(entry.Path, "stop", "The script did not stop; ScriptDock is still tracking it.");
+            else
+                ResolveStoppedProcessActionErrors(entry.Path);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("ui: stop failed", ex, new { script = entry.Path });
+            ReportProcessActionError(entry.Path, "stop", "The script did not stop; ScriptDock is still tracking it.");
+        }
+    }
 
     [RelayCommand]
-    private async Task DismissEntry(RecentEntry? entry) => await GuardAsync("dismiss", async () =>
+    private async Task DismissEntry(RecentEntry? entry)
     {
         if (entry is null)
             return;
 
-        // Only dismissing a *running* entry destroys work, so confirm just that case; dismissing a
-        // finished entry only drops it from the list (it can be re-run), so it stays immediate.
-        if (entry.Process is { State: RunState.Running } &&
-            !await ConfirmAsync("Dismiss Script", $"“{entry.DisplayName}” is running. Stop and dismiss it?", "Dismiss"))
-            return;
-
-        // Remember the dismissed row's position so focus lands on its neighbour, not nowhere.
-        var index = Recent.IndexOf(entry);
-
-        if (entry.Process is not null)
+        try
         {
-            if (entry.Process.State == RunState.Running && !await _runner.TerminateAsync(entry.Process))
-            {
-                ReportOperationalError("dismiss", "The script did not stop; it was not dismissed.");
+            // Only dismissing a *running* entry destroys work, so confirm just that case; dismissing a
+            // finished entry only drops it from the list (it can be re-run), so it stays immediate.
+            if (entry.Process is { State: RunState.Running } &&
+                !await ConfirmAsync("Dismiss Script", $"“{entry.DisplayName}” is running. Stop and dismiss it?", "Dismiss"))
                 return;
+
+            // Remember the dismissed row's position so focus lands on its neighbour, not nowhere.
+            var index = Recent.IndexOf(entry);
+
+            if (entry.Process is not null)
+            {
+                if (entry.Process.State == RunState.Running && !await _runner.TerminateAsync(entry.Process))
+                {
+                    ReportProcessActionError(entry.Path, "dismiss", "The script did not stop; it was not dismissed.");
+                    return;
+                }
+                _runner.Dismiss(entry.Process);
             }
-            _runner.Dismiss(entry.Process);
+
+            var previousRecents = _state.RecentlyRun;
+            _state.RecentlyRun = previousRecents
+                .Where(r => !PathIdentity.Same(r.Path, entry.Path))
+                .ToList();
+            try
+            {
+                _stateStore.Save(_state);
+            }
+            catch
+            {
+                _state.RecentlyRun = previousRecents;
+                throw;
+            }
+
+            _processActionErrors.Remove(PathIdentity.Key(entry.Path));
+            Log.Info("ui: dismiss", new { script = entry.Path });
+            RebuildRecent();
+
+            // The dismissed path is gone, so RebuildRecent cleared the selection; move it to the
+            // neighbour at that position instead (the next entry, or the previous if it was last).
+            SelectedRecentEntry = index < 0 || Recent.Count == 0 ? null : Recent[Math.Min(index, Recent.Count - 1)];
         }
-
-        _state.RecentlyRun = _state.RecentlyRun
-            .Where(r => !PathIdentity.Same(r.Path, entry.Path))
-            .ToList();
-        _stateStore.Save(_state);
-        ResolveOperationalError("dismiss");
-        Log.Info("ui: dismiss", new { script = entry.Path });
-        RebuildRecent();
-
-        // The dismissed path is gone, so RebuildRecent cleared the selection; move it to the
-        // neighbour at that position instead (the next entry, or the previous if it was last).
-        SelectedRecentEntry = index < 0 || Recent.Count == 0 ? null : Recent[Math.Min(index, Recent.Count - 1)];
-    });
+        catch (Exception ex)
+        {
+            Log.Error("ui: dismiss failed", ex, new { script = entry.Path });
+            ReportProcessActionError(entry.Path, "dismiss", "The script could not be dismissed. Check the log and try again.");
+        }
+    }
 
     [RelayCommand]
     private void ToggleHidden(ScriptItem? item) => Guard("toggle hidden", () =>
@@ -448,37 +488,71 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(CanSendInput));
         OnPropertyChanged(nameof(HasSelection));
         RefreshOutput();
+        RefreshRecentActionErrorProjection();
     }
 
     private async Task RunByPath(string path, string displayName)
     {
-        var running = _runner.Active.FirstOrDefault(p =>
-            PathIdentity.Same(p.ScriptPath, path) && p.State == RunState.Running);
+        ScriptProcess? started;
+        try
+        {
+            var running = _runner.Active.FirstOrDefault(p =>
+                PathIdentity.Same(p.ScriptPath, path) && p.State == RunState.Running);
 
-        if (running is not null)
-        {
-            // Running an already-running script restarts it — that kills the live run, so confirm.
-            if (!await ConfirmAsync("Restart Script", $"“{displayName}” is already running. Restart it?", "Restart"))
-                return;
-            if (await _runner.RestartAsync(running) is null)
+            if (running is not null)
             {
-                ReportOperationalError("restart", "The existing script did not stop; no replacement was launched.");
-                return;
+                // Running an already-running script restarts it — that kills the live run, so confirm.
+                if (!await ConfirmAsync("Restart Script", $"“{displayName}” is already running. Restart it?", "Restart"))
+                    return;
+                started = await _runner.RestartAsync(running);
+                if (started is null)
+                {
+                    ReportProcessActionError(path, "restart", "The existing script did not stop; no replacement was launched.");
+                    RebuildRecent();
+                    SelectRecentPath(path);
+                    return;
+                }
+                ResolveProcessActionError(path, "restart");
             }
-            ResolveOperationalError("restart");
+            else
+            {
+                started = _runner.Start(path);
+            }
         }
-        else
+        catch (Exception ex)
         {
-            _runner.Start(path);
+            Log.Error("ui: run failed", ex, new { script = path });
+            EnsureRecentPath(path);
+            RebuildRecent();
+            SelectRecentPath(path);
+            ReportProcessActionError(path, "run", "The script could not be started. Check the log and try again.");
+            return;
         }
 
         _state.RecentlyRun = RecentRuns.Add(_state.RecentlyRun, path, DateTimeOffset.UtcNow);
-        _stateStore.Save(_state);
+        try
+        {
+            _stateStore.Save(_state);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("ui: save recent run failed", ex, new { script = path });
+            ReportProcessActionError(path, "recent-history", "The script ran, but its recent history could not be saved.");
+        }
         RebuildRecent();
 
         // Surface the just-run script: select its Recent entry so its output shows in the console
         // immediately (selection re-pins the console to the bottom).
-        SelectedRecentEntry = Recent.FirstOrDefault(e => PathIdentity.Same(e.Path, path));
+        SelectRecentPath(path);
+
+        // The row is stable by path, but a successful Run/Restart produces a new process generation.
+        // Failures tied to the prior process no longer have a surviving consequence on this row.
+        ResolveReplacedProcessActionErrors(path);
+
+        if (started.State == RunState.Failed)
+            ReportProcessActionError(path, "run", "The script could not be started. Check its output and try again.");
+        else
+            ResolveProcessActionError(path, "run");
 
         // A freshly started/restarted run owns a stdin pipe, so move keyboard focus to the console
         // input for immediate typing. Gated on CanSendInput so a non-input run never steals focus.
@@ -610,6 +684,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             var process = SelectedRecentEntry?.Process;
             var lines = process?.ReadOutput();
+            if (SelectedRecentEntry is { } selected)
+                ResolveProcessActionError(selected.Path, "read-output");
 
             // Cache hit: same run, same (reference-identical) tail as last render — nothing to redo.
             if (ReferenceEquals(process, _renderedOutputProcess) && ReferenceEquals(lines, _renderedOutputLines))
@@ -622,6 +698,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             Log.Warn("ui: refresh output failed", ex);
+            if (SelectedRecentEntry is { } selected)
+                ReportProcessActionError(selected.Path, "read-output", "Couldn’t refresh this script’s output.");
         }
     }
 
@@ -639,27 +717,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    // Async sibling of Guard for the commands that await a confirmation before acting.
-    private async Task GuardAsync(string action, Func<Task> body)
-    {
-        try
-        {
-            await body();
-            ResolveOperationalError(action);
-        }
-        catch (Exception ex)
-        {
-            Log.Error($"ui: {action} failed", ex);
-            ReportOperationalError(action, $"{action} failed — see logs.");
-        }
-    }
-
     // Ask the view to confirm a destructive action. With no handler attached (tests) there is no UI
     // to ask, so the action proceeds.
     private async Task<bool> ConfirmAsync(string title, string message, string confirmLabel) =>
         ConfirmHandler is null || await ConfirmHandler(new ConfirmRequest(title, message, confirmLabel));
 
     private sealed record OperationalErrorEntry(string Key, string Message);
+    private sealed record ProcessActionErrorEntry(string Key, string Message);
+
+    internal void ReportShellActionError(string key, string message) => ReportOperationalError(key, message);
+
+    internal void ResolveShellActionError(string key) => ResolveOperationalError(key);
 
     private void ReportOperationalError(string key, string message)
     {
@@ -695,17 +763,124 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         OperationalErrorCount = _operationalErrors.Count;
     }
 
-    // Set the replaceable status-bar activity text and its presentation together. Operational
-    // failures use the independent persistent queue above, so an ordinary result cannot erase one.
-    private void SetStatus(string text, StatusKind kind = StatusKind.Info)
+    private void ReportProcessActionError(string path, string key, string message)
     {
-        _statusKind = kind;
-        Status = text;
-        OnPropertyChanged(nameof(StatusBrush));
+        var pathKey = PathIdentity.Key(path);
+        if (!_processActionErrors.TryGetValue(pathKey, out var errors))
+        {
+            errors = [];
+            _processActionErrors[pathKey] = errors;
+        }
+
+        var index = errors.FindIndex(error => error.Key == key);
+        if (index >= 0)
+            errors[index] = new ProcessActionErrorEntry(key, message);
+        else
+            errors.Add(new ProcessActionErrorEntry(key, message));
+        RefreshRecentActionErrorProjection();
     }
 
-    // The status line after a scan: the deltas only ("3 new, 1 removed" / "Up to date"), since the
-    // status bar's right side already shows the total script count.
+    private void ResolveProcessActionError(string path, string key)
+    {
+        var pathKey = PathIdentity.Key(path);
+        if (_processActionErrors.TryGetValue(pathKey, out var errors))
+        {
+            errors.RemoveAll(error => error.Key == key);
+            if (errors.Count == 0)
+                _processActionErrors.Remove(pathKey);
+        }
+        RefreshRecentActionErrorProjection();
+    }
+
+    private void ResolveStoppedProcessActionErrors(string path)
+    {
+        RemoveProcessActionErrors(path, ["send-input", "stop"]);
+    }
+
+    private void ResolveReplacedProcessActionErrors(string path)
+    {
+        RemoveProcessActionErrors(path, ["send-input", "stop", "restart", "run", "read-output"]);
+    }
+
+    private void RemoveProcessActionErrors(string path, IReadOnlyCollection<string> keys)
+    {
+        var pathKey = PathIdentity.Key(path);
+        if (_processActionErrors.TryGetValue(pathKey, out var errors))
+        {
+            errors.RemoveAll(error => keys.Contains(error.Key));
+            if (errors.Count == 0)
+                _processActionErrors.Remove(pathKey);
+        }
+        RefreshRecentActionErrorProjection();
+    }
+
+    [RelayCommand]
+    private void DismissRecentActionError()
+    {
+        if (SelectedRecentEntry is not { } selected)
+            return;
+
+        var pathKey = PathIdentity.Key(selected.Path);
+        if (_processActionErrors.TryGetValue(pathKey, out var errors) && errors.Count > 0)
+        {
+            errors.RemoveAt(0);
+            if (errors.Count == 0)
+                _processActionErrors.Remove(pathKey);
+        }
+        RefreshRecentActionErrorProjection();
+    }
+
+    private void RefreshRecentActionErrorProjection()
+    {
+        var pathKey = SelectedRecentEntry is { } selected ? PathIdentity.Key(selected.Path) : null;
+        var errors = pathKey is not null && _processActionErrors.TryGetValue(pathKey, out var found)
+            ? found
+            : null;
+        RecentActionError = errors?.FirstOrDefault()?.Message ?? string.Empty;
+        RecentActionErrorCount = errors?.Count ?? 0;
+    }
+
+    private void EnsureRecentPath(string path)
+    {
+        if (_state.RecentlyRun.Any(run => PathIdentity.Same(run.Path, path)))
+            return;
+        _state.RecentlyRun = RecentRuns.Add(_state.RecentlyRun, path, DateTimeOffset.UtcNow);
+    }
+
+    private void SelectRecentPath(string path) =>
+        SelectedRecentEntry = Recent.FirstOrDefault(entry => PathIdentity.Same(entry.Path, path));
+
+    private void ShowCatalogResult(string text, bool transient = false)
+    {
+        _catalogResultTimer?.Stop();
+        _catalogResultTimer = null;
+        CatalogResult = text;
+        if (!transient)
+            return;
+
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (ReferenceEquals(_catalogResultTimer, timer))
+            {
+                _catalogResultTimer = null;
+                CatalogResult = string.Empty;
+            }
+        };
+        _catalogResultTimer = timer;
+        timer.Start();
+    }
+
+    private void ClearCatalogResult()
+    {
+        _catalogResultTimer?.Stop();
+        _catalogResultTimer = null;
+        CatalogResult = string.Empty;
+    }
+
+    // The Scripts-pane result after a scan: the deltas only ("3 new, 1 removed" / "Up to date"),
+    // since the standing status bar already shows the total script count.
     private static string ScanResultMessage(ScanDiff diff)
     {
         var added = diff.Added.Count;

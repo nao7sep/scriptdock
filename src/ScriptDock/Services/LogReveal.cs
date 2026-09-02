@@ -25,21 +25,29 @@ internal readonly record struct LogRevealTarget(string Path, LogRevealTargetKind
 /// </summary>
 public static class LogReveal
 {
-    public static void Reveal()
+    public static bool Reveal() => Reveal(Process.Start);
+
+    internal static bool Reveal(Func<ProcessStartInfo, Process?> start)
     {
         try
         {
             var target = SelectTarget(StorageRoot.LogsDirectory, Log.SessionLogPath, Log.Flush);
-            if (target.Kind == LogRevealTargetKind.File)
-                RevealInFileManager(target.Path);
-            else
-                OpenDirectoryInFileManager(target.Path);
+            var opened = OpenTarget(target, start);
+            if (!opened)
+                Log.Error("reveal log: no process returned", new { target = target.Path, kind = target.Kind.ToString() });
+            return opened;
         }
         catch (Exception ex)
         {
             Log.Error("reveal log: failed", ex);
+            return false;
         }
     }
+
+    internal static bool OpenTarget(LogRevealTarget target, Func<ProcessStartInfo, Process?> start) =>
+        target.Kind == LogRevealTargetKind.File
+            ? RevealInFileManager(target.Path, start)
+            : OpenDirectoryInFileManager(target.Path, start);
 
     internal static LogRevealTarget SelectTarget(string logsDirectory, string? sessionLogPath, Action flush)
     {
@@ -74,15 +82,16 @@ public static class LogReveal
         }
     }
 
-    private static void RevealInFileManager(string path)
+    private static bool RevealInFileManager(string path, Func<ProcessStartInfo, Process?> start)
     {
+        Process? process;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
             // `open -R` selects and reveals the item in Finder.
             var psi = new ProcessStartInfo("open") { UseShellExecute = false };
             psi.ArgumentList.Add("-R");
             psi.ArgumentList.Add(path);
-            Process.Start(psi)?.Dispose();
+            process = start(psi);
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
@@ -94,16 +103,20 @@ public static class LogReveal
                 UseShellExecute = false,
                 Arguments = $"/select,\"{path}\"",
             };
-            Process.Start(psi)?.Dispose();
+            process = start(psi);
         }
         else
         {
-            OpenDirectoryInFileManager(Path.GetDirectoryName(path) ?? path);
+            return OpenDirectoryInFileManager(Path.GetDirectoryName(path) ?? path, start);
         }
+
+        process?.Dispose();
+        return process is not null;
     }
 
-    private static void OpenDirectoryInFileManager(string dir)
+    private static bool OpenDirectoryInFileManager(string dir, Func<ProcessStartInfo, Process?> start)
     {
-        Process.Start(new ProcessStartInfo(dir) { UseShellExecute = true })?.Dispose();
+        using var process = start(new ProcessStartInfo(dir) { UseShellExecute = true });
+        return process is not null;
     }
 }

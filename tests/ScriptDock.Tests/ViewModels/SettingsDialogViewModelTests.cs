@@ -136,6 +136,21 @@ public sealed class SettingsDialogViewModelTests
         Assert.True(vm.AddExtension(".sh"));
         Assert.Contains(".sh", vm.Extensions);
         Assert.Equal(string.Empty, vm.ExtensionError);
+        Assert.False(vm.HasExtensionError);
+        Assert.Equal(string.Empty, vm.ExtensionItemStatus);
+    }
+
+    [Fact]
+    public void AddExtension_BlankAndDuplicateExposeInvalidState()
+    {
+        var vm = new SettingsDialogViewModel(Seed());
+
+        Assert.False(vm.AddExtension("  "));
+        Assert.True(vm.HasExtensionError);
+        Assert.Equal("Invalid", vm.ExtensionItemStatus);
+
+        Assert.False(vm.AddExtension(".COMMAND"));
+        Assert.Contains("already", vm.ExtensionError, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -165,6 +180,21 @@ public sealed class SettingsDialogViewModelTests
 
         Assert.True(vm.AddIgnorePattern("/obj/"));
         Assert.Equal(string.Empty, vm.PatternError);
+        Assert.False(vm.HasPatternError);
+        Assert.Equal(string.Empty, vm.PatternItemStatus);
+    }
+
+    [Fact]
+    public void AddIgnorePattern_BlankAndDuplicateExposeInvalidState()
+    {
+        var vm = new SettingsDialogViewModel(Seed());
+
+        Assert.False(vm.AddIgnorePattern("  "));
+        Assert.True(vm.HasPatternError);
+        Assert.Equal("Invalid", vm.PatternItemStatus);
+
+        Assert.False(vm.AddIgnorePattern("/NODE_MODULES/"));
+        Assert.Contains("already", vm.PatternError, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

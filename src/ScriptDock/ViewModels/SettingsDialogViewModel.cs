@@ -33,12 +33,17 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     public ObservableCollection<string> IgnorePatterns { get; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasExtensionError))]
+    [NotifyPropertyChangedFor(nameof(ExtensionItemStatus))]
     private string _extensionError = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPatternError))]
+    [NotifyPropertyChangedFor(nameof(PatternItemStatus))]
     private string _patternError = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSaveError))]
     private string _saveError = string.Empty;
 
     // UI (chrome) font family. Family only; blank = the bundled default.
@@ -84,6 +89,12 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         RecaptureProcessesOnLaunch != _originalRecaptureProcessesOnLaunch ||
         UiFontFamily != _originalUiFontFamily;
 
+    public bool HasExtensionError => ExtensionError.Length > 0;
+    public bool HasPatternError => PatternError.Length > 0;
+    public bool HasSaveError => SaveError.Length > 0;
+    public string ExtensionItemStatus => HasExtensionError ? "Invalid" : string.Empty;
+    public string PatternItemStatus => HasPatternError ? "Invalid" : string.Empty;
+
     public bool AddRootDir(string value)
     {
         var trimmed = value.Trim();
@@ -126,7 +137,10 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     {
         var trimmed = value.Trim();
         if (trimmed.Length == 0)
+        {
+            ExtensionError = "Enter an extension.";
             return false;
+        }
 
         // An extension is a single token, so reject a pasted multi-token / multi-line value rather
         // than silently forming a junk extension. This is validation, which the text-cleanup
@@ -145,7 +159,10 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         // (OrdinalIgnoreCase, mirroring the case-insensitive filesystems it runs on), so
         // ".command" and ".Command" are one entry rather than two that match the same files.
         if (Extensions.Any(e => string.Equals(e, trimmed, StringComparison.OrdinalIgnoreCase)))
+        {
+            ExtensionError = "That extension is already listed.";
             return false;
+        }
 
         Extensions.Add(trimmed);
         ExtensionError = string.Empty;
@@ -156,7 +173,10 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     {
         var trimmed = value.Trim();
         if (trimmed.Length == 0)
+        {
+            PatternError = "Enter an ignore pattern.";
             return false;
+        }
 
         // A pattern is a single-line regex. An interior line break means a multi-line paste leaked
         // in; reject it rather than flatten it — collapsing a newline to a space would silently
@@ -178,7 +198,10 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         // them IgnoreCase), so "/Node_modules/" and "/node_modules/" are one entry, not two that
         // prune the same directories.
         if (IgnorePatterns.Any(p => string.Equals(p, trimmed, StringComparison.OrdinalIgnoreCase)))
+        {
+            PatternError = "That pattern is already listed.";
             return false;
+        }
 
         IgnorePatterns.Add(trimmed);
         PatternError = string.Empty;

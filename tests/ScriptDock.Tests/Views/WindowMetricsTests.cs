@@ -162,6 +162,18 @@ public sealed class WindowMetricsTests
     }
 
     [Fact]
+    public void MainWindow_LeavesStandingFactsInStatus_AndOwnsOperationResultsAtTheirPanes()
+    {
+        var axaml = ReadMainWindowAxaml();
+
+        Assert.DoesNotContain("{Binding Status}", axaml);
+        Assert.Contains("Text=\"{Binding CatalogResult}\"", axaml);
+        Assert.Contains("Text=\"{Binding RecentActionError}\"", axaml);
+        Assert.Contains("Command=\"{Binding DismissRecentActionErrorCommand}\"", axaml);
+        Assert.Contains("AutomationProperties.LiveSetting=\"Polite\"", axaml);
+    }
+
+    [Fact]
     public void DisplayFromIntent_ShowsTheIntentWhenItFits()
     {
         // Window big enough to honour the user's intent: the display equals the intent exactly,

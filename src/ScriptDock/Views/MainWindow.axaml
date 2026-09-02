@@ -110,7 +110,7 @@
              and assertive live semantics announce newly actionable failures. -->
         <Border x:Name="OperationalErrorBar" Grid.Row="1"
                 IsVisible="{Binding HasOperationalError}"
-                Background="#2B171B" BorderBrush="{StaticResource DangerTextBrush}"
+                Background="{StaticResource ErrorSurfaceBrush}" BorderBrush="{StaticResource DangerTextBrush}"
                 BorderThickness="0,0,0,1" Padding="14,7"
                 AutomationProperties.LiveSetting="Assertive">
             <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="8">
@@ -137,25 +137,21 @@
             </Grid>
         </Border>
 
-        <!-- Status bar in its own bottom track so it stays reserved at every window size. Two zones:
-             left is the replaceable ordinary activity/result (secondary, or accent while busy); right is
-             the persistent fact cluster (total scripts,
-             hidden when any, and running with a green dot when something is live). -->
+        <!-- Status bar in its own bottom track so it stays reserved at every window size. It contains
+             standing facts only: total scripts, hidden scripts, and running scripts. One-off scan and
+             configuration outcomes belong to the Scripts pane below. -->
         <Border x:Name="StatusBar" Grid.Row="3" Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="14,6">
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding ScriptCount, StringFormat='{}{0} scripts'}" Foreground="{StaticResource TextSecondaryBrush}"/>
-                    <TextBlock Text="·" Foreground="{StaticResource BorderBrush}" IsVisible="{Binding HasHidden}"/>
-                    <TextBlock Text="{Binding HiddenCount, StringFormat='{}{0} hidden'}" Foreground="{StaticResource TextSecondaryBrush}" IsVisible="{Binding HasHidden}"/>
-                    <TextBlock Text="·" Foreground="{StaticResource BorderBrush}"/>
-                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                        <Ellipse Width="7" Height="7" Fill="{StaticResource RunningBrush}" VerticalAlignment="Center" IsVisible="{Binding HasRunning}"/>
-                        <TextBlock Text="{Binding RunningCount, StringFormat='{}{0} running'}" Foreground="{StaticResource TextSecondaryBrush}"/>
-                    </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <TextBlock Text="{Binding ScriptCount, StringFormat='{}{0} scripts'}" Foreground="{StaticResource TextSecondaryBrush}"/>
+                <TextBlock Text="·" Foreground="{StaticResource BorderBrush}" IsVisible="{Binding HasHidden}"/>
+                <TextBlock Text="{Binding HiddenCount, StringFormat='{}{0} hidden'}" Foreground="{StaticResource TextSecondaryBrush}" IsVisible="{Binding HasHidden}"/>
+                <TextBlock Text="·" Foreground="{StaticResource BorderBrush}"/>
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <Ellipse Width="7" Height="7" Fill="{StaticResource RunningBrush}" VerticalAlignment="Center" IsVisible="{Binding HasRunning}"/>
+                    <TextBlock Text="{Binding RunningCount, StringFormat='{}{0} running'}" Foreground="{StaticResource TextSecondaryBrush}"/>
                 </StackPanel>
-                <TextBlock Text="{Binding Status}" Foreground="{Binding StatusBrush}" VerticalAlignment="Center"/>
-            </DockPanel>
+            </StackPanel>
         </Border>
 
         <!-- Body: a left column (Scripts above Output, parted by a row splitter) beside a full-height
@@ -211,6 +207,22 @@
                                 </StackPanel>
                             </DockPanel>
                         </Border>
+                        <!-- Scan progress/results and the saved-configuration consequence stay with the
+                             catalog they affect instead of becoming permanent status-bar content. -->
+                        <Border DockPanel.Dock="Top" IsVisible="{Binding HasCatalogResult}"
+                                Background="{StaticResource ChipBackgroundBrush}"
+                                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"
+                                Padding="10,7" AutomationProperties.LiveSetting="Polite">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="7">
+                                <Path Grid.Column="0" Width="14" Height="14" Stretch="Uniform"
+                                      Stroke="{StaticResource TextSecondaryBrush}" StrokeThickness="1.6"
+                                      StrokeLineCap="Round" StrokeJoin="Round"
+                                      Data="M7,1 A6,6 0 1 1 6.99,1 M7,6 V10 M7,4 V4.1"/>
+                                <TextBlock Grid.Column="1" Text="{Binding CatalogResult}"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           TextWrapping="Wrap" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
                         <Grid Margin="10">
                             <ListBox x:Name="ScriptsList" ItemsSource="{Binding Scripts}"
                                      SelectedItem="{Binding SelectedScript, Mode=TwoWay}"
@@ -248,6 +260,34 @@
                                 </Border>
                                 <TextBlock Text="Output" Classes="cardHeader" VerticalAlignment="Center"/>
                             </DockPanel>
+                        </Border>
+                        <!-- Per-process action failures are owned by the selected run's detail/console.
+                             They persist across selection changes and are never duplicated in global chrome. -->
+                        <Border DockPanel.Dock="Top" IsVisible="{Binding HasRecentActionError}"
+                                Background="{StaticResource ErrorSurfaceBrush}" BorderBrush="{StaticResource DangerTextBrush}"
+                                BorderThickness="0,0,0,1" Padding="10,6"
+                                AutomationProperties.LiveSetting="Assertive">
+                            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="7">
+                                <Path Grid.Column="0" Width="14" Height="14" Stretch="Uniform"
+                                      Stroke="{StaticResource DangerTextBrush}" StrokeThickness="1.7"
+                                      StrokeLineCap="Round" StrokeJoin="Round"
+                                      Data="M7,1 L13,13 H1 Z M7,5 V8.5 M7,11 V11.1"/>
+                                <TextBlock Grid.Column="1" Text="Error" FontWeight="SemiBold"
+                                           Foreground="{StaticResource DangerTextBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="2" Text="{Binding RecentActionError}"
+                                           Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="3" Text="{Binding RecentActionErrorCountText}"
+                                           IsVisible="{Binding HasMultipleRecentActionErrors}"
+                                           Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                <Button Grid.Column="4" Classes="tool" Padding="5,3"
+                                        Command="{Binding DismissRecentActionErrorCommand}"
+                                        AutomationProperties.Name="Dismiss process error" ToolTip.Tip="Dismiss process error">
+                                    <Path Width="12" Height="12" Stretch="Uniform"
+                                          Stroke="{StaticResource DangerTextBrush}" StrokeThickness="1.8"
+                                          StrokeLineCap="Round" Data="M1,1 L11,11 M11,1 L1,11"/>
+                                </Button>
+                            </Grid>
                         </Border>
                         <!-- Interactive input: a line typed here is sent to the selected running script's stdin
                              on Enter. Enabled only while that run is running and accepts input. -->

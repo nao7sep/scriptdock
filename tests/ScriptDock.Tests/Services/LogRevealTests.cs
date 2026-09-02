@@ -70,6 +70,16 @@ public sealed class LogRevealTests
         Assert.Equal(temp.Path, target.Path);
     }
 
+    [Fact]
+    public void OpenTarget_reports_when_the_shell_did_not_accept_the_request()
+    {
+        var target = new LogRevealTarget("/tmp/scriptdock.log", LogRevealTargetKind.File);
+
+        var opened = LogReveal.OpenTarget(target, _ => null);
+
+        Assert.False(opened);
+    }
+
     private sealed class TempDirectory : IDisposable
     {
         public TempDirectory()

@@ -362,10 +362,12 @@ public partial class MainWindow : Window
 
             var draft = vm.CreateSettingsDraft();
             await SettingsDialog.EditAsync(this, draft, vm.TryApplySettings);
+            vm.ResolveShellActionError("open-settings");
         }
         catch (Exception ex)
         {
             Log.Error("ui: open settings failed", ex);
+            ViewModel?.ReportShellActionError("open-settings", "Settings could not be opened. Check the log and try again.");
         }
     }
 
@@ -374,23 +376,35 @@ public partial class MainWindow : Window
         try
         {
             await new ShortcutsDialog(_shortcuts).ShowDialog(this);
+            ViewModel?.ResolveShellActionError("open-shortcuts");
         }
         catch (Exception ex)
         {
             Log.Error("ui: open shortcuts failed", ex);
+            ViewModel?.ReportShellActionError("open-shortcuts", "Keyboard Shortcuts could not be opened. Check the log and try again.");
         }
     }
 
     private async void OnAboutClick(object? sender, RoutedEventArgs e)
     {
-        try { await AboutDialog.ShowAsync(this); }
-        catch (Exception ex) { Log.Error("ui: open about failed", ex); }
+        try
+        {
+            await AboutDialog.ShowAsync(this);
+            ViewModel?.ResolveShellActionError("open-about");
+        }
+        catch (Exception ex)
+        {
+            Log.Error("ui: open about failed", ex);
+            ViewModel?.ReportShellActionError("open-about", "About ScriptDock could not be opened. Check the log and try again.");
+        }
     }
 
     private void OnRevealLogsClick(object? sender, RoutedEventArgs e)
     {
-        try { LogReveal.Reveal(); }
-        catch (Exception ex) { Log.Error("ui: reveal logs failed", ex); }
+        if (LogReveal.Reveal())
+            ViewModel?.ResolveShellActionError("reveal-logs");
+        else
+            ViewModel?.ReportShellActionError("reveal-logs", "Logs could not be revealed. Check the console and try again.");
     }
 
     private void OnScriptDoubleTapped(object? sender, TappedEventArgs e)

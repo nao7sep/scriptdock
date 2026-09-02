@@ -1,7 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:ScriptDock.ViewModels"
-             xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:ctl="using:ScriptDock.Controls"
              x:Class="ScriptDock.Views.SettingsView"
              x:DataType="vm:SettingsDialogViewModel">
@@ -36,10 +35,23 @@
             <DockPanel>
                 <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemoveExtClick"/>
                 <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddExtClick"/>
-                <ctl:ComposingTextBox x:Name="ExtEntry" PlaceholderText=".command" SubmitOnEnter="True" Submitted="OnExtSubmitted"/>
+                <ctl:ComposingTextBox x:Name="ExtEntry" PlaceholderText=".command" SubmitOnEnter="True" Submitted="OnExtSubmitted"
+                                      Classes.invalid="{Binding HasExtensionError}"
+                                      AutomationProperties.Name="Extension"
+                                      AutomationProperties.HelpText="{Binding ExtensionError}"
+                                      AutomationProperties.ItemStatus="{Binding ExtensionItemStatus}"/>
             </DockPanel>
-            <TextBlock Text="{Binding ExtensionError}" Foreground="{StaticResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"
-                       IsVisible="{Binding ExtensionError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
+            <Grid x:Name="ExtensionErrorResult" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6" IsVisible="{Binding HasExtensionError}"
+                  AutomationProperties.LiveSetting="Assertive">
+                <Path Grid.Column="0" Width="13" Height="13" Stretch="Uniform"
+                      Stroke="{StaticResource DangerTextBrush}" StrokeThickness="1.6"
+                      StrokeLineCap="Round" StrokeJoin="Round"
+                      Data="M6.5,1 L12,12 H1 Z M6.5,4.5 V8 M6.5,10 V10.1"/>
+                <TextBlock Grid.Column="1" Text="Error" FontWeight="SemiBold"
+                           Foreground="{StaticResource DangerTextBrush}" FontSize="12"/>
+                <TextBlock Grid.Column="2" Text="{Binding ExtensionError}"
+                           Foreground="{StaticResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"/>
+            </Grid>
         </StackPanel>
 
         <!-- Ignore patterns -->
@@ -50,10 +62,23 @@
             <DockPanel>
                 <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemovePatternClick"/>
                 <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddPatternClick"/>
-                <ctl:ComposingTextBox x:Name="PatternEntry" PlaceholderText="/node_modules/" SubmitOnEnter="True" Submitted="OnPatternSubmitted"/>
+                <ctl:ComposingTextBox x:Name="PatternEntry" PlaceholderText="/node_modules/" SubmitOnEnter="True" Submitted="OnPatternSubmitted"
+                                      Classes.invalid="{Binding HasPatternError}"
+                                      AutomationProperties.Name="Ignore pattern"
+                                      AutomationProperties.HelpText="{Binding PatternError}"
+                                      AutomationProperties.ItemStatus="{Binding PatternItemStatus}"/>
             </DockPanel>
-            <TextBlock Text="{Binding PatternError}" Foreground="{StaticResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"
-                       IsVisible="{Binding PatternError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
+            <Grid x:Name="PatternErrorResult" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6" IsVisible="{Binding HasPatternError}"
+                  AutomationProperties.LiveSetting="Assertive">
+                <Path Grid.Column="0" Width="13" Height="13" Stretch="Uniform"
+                      Stroke="{StaticResource DangerTextBrush}" StrokeThickness="1.6"
+                      StrokeLineCap="Round" StrokeJoin="Round"
+                      Data="M6.5,1 L12,12 H1 Z M6.5,4.5 V8 M6.5,10 V10.1"/>
+                <TextBlock Grid.Column="1" Text="Error" FontWeight="SemiBold"
+                           Foreground="{StaticResource DangerTextBrush}" FontSize="12"/>
+                <TextBlock Grid.Column="2" Text="{Binding PatternError}"
+                           Foreground="{StaticResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"/>
+            </Grid>
         </StackPanel>
 
         <!-- Process lifecycle -->
@@ -65,11 +90,17 @@
                       IsChecked="{Binding RecaptureProcessesOnLaunch}"/>
         </StackPanel>
 
-        <TextBlock Text="{Binding SaveError}"
-                   Foreground="{StaticResource DangerTextBrush}"
-                   FontSize="12"
-                   TextWrapping="Wrap"
-                   IsVisible="{Binding SaveError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"/>
+        <Grid x:Name="SaveErrorResult" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6" IsVisible="{Binding HasSaveError}"
+              AutomationProperties.LiveSetting="Assertive">
+            <Path Grid.Column="0" Width="13" Height="13" Stretch="Uniform"
+                  Stroke="{StaticResource DangerTextBrush}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round"
+                  Data="M6.5,1 L12,12 H1 Z M6.5,4.5 V8 M6.5,10 V10.1"/>
+            <TextBlock Grid.Column="1" Text="Error" FontWeight="SemiBold"
+                       Foreground="{StaticResource DangerTextBrush}" FontSize="12"/>
+            <TextBlock Grid.Column="2" Text="{Binding SaveError}"
+                       Foreground="{StaticResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"/>
+        </Grid>
 
     </StackPanel>
 </UserControl>
