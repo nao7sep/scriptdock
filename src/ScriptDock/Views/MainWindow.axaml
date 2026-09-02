@@ -110,7 +110,7 @@
         <Border x:Name="OperationalErrorBar" Grid.Row="1"
                 IsVisible="{Binding HasOperationalError}"
                 Background="{StaticResource ErrorSurfaceBrush}" BorderBrush="{StaticResource DangerTextBrush}"
-                BorderThickness="0,0,0,1" Padding="14,7"
+                BorderThickness="0,0,0,1" Padding="14,6"
                 AutomationProperties.LiveSetting="Assertive">
             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                 <TextBlock Text="{Binding OperationalError}"
@@ -205,15 +205,9 @@
                                 Background="{StaticResource ChipBackgroundBrush}"
                                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"
                                 Padding="10,7" AutomationProperties.LiveSetting="Polite">
-                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="7">
-                                <Path Grid.Column="0" Width="14" Height="14" Stretch="Uniform"
-                                      Stroke="{StaticResource TextSecondaryBrush}" StrokeThickness="1.6"
-                                      StrokeLineCap="Round" StrokeJoin="Round"
-                                      Data="M7,1 A6,6 0 1 1 6.99,1 M7,6 V10 M7,4 V4.1"/>
-                                <TextBlock Grid.Column="1" Text="{Binding CatalogResult}"
-                                           Foreground="{StaticResource TextSecondaryBrush}"
-                                           TextWrapping="Wrap" VerticalAlignment="Center"/>
-                            </Grid>
+                            <TextBlock Text="{Binding CatalogResult}"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       TextWrapping="Wrap" VerticalAlignment="Center"/>
                         </Border>
                         <Grid Margin="10">
                             <ListBox x:Name="ScriptsList" ItemsSource="{Binding Scripts}"

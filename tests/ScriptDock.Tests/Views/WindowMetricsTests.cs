@@ -163,12 +163,29 @@ public sealed class WindowMetricsTests
     }
 
     [Fact]
+    public void ResultClose_MeetsTheFirstMessageLineWithoutCreatingAFalseSecondRow()
+    {
+        var appAxaml = ReadAppAxaml();
+        var windowAxaml = ReadMainWindowAxaml();
+
+        Assert.Contains("<Setter Property=\"MinWidth\" Value=\"20\"/>", appAxaml);
+        Assert.Contains("<Setter Property=\"MinHeight\" Value=\"20\"/>", appAxaml);
+        Assert.Equal(2, Regex.Matches(windowAxaml, "Classes=\"resultClose\" VerticalAlignment=\"Top\"").Count);
+        Assert.Contains("Padding=\"14,6\"", windowAxaml);
+        Assert.Contains("Padding=\"10,6\"", windowAxaml);
+        Assert.Contains("Text=\"{Binding OperationalError}\"", windowAxaml);
+        Assert.Contains("Text=\"{Binding RecentActionError}\"", windowAxaml);
+        Assert.True(Regex.Matches(windowAxaml, "TextWrapping=\"Wrap\"").Count >= 2);
+    }
+
+    [Fact]
     public void MainWindow_LeavesStandingFactsInStatus_AndOwnsOperationResultsAtTheirPanes()
     {
         var axaml = ReadMainWindowAxaml();
 
         Assert.DoesNotContain("{Binding Status}", axaml);
         Assert.Contains("Text=\"{Binding CatalogResult}\"", axaml);
+        Assert.DoesNotContain("M7,1 A6,6 0 1 1 6.99,1", axaml);
         Assert.Contains("Text=\"{Binding RecentActionError}\"", axaml);
         Assert.Contains("AutomationProperties.LiveSetting=\"{Binding RecentActionLiveSetting}\"", axaml);
         Assert.Contains("Command=\"{Binding DismissRecentActionErrorCommand}\"", axaml);
@@ -313,5 +330,12 @@ public sealed class WindowMetricsTests
         var testsViewsDir = Path.GetDirectoryName(callerPath)!;
         var repoRoot = Path.GetFullPath(Path.Combine(testsViewsDir, "..", "..", ".."));
         return File.ReadAllText(Path.Combine(repoRoot, "src", "ScriptDock", "Views", "MainWindow.axaml"));
+    }
+
+    private static string ReadAppAxaml([CallerFilePath] string callerPath = "")
+    {
+        var testsViewsDir = Path.GetDirectoryName(callerPath)!;
+        var repoRoot = Path.GetFullPath(Path.Combine(testsViewsDir, "..", "..", ".."));
+        return File.ReadAllText(Path.Combine(repoRoot, "src", "ScriptDock", "App.axaml"));
     }
 }
