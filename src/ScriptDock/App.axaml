@@ -23,6 +23,8 @@
         <Color x:Key="AccentForeground">#062126</Color>
         <Color x:Key="AccentDisabled">#174650</Color>
         <Color x:Key="AccentForegroundDisabled">#B4C4C8</Color>
+        <Color x:Key="InactiveAction">#3B5962</Color>
+        <Color x:Key="InactiveActionForeground">#D4E0E3</Color>
         <Color x:Key="Danger">#BE3455</Color>
         <Color x:Key="DangerHover">#C83A58</Color>
         <Color x:Key="ErrorSurface">#2B171B</Color>
@@ -58,6 +60,8 @@
         <SolidColorBrush x:Key="AccentForegroundBrush" Color="{StaticResource AccentForeground}"/>
         <SolidColorBrush x:Key="AccentDisabledBrush" Color="{StaticResource AccentDisabled}"/>
         <SolidColorBrush x:Key="AccentForegroundDisabledBrush" Color="{StaticResource AccentForegroundDisabled}"/>
+        <SolidColorBrush x:Key="InactiveActionBrush" Color="{StaticResource InactiveAction}"/>
+        <SolidColorBrush x:Key="InactiveActionForegroundBrush" Color="{StaticResource InactiveActionForeground}"/>
         <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource Danger}"/>
         <SolidColorBrush x:Key="DangerHoverBrush" Color="{StaticResource DangerHover}"/>
         <SolidColorBrush x:Key="ErrorSurfaceBrush" Color="{StaticResource ErrorSurface}"/>
@@ -164,6 +168,19 @@
         <Style Selector="Button.accent:focus /template/ ContentPresenter">
             <Setter Property="Background" Value="{StaticResource AccentHoverBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource AccentForegroundBrush}"/>
+        </Style>
+
+        <!-- Avalonia drops the :focus match when a native window deactivates even though the
+             control retains keyboard focus. Without an explicit inactive state, the primary
+             action snaps back to its brighter base accent. DialogBase owns this class so the
+             same muted treatment covers every app-authored dialog and startup notice. -->
+        <Style Selector="Window.windowInactive Button.accent /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource InactiveActionBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource InactiveActionForegroundBrush}"/>
+        </Style>
+        <Style Selector="Window.windowInactive Button.accent:focus /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource InactiveActionBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource InactiveActionForegroundBrush}"/>
         </Style>
         <!-- Disabled commit remains readable while clearly receding from the live cyan action. -->
         <Style Selector="Button.accent:disabled">
