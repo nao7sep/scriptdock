@@ -25,6 +25,22 @@
                 <Button Content="Add…" Classes="tool" Click="OnAddRootClick"/>
                 <Button Content="Remove" Classes="tool" Click="OnRemoveRootClick"/>
             </StackPanel>
+            <Grid x:Name="RootPickerResult" ColumnDefinitions="*,Auto" ColumnSpacing="7"
+                  IsVisible="{Binding HasRootPickerResult}"
+                  AutomationProperties.Name="{Binding RootPickerResult}"
+                  AutomationProperties.LiveSetting="Assertive">
+                <TextBlock Text="{Binding RootPickerResult}" VerticalAlignment="Top"
+                           Foreground="{StaticResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"/>
+                <Button x:Name="CloseRootPickerResult" Grid.Column="1"
+                        Classes="resultClose" VerticalAlignment="Top"
+                        Click="OnCloseRootPickerResult"
+                        AutomationProperties.Name="Close root-directory result"
+                        ToolTip.Tip="Close">
+                    <Path Width="10" Height="10" Stretch="Uniform"
+                          Stroke="{StaticResource DangerTextBrush}" StrokeThickness="1.8"
+                          StrokeLineCap="Round" Data="M1,1 L9,9 M9,1 L1,9"/>
+                </Button>
+            </Grid>
         </StackPanel>
 
         <!-- Extensions -->

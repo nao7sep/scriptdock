@@ -55,6 +55,27 @@ public sealed class SettingsAccessibilityTests
         Assert.Equal("Invalid", AutomationProperties.GetItemStatus(pattern));
     }
 
+    [AvaloniaFact]
+    public void RootPickerResult_IsAnnouncedAndItsQuietCloseMarkMeetsTheFirstLine()
+    {
+        var vm = new SettingsDialogViewModel(new AppConfig());
+        var view = new SettingsView { DataContext = vm };
+        var host = new Window { Content = view, Width = 600, Height = 800 };
+        host.Show();
+
+        vm.ReportRootPickerFailure(new IOException("EACCES /private/tmp/hostile-sentinel"));
+        Dispatcher.UIThread.RunJobs();
+
+        var result = view.FindControl<Grid>("RootPickerResult")!;
+        var close = view.FindControl<Button>("CloseRootPickerResult")!;
+        Assert.True(result.IsVisible);
+        Assert.Equal(AutomationLiveSetting.Assertive, AutomationProperties.GetLiveSetting(result));
+        Assert.Equal(vm.RootPickerResult, AutomationProperties.GetName(result));
+        Assert.Contains("resultClose", close.Classes);
+        Assert.Equal(Avalonia.Layout.VerticalAlignment.Top, close.VerticalAlignment);
+        Assert.IsType<Avalonia.Controls.Shapes.Path>(close.Content);
+    }
+
     [Fact]
     public void Dialog_shell_bounds_dynamic_results_and_keeps_the_footer_outside_the_scroll_body()
     {

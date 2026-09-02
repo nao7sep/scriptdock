@@ -46,6 +46,10 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasSaveError))]
     private string _saveError = string.Empty;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasRootPickerResult))]
+    private string _rootPickerResult = string.Empty;
+
     // UI (chrome) font family. Family only; blank = the bundled default.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsDirty))]
@@ -92,6 +96,7 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     public bool HasExtensionError => ExtensionError.Length > 0;
     public bool HasPatternError => PatternError.Length > 0;
     public bool HasSaveError => SaveError.Length > 0;
+    public bool HasRootPickerResult => RootPickerResult.Length > 0;
     public string ExtensionItemStatus => HasExtensionError ? "Invalid" : string.Empty;
     public string PatternItemStatus => HasPatternError ? "Invalid" : string.Empty;
 
@@ -111,6 +116,11 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         RootDirs.Add(resolved);
         return true;
     }
+
+    public void ReportRootPickerFailure(Exception error) =>
+        RootPickerResult = FailurePresentation.RootPicker(error);
+
+    public void ResolveRootPickerFailure() => RootPickerResult = string.Empty;
 
     /// <summary>Adds a path returned by the native picker without trimming legal filename bytes.</summary>
     public bool AddPickedRootDir(string value)

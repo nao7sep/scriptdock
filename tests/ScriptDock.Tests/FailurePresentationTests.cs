@@ -18,6 +18,7 @@ public sealed class FailurePresentationTests
             FailurePresentation.StartupStorage(),
             FailurePresentation.StartupData(),
             FailurePresentation.RecoveredData(),
+            FailurePresentation.RootPicker(error),
             FailurePresentation.ScriptStart(error),
         };
 

@@ -40,6 +40,7 @@ public partial class SettingsView : UserControl
                 Title = "Add root directory",
                 AllowMultiple = true,
             });
+            Vm.ResolveRootPickerFailure();
 
             // The view model resolves, de-duplicates, and validates each path; non-local
             // picks (a virtual location with no filesystem path) are skipped.
@@ -52,8 +53,12 @@ public partial class SettingsView : UserControl
         catch (Exception ex)
         {
             Log.Error("ui: add root directory failed", ex);
+            Vm?.ReportRootPickerFailure(ex);
         }
     }
+
+    private void OnCloseRootPickerResult(object? sender, RoutedEventArgs e) =>
+        Vm?.ResolveRootPickerFailure();
 
     private void OnAddExtClick(object? sender, RoutedEventArgs e) => AddExtension();
     private void OnAddPatternClick(object? sender, RoutedEventArgs e) => AddPattern();

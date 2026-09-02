@@ -99,6 +99,21 @@ public sealed class SettingsDialogViewModelTests
     }
 
     [Fact]
+    public void RootPickerFailure_IsOwnedByTheRootSectionWithoutDiagnostics()
+    {
+        const string hostile = "EACCES Error invoking remote method IPC /private/tmp/hostile-sentinel";
+        var vm = new SettingsDialogViewModel(Seed());
+
+        vm.ReportRootPickerFailure(new IOException(hostile));
+
+        Assert.True(vm.HasRootPickerResult);
+        Assert.DoesNotContain(hostile, vm.RootPickerResult, StringComparison.Ordinal);
+
+        vm.ResolveRootPickerFailure();
+        Assert.False(vm.HasRootPickerResult);
+    }
+
+    [Fact]
     public void AddExtension_NormalisesLeadingDot()
     {
         var vm = new SettingsDialogViewModel(Seed());

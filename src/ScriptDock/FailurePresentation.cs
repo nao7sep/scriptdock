@@ -18,6 +18,9 @@ public static class FailurePresentation
         "A settings file was unreadable, so ScriptDock preserved it and started with defaults in its " +
         "place. Your scripts are untouched. Check the session log for the preserved copy's location.";
 
+    public static string RootPicker(Exception error) =>
+        "The folder picker could not be opened. Your root directories are unchanged; try adding a directory again.";
+
     public static string ScriptStart(Exception error) => error is UnauthorizedAccessException
         ? "The script could not be started. Check that ScriptDock can run it, then try again."
         : "The script could not be started. Check the session log for details, then try again.";
