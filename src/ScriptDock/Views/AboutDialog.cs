@@ -42,6 +42,32 @@ public sealed class AboutDialog : DialogBase
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        var dismissMark = new Shapes.Path
+        {
+            Width = 10,
+            Height = 10,
+            StrokeThickness = 1.6,
+            StrokeLineCap = PenLineCap.Round,
+            Data = Geometry.Parse("M1,1 L9,9 M9,1 L1,9"),
+        };
+        var dismissLaunchError = new Button
+        {
+            Classes = { "resultClose" },
+            VerticalAlignment = VerticalAlignment.Top,
+            Content = dismissMark,
+        };
+        AutomationProperties.SetName(dismissLaunchError, "Close result");
+        ToolTip.SetTip(dismissLaunchError, "Close");
+        dismissMark.Bind(
+            Shapes.Shape.StrokeProperty,
+            new Binding("Foreground") { RelativeSource = new RelativeSource { AncestorType = typeof(Button) } });
+        var launchErrorContent = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            ColumnSpacing = 8,
+            Children = { _launchErrorMessage, dismissLaunchError },
+        };
+        Grid.SetColumn(dismissLaunchError, 1);
         _launchError = new Border
         {
             Background = Palette.Brush("ErrorSurfaceBrush"),
@@ -51,8 +77,9 @@ public sealed class AboutDialog : DialogBase
             Padding = new Thickness(9, 7),
             Margin = new Thickness(0, 0, 0, 16),
             IsVisible = false,
-            Child = _launchErrorMessage,
+            Child = launchErrorContent,
         };
+        dismissLaunchError.Click += (_, _) => _launchError.IsVisible = false;
         AutomationProperties.SetLiveSetting(_launchError, AutomationLiveSetting.Assertive);
 
         var panel = new StackPanel

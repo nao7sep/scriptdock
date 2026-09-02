@@ -111,6 +111,9 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             Log.Error("ui: window load failed", ex);
+            ViewModel?.ReportShellActionError(
+                "window-load",
+                "ScriptDock could not finish loading this window. Check the log and try Rescan.");
         }
     }
 

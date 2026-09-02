@@ -33,6 +33,9 @@ public sealed class AboutDialogTests
         var close = dialog.GetVisualDescendants()
             .OfType<Button>()
             .Single(button => Equals(button.Content, "Close"));
+        var dismiss = result.GetVisualDescendants()
+            .OfType<Button>()
+            .Single(button => AutomationProperties.GetName(button) == "Close result");
         Assert.True(result.IsVisible);
         Assert.True(dialog.Bounds.Height > before);
         Assert.True(close.IsVisible);
@@ -40,5 +43,10 @@ public sealed class AboutDialogTests
         var closeBottom = close.TranslatePoint(new Point(close.Bounds.Width, close.Bounds.Height), dialog);
         Assert.NotNull(closeBottom);
         Assert.True(closeBottom.Value.Y <= dialog.ClientSize.Height);
+        Assert.True(dismiss.Bounds.Height > 0);
+        Assert.IsType<Avalonia.Controls.Shapes.Path>(dismiss.Content);
+
+        dismiss.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.False(result.IsVisible);
     }
 }
