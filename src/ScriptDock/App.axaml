@@ -212,6 +212,23 @@
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="FontSize" Value="12"/>
         </Style>
+        <!-- A persistent result's close mark has a stable compact hit target and no button chrome
+             until hover/focus. It does not inherit the text-oriented tool-button geometry. -->
+        <Style Selector="Button.resultClose">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{StaticResource DangerTextBrush}"/>
+            <Setter Property="Padding" Value="6"/>
+            <Setter Property="MinWidth" Value="26"/>
+            <Setter Property="MinHeight" Value="26"/>
+            <Setter Property="CornerRadius" Value="4"/>
+        </Style>
+        <Style Selector="Button.resultClose:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource ChipHoverBrush}"/>
+        </Style>
+        <Style Selector="Button.resultClose:focus /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource ChipHoverBrush}"/>
+        </Style>
         <Style Selector="TextBox.invalid">
             <Setter Property="BorderBrush" Value="{StaticResource DangerTextBrush}"/>
             <Setter Property="BorderThickness" Value="2"/>

@@ -100,7 +100,7 @@ public sealed class ProcessRunner : IProcessRunner
         }
         catch (Exception ex)
         {
-            handle.Fail($"Failed to start: {ex.Message}");
+            handle.Fail(FailurePresentation.ScriptStart(ex));
             Log.Error("run: start failed", ex, new { script = scriptPath });
         }
 

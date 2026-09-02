@@ -106,33 +106,25 @@
 
         <!-- Operational failures are independent from the replaceable activity line. One keyed
              failure is shown at a time; the count preserves additional unresolved failures and
-             Dismiss reveals the next. The heading + drawn warning icon make severity non-colour-only,
-             and assertive live semantics announce newly actionable failures. -->
+             the close mark reveals the next. The concrete message is the non-colour cue. -->
         <Border x:Name="OperationalErrorBar" Grid.Row="1"
                 IsVisible="{Binding HasOperationalError}"
                 Background="{StaticResource ErrorSurfaceBrush}" BorderBrush="{StaticResource DangerTextBrush}"
                 BorderThickness="0,0,0,1" Padding="14,7"
                 AutomationProperties.LiveSetting="Assertive">
-            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="8">
-                <Path Grid.Column="0" Width="16" Height="16" Stretch="Uniform"
-                      Stroke="{StaticResource DangerTextBrush}" StrokeThickness="1.8"
-                      StrokeLineCap="Round" StrokeJoin="Round"
-                      Data="M8,1.5 L15,14.5 H1 Z M8,5 V9 M8,12 V12.1"/>
-                <TextBlock Grid.Column="1" Text="Error" FontWeight="SemiBold"
-                           Foreground="{StaticResource DangerTextBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="2" Text="{Binding OperationalError}"
-                           Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"
-                           TextTrimming="CharacterEllipsis"/>
-                <TextBlock Grid.Column="3" Text="{Binding OperationalErrorCountText}"
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                <TextBlock Text="{Binding OperationalError}"
+                           Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+                <TextBlock Grid.Column="1" Text="{Binding OperationalErrorCountText}"
                            IsVisible="{Binding HasMultipleOperationalErrors}"
                            Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <Button Grid.Column="4" Classes="tool" Padding="5,3"
+                <Button Grid.Column="2" Classes="resultClose" VerticalAlignment="Top"
                         Command="{Binding DismissOperationalErrorCommand}"
                         AutomationProperties.Name="Dismiss error" ToolTip.Tip="Dismiss error">
-                    <Path Width="12" Height="12" Stretch="Uniform"
+                    <Path Width="10" Height="10" Stretch="Uniform"
                           Stroke="{StaticResource DangerTextBrush}" StrokeThickness="1.8"
                           StrokeLineCap="Round"
-                          Data="M1,1 L11,11 M11,1 L1,11"/>
+                          Data="M1,1 L9,9 M9,1 L1,9"/>
                 </Button>
             </Grid>
         </Border>
@@ -267,25 +259,19 @@
                                 Background="{StaticResource ErrorSurfaceBrush}" BorderBrush="{StaticResource DangerTextBrush}"
                                 BorderThickness="0,0,0,1" Padding="10,6"
                                 AutomationProperties.LiveSetting="{Binding RecentActionLiveSetting}">
-                            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="7">
-                                <Path Grid.Column="0" Width="14" Height="14" Stretch="Uniform"
-                                      Stroke="{StaticResource DangerTextBrush}" StrokeThickness="1.7"
-                                      StrokeLineCap="Round" StrokeJoin="Round"
-                                      Data="M7,1 L13,13 H1 Z M7,5 V8.5 M7,11 V11.1"/>
-                                <TextBlock Grid.Column="1" Text="Error" FontWeight="SemiBold"
-                                           Foreground="{StaticResource DangerTextBrush}" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="2" Text="{Binding RecentActionError}"
+                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="7">
+                                <TextBlock Text="{Binding RecentActionError}"
                                            Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap"
-                                           VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="3" Text="{Binding RecentActionErrorCountText}"
+                                           />
+                                <TextBlock Grid.Column="1" Text="{Binding RecentActionErrorCountText}"
                                            IsVisible="{Binding HasMultipleRecentActionErrors}"
                                            Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                <Button Grid.Column="4" Classes="tool" Padding="5,3"
+                                <Button Grid.Column="2" Classes="resultClose" VerticalAlignment="Top"
                                         Command="{Binding DismissRecentActionErrorCommand}"
                                         AutomationProperties.Name="Dismiss process error" ToolTip.Tip="Dismiss process error">
-                                    <Path Width="12" Height="12" Stretch="Uniform"
+                                    <Path Width="10" Height="10" Stretch="Uniform"
                                           Stroke="{StaticResource DangerTextBrush}" StrokeThickness="1.8"
-                                          StrokeLineCap="Round" Data="M1,1 L11,11 M11,1 L1,11"/>
+                                          StrokeLineCap="Round" Data="M1,1 L9,9 M9,1 L1,9"/>
                                 </Button>
                             </Grid>
                         </Border>

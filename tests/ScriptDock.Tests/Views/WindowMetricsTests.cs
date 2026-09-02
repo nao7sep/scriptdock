@@ -155,7 +155,8 @@ public sealed class WindowMetricsTests
 
         Assert.Contains("x:Name=\"OperationalErrorBar\"", axaml);
         Assert.Contains("AutomationProperties.LiveSetting=\"Assertive\"", axaml);
-        Assert.Contains("Text=\"Error\"", axaml);
+        Assert.DoesNotContain("Text=\"Error\"", axaml);
+        Assert.Contains("Classes=\"resultClose\"", axaml);
         Assert.Contains("Command=\"{Binding DismissOperationalErrorCommand}\"", axaml);
         Assert.Contains("x:Name=\"HeaderBar\"", axaml);
         Assert.Contains("x:Name=\"StatusBar\"", axaml);

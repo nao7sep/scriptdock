@@ -48,11 +48,7 @@ public partial class App : Application
                 Log.Error("startup: a settings file could not be read or set aside", ex);
                 desktop.MainWindow = NoticeDialog.CreateStartupFailure(
                     "ScriptDock could not start",
-                    "A settings file could not be read, and ScriptDock could not set it aside either — so it has "
-                    + "been left exactly where it is rather than risk overwriting it.\n\n"
-                    + ex.Message
-                    + "\n\nYour scripts are not affected. Repair or move the file under the ScriptDock data "
-                    + "folder, then start ScriptDock again.");
+                    FailurePresentation.StartupData());
                 RegisterOwnerActivation(desktop.MainWindow);
                 base.OnFrameworkInitializationCompleted();
                 return;
@@ -74,9 +70,7 @@ public partial class App : Application
                     await Views.NoticeDialog.ShowAsync(
                         mainWindow,
                         "A settings file was reset",
-                        "A file was unreadable and has been set aside so nothing is lost:\n\n" +
-                        string.Join("\n", quarantined) +
-                        "\n\nScriptDock started with defaults for it. Your scripts are untouched.");
+                        FailurePresentation.RecoveredData());
                 }
             };
         }

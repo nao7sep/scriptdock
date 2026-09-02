@@ -36,9 +36,7 @@ sealed class Program
         catch (Exception ex)
         {
             App.StartupFailureMessage =
-                "ScriptDock cannot use its storage location, so it has not opened your scripts or changed any settings.\n\n"
-                + ex.Message
-                + "\n\nRepair the SCRIPTDOCK_HOME location or its permissions, then start ScriptDock again.";
+                FailurePresentation.StartupStorage();
             Console.Error.WriteLine("ScriptDock cannot start: its storage location could not be created. " + ex.Message);
             _ = BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
             return 1;

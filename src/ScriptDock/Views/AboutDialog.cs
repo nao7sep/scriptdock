@@ -42,26 +42,6 @@ public sealed class AboutDialog : DialogBase
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        var launchErrorGrid = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"),
-            ColumnSpacing = 7,
-            Children =
-            {
-                ErrorMark(),
-                new TextBlock
-                {
-                    Text = "Error",
-                    FontSize = 12,
-                    FontWeight = FontWeight.SemiBold,
-                    Foreground = Palette.Brush("DangerTextBrush"),
-                    VerticalAlignment = VerticalAlignment.Center,
-                },
-                _launchErrorMessage,
-            },
-        };
-        Grid.SetColumn(launchErrorGrid.Children[1], 1);
-        Grid.SetColumn(launchErrorGrid.Children[2], 2);
         _launchError = new Border
         {
             Background = Palette.Brush("ErrorSurfaceBrush"),
@@ -71,7 +51,7 @@ public sealed class AboutDialog : DialogBase
             Padding = new Thickness(9, 7),
             Margin = new Thickness(0, 0, 0, 16),
             IsVisible = false,
-            Child = launchErrorGrid,
+            Child = _launchErrorMessage,
         };
         AutomationProperties.SetLiveSetting(_launchError, AutomationLiveSetting.Assertive);
 
@@ -119,18 +99,6 @@ public sealed class AboutDialog : DialogBase
         _launchErrorMessage.Text = $"Couldn’t open {destination}. Check the log and try again.";
         _launchError.IsVisible = true;
     }
-
-    private static Shapes.Path ErrorMark() => new()
-    {
-        Width = 14,
-        Height = 14,
-        Stretch = Stretch.Uniform,
-        Stroke = Palette.Brush("DangerTextBrush"),
-        StrokeThickness = 1.7,
-        StrokeLineCap = PenLineCap.Round,
-        StrokeJoin = PenLineJoin.Round,
-        Data = Geometry.Parse("M7,1 L13,13 H1 Z M7,5 V8.5 M7,11 V11.1"),
-    };
 
     /// <summary>
     /// A button label with a trailing external-link mark drawn as a vector rather than the
