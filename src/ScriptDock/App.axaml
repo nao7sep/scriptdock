@@ -161,6 +161,10 @@
             <Setter Property="Background" Value="{StaticResource AccentHoverBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource AccentForegroundBrush}"/>
         </Style>
+        <Style Selector="Button.accent:focus /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource AccentHoverBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentForegroundBrush}"/>
+        </Style>
         <!-- Disabled commit remains readable while clearly receding from the live cyan action. -->
         <Style Selector="Button.accent:disabled">
             <Setter Property="Opacity" Value="1"/>
@@ -179,7 +183,15 @@
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
+        <Style Selector="Button.destructive /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource DangerBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
         <Style Selector="Button.destructive:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource DangerHoverBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <Style Selector="Button.destructive:focus /template/ ContentPresenter">
             <Setter Property="Background" Value="{StaticResource DangerHoverBrush}"/>
             <Setter Property="Foreground" Value="White"/>
         </Style>

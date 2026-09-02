@@ -68,6 +68,19 @@ public sealed class SettingsAccessibilityTests
         Assert.Contains("MaxHeight = screen.WorkingArea.Height / RenderScaling * 0.85", code);
     }
 
+    [Fact]
+    public void Dialog_action_intent_survives_keyboard_focus()
+    {
+        var styles = File.ReadAllText(SourcePathIn("", "App.axaml"));
+
+        Assert.Contains("Button.accent:focus /template/ ContentPresenter", styles);
+        Assert.Contains("Button.destructive /template/ ContentPresenter", styles);
+        Assert.Contains("Button.destructive:focus /template/ ContentPresenter", styles);
+    }
+
     private static string SourcePath(string file, [CallerFilePath] string caller = "") =>
-        Path.GetFullPath(Path.Combine(Path.GetDirectoryName(caller)!, "..", "..", "..", "src", "ScriptDock", "Views", file));
+        SourcePathIn("Views", file, caller);
+
+    private static string SourcePathIn(string directory, string file, [CallerFilePath] string caller = "") =>
+        Path.GetFullPath(Path.Combine(Path.GetDirectoryName(caller)!, "..", "..", "..", "src", "ScriptDock", directory, file));
 }
