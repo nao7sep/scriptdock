@@ -183,7 +183,20 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public async Task InitializeAsync()
     {
         if (_config.RecaptureProcessesOnLaunch)
-            _runner.Recapture(_state.RunningProcesses);
+        {
+            try
+            {
+                _runner.Recapture(_state.RunningProcesses);
+                ResolveOperationalError("recapture");
+            }
+            catch (Exception ex)
+            {
+                Log.Error("ui: process recapture failed", ex);
+                ReportOperationalError(
+                    "recapture",
+                    "Previously running scripts could not be restored. Check the log, then run them again if needed.");
+            }
+        }
 
         StartOutputTimer();
         RebuildRecent();

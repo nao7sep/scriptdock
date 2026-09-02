@@ -98,6 +98,32 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
     }
 
     [Fact]
+    public async Task InitializeAsync_RecaptureFailureIsRetainedWithoutRawDiagnosticsAndScanContinues()
+    {
+        var hostile = "EACCES IPC /private/tmp/SCRIPTDOCK-RECAPTURE-SENTINEL";
+        var runner = new FakeProcessRunner { RecaptureException = new IOException(hostile) };
+        var config = new AppConfig
+        {
+            RootDirs = [_root],
+            Extensions = [".command"],
+            RecaptureProcessesOnLaunch = true,
+        };
+        Touch("still-scanned.command");
+        var state = new AppState();
+        var vm = new MainWindowViewModel(
+            new FakeJsonStore<AppConfig> { Value = config },
+            new FakeJsonStore<AppState> { Value = state },
+            config, state, new ScriptScanner(), runner);
+
+        await vm.InitializeAsync();
+
+        Assert.True(vm.HasOperationalError);
+        Assert.Contains("could not be restored", vm.OperationalError, StringComparison.Ordinal);
+        Assert.DoesNotContain(hostile, vm.OperationalError, StringComparison.Ordinal);
+        Assert.Single(vm.Scripts);
+    }
+
+    [Fact]
     public async Task RebuildScripts_PreservesSelectionByPath_AcrossRescan()
     {
         Touch("a.command");

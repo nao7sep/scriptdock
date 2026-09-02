@@ -24,6 +24,7 @@ public sealed class FakeProcessRunner : IProcessRunner
     public List<PersistedProcess> RecaptureCalls { get; } = new();
     public bool TerminateResult { get; set; } = true;
     public bool RestartResult { get; set; } = true;
+    public Exception? RecaptureException { get; set; }
 
     public event EventHandler? ProcessesChanged { add { } remove { } }
 
@@ -73,6 +74,8 @@ public sealed class FakeProcessRunner : IProcessRunner
     /// so AcceptsInput stays false; it has no live OS Process, so Pid/OsStartedAt read null.</summary>
     public void Recapture(IReadOnlyList<PersistedProcess> records)
     {
+        if (RecaptureException is not null)
+            throw RecaptureException;
         RecaptureCalls.AddRange(records);
         foreach (var record in records)
             _active.Add(new ScriptProcess(_nextId++, record.ScriptPath, record.LaunchedAt) { LogFilePath = record.LogFilePath });
