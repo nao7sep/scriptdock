@@ -171,8 +171,8 @@ public sealed class WindowMetricsTests
         Assert.Contains("<Setter Property=\"MinWidth\" Value=\"20\"/>", appAxaml);
         Assert.Contains("<Setter Property=\"MinHeight\" Value=\"20\"/>", appAxaml);
         Assert.Equal(2, Regex.Matches(windowAxaml, "Classes=\"resultClose\" VerticalAlignment=\"Top\"").Count);
-        Assert.Contains("Padding=\"14,8\"", windowAxaml);
-        Assert.Contains("Padding=\"10,8\"", windowAxaml);
+        Assert.Contains("Padding=\"14,10\"", windowAxaml);
+        Assert.Contains("Padding=\"10,10\"", windowAxaml);
         Assert.Contains("Text=\"{Binding OperationalError}\"", windowAxaml);
         Assert.Contains("Text=\"{Binding RecentActionError}\"", windowAxaml);
         Assert.True(Regex.Matches(windowAxaml, "TextWrapping=\"Wrap\"").Count >= 2);

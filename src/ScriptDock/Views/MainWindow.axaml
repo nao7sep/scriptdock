@@ -110,7 +110,7 @@
         <Border x:Name="OperationalErrorBar" Grid.Row="1"
                 IsVisible="{Binding HasOperationalError}"
                 Background="{StaticResource ErrorSurfaceBrush}" BorderBrush="{StaticResource DangerTextBrush}"
-                BorderThickness="0,0,0,1" Padding="14,8"
+                BorderThickness="0,0,0,1" Padding="14,10"
                 AutomationProperties.LiveSetting="Assertive">
             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                 <TextBlock Text="{Binding OperationalError}" VerticalAlignment="Top"
@@ -251,7 +251,7 @@
                              They persist across selection changes and are never duplicated in global chrome. -->
                         <Border x:Name="RecentActionErrorBar" DockPanel.Dock="Top" IsVisible="{Binding HasRecentActionError}"
                                 Background="{StaticResource ErrorSurfaceBrush}" BorderBrush="{StaticResource DangerTextBrush}"
-                                BorderThickness="0,0,0,1" Padding="10,8"
+                                BorderThickness="0,0,0,1" Padding="10,10"
                                 AutomationProperties.LiveSetting="{Binding RecentActionLiveSetting}">
                             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="7">
                                 <TextBlock Text="{Binding RecentActionError}" VerticalAlignment="Top"
