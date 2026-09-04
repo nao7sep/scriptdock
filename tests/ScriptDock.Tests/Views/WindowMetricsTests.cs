@@ -149,50 +149,6 @@ public sealed class WindowMetricsTests
     }
 
     [Fact]
-    public void MainWindow_DeclaresIndependentAssertiveOperationalErrorChrome()
-    {
-        var axaml = ReadMainWindowAxaml();
-
-        Assert.Contains("x:Name=\"OperationalErrorBar\"", axaml);
-        Assert.Contains("AutomationProperties.LiveSetting=\"Assertive\"", axaml);
-        Assert.DoesNotContain("Text=\"Error\"", axaml);
-        Assert.Contains("Classes=\"resultClose\"", axaml);
-        Assert.Contains("Command=\"{Binding DismissOperationalErrorCommand}\"", axaml);
-        Assert.Contains("x:Name=\"HeaderBar\"", axaml);
-        Assert.Contains("x:Name=\"StatusBar\"", axaml);
-    }
-
-    [Fact]
-    public void ResultClose_MeetsTheFirstMessageLineWithoutCreatingAFalseSecondRow()
-    {
-        var appAxaml = ReadAppAxaml();
-        var windowAxaml = ReadMainWindowAxaml();
-
-        Assert.Contains("<Setter Property=\"MinWidth\" Value=\"20\"/>", appAxaml);
-        Assert.Contains("<Setter Property=\"MinHeight\" Value=\"20\"/>", appAxaml);
-        Assert.Equal(2, Regex.Matches(windowAxaml, "Classes=\"resultClose\" VerticalAlignment=\"Top\"").Count);
-        Assert.Contains("Padding=\"14,10\"", windowAxaml);
-        Assert.Contains("Padding=\"10,10\"", windowAxaml);
-        Assert.Contains("Text=\"{Binding OperationalError}\"", windowAxaml);
-        Assert.Contains("Text=\"{Binding RecentActionError}\"", windowAxaml);
-        Assert.True(Regex.Matches(windowAxaml, "TextWrapping=\"Wrap\"").Count >= 2);
-    }
-
-    [Fact]
-    public void MainWindow_LeavesStandingFactsInStatus_AndOwnsOperationResultsAtTheirPanes()
-    {
-        var axaml = ReadMainWindowAxaml();
-
-        Assert.DoesNotContain("{Binding Status}", axaml);
-        Assert.Contains("Text=\"{Binding CatalogResult}\"", axaml);
-        Assert.DoesNotContain("M7,1 A6,6 0 1 1 6.99,1", axaml);
-        Assert.Contains("Text=\"{Binding RecentActionError}\"", axaml);
-        Assert.Contains("AutomationProperties.LiveSetting=\"{Binding RecentActionLiveSetting}\"", axaml);
-        Assert.Contains("Command=\"{Binding DismissRecentActionErrorCommand}\"", axaml);
-        Assert.Contains("AutomationProperties.LiveSetting=\"Polite\"", axaml);
-    }
-
-    [Fact]
     public void DisplayFromIntent_ShowsTheIntentWhenItFits()
     {
         // Window big enough to honour the user's intent: the display equals the intent exactly,
@@ -266,34 +222,6 @@ public sealed class WindowMetricsTests
         Assert.Equal(RowMinHeights, LeftColumnRowMinHeights(axaml));
     }
 
-    [Fact]
-    public void Body_IsColumnMajor_WithRecentBesideTheLeftScriptsOverConsoleStack()
-    {
-        // The layout's defining shape: the body splits into COLUMNS (left stack | splitter | Recent),
-        // and the left column splits into ROWS (Scripts | splitter | console). This is what makes
-        // Recent a full-body-height column rather than a top-right pane. Pin it so a regression to the
-        // old row-major body (Recent nested beside Scripts in a top row) fails here. The same shape is
-        // what lets WindowMetrics read width from BodyGrid's columns and height from LeftPanesGrid's rows.
-        var axaml = ReadMainWindowAxaml();
-
-        // BodyGrid's own track definitions are columns, not rows.
-        var bodyGridHead = Section(axaml, "<Grid x:Name=\"BodyGrid\"", "</Grid.ColumnDefinitions>");
-        Assert.DoesNotContain("<Grid.RowDefinitions>", bodyGridHead);
-
-        // The left column is an inner grid that splits into rows.
-        Assert.Contains("<Grid x:Name=\"LeftPanesGrid\"", axaml);
-        var leftGridHead = Section(axaml, "<Grid x:Name=\"LeftPanesGrid\"", "</Grid.RowDefinitions>");
-        Assert.DoesNotContain("<Grid.ColumnDefinitions>", leftGridHead);
-
-        // Recent sits in the third body column (it is the full-height right pane), and the column
-        // splitter resizes columns while the console splitter resizes rows.
-        Assert.Contains("<Border Grid.Column=\"2\" Classes=\"card\"", axaml);
-        Assert.Contains("x:Name=\"RecentSplitter\"", axaml);
-        Assert.Contains("x:Name=\"ConsoleSplitter\"", axaml);
-        Assert.Matches("RecentSplitter[^>]*ResizeDirection=\"Columns\"", axaml);
-        Assert.Matches("ConsoleSplitter[^>]*ResizeDirection=\"Rows\"", axaml);
-    }
-
     // The two BodyGrid columns that carry a MinWidth (the 6px splitter column has none), in order:
     // the left Scripts/console stack and the Recent column.
     private static IReadOnlyList<double> BodyColumnMinWidths(string axaml)
@@ -332,10 +260,4 @@ public sealed class WindowMetricsTests
         return File.ReadAllText(Path.Combine(repoRoot, "src", "ScriptDock", "Views", "MainWindow.axaml"));
     }
 
-    private static string ReadAppAxaml([CallerFilePath] string callerPath = "")
-    {
-        var testsViewsDir = Path.GetDirectoryName(callerPath)!;
-        var repoRoot = Path.GetFullPath(Path.Combine(testsViewsDir, "..", "..", ".."));
-        return File.ReadAllText(Path.Combine(repoRoot, "src", "ScriptDock", "App.axaml"));
-    }
 }

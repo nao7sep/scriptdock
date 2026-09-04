@@ -42,13 +42,9 @@ public sealed class UiFontTests
     public void Resolve_PrefersTheFirstInstalledFamily()
     {
         var installed = FontManager.Current.SystemFonts.FirstOrDefault();
-        if (installed is null)
-        {
-            // No system fonts in this environment; the fallback path is covered above.
-            return;
-        }
+        Assert.NotNull(installed);
 
         // An absent family listed first is skipped in favor of the installed one.
-        Assert.Equal(installed.Name, UiFont.Resolve($"No Such Font 99999, {installed.Name}").Name);
+        Assert.Equal(installed!.Name, UiFont.Resolve($"No Such Font 99999, {installed.Name}").Name);
     }
 }

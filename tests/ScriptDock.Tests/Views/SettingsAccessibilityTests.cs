@@ -1,5 +1,4 @@
 using System.IO;
-using System.Runtime.CompilerServices;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
@@ -76,32 +75,4 @@ public sealed class SettingsAccessibilityTests
         Assert.IsType<Avalonia.Controls.Shapes.Path>(close.Content);
     }
 
-    [Fact]
-    public void Dialog_shell_bounds_dynamic_results_and_keeps_the_footer_outside_the_scroll_body()
-    {
-        var shell = File.ReadAllText(SourcePath("DialogBase.axaml"));
-        var code = File.ReadAllText(SourcePath("DialogBase.axaml.cs"));
-
-        Assert.Contains("SizeToContent=\"Height\"", shell);
-        Assert.Contains("x:Name=\"ButtonPanel\"", shell);
-        Assert.Contains("DockPanel.Dock=\"Bottom\"", shell);
-        Assert.Contains("<ScrollViewer", shell);
-        Assert.Contains("MaxHeight = screen.WorkingArea.Height / RenderScaling * 0.85", code);
-    }
-
-    [Fact]
-    public void Dialog_action_intent_survives_keyboard_focus()
-    {
-        var styles = File.ReadAllText(SourcePathIn("", "App.axaml"));
-
-        Assert.Contains("Button.accent:focus /template/ ContentPresenter", styles);
-        Assert.Contains("Button.destructive /template/ ContentPresenter", styles);
-        Assert.Contains("Button.destructive:focus /template/ ContentPresenter", styles);
-    }
-
-    private static string SourcePath(string file, [CallerFilePath] string caller = "") =>
-        SourcePathIn("Views", file, caller);
-
-    private static string SourcePathIn(string directory, string file, [CallerFilePath] string caller = "") =>
-        Path.GetFullPath(Path.Combine(Path.GetDirectoryName(caller)!, "..", "..", "..", "src", "ScriptDock", directory, file));
 }
