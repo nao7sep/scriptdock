@@ -29,7 +29,7 @@ For the production-faithful build — an ad-hoc-signed `ScriptDock.app` you can 
 
 ## License
 
-MIT © 2026 Yoshinao Inoguchi
+[GNU GPL v3 or later](LICENSE) © 2026 Yoshinao Inoguchi
 
 ## Contact
 

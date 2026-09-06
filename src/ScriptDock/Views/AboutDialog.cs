@@ -104,7 +104,7 @@ public sealed class AboutDialog : DialogBase
                     Children = { githubButton, issuesButton },
                 },
                 _launchError,
-                new TextBlock { Text = "© 2026 Yoshinao Inoguchi — MIT License", FontSize = 12, Foreground = Palette.Brush("TextSecondaryBrush") },
+                new TextBlock { Text = "© 2026 Yoshinao Inoguchi — GNU GPL v3 or later", FontSize = 12, Foreground = Palette.Brush("TextSecondaryBrush") },
             },
         };
 
