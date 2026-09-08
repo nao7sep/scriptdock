@@ -58,7 +58,7 @@ public partial class MainWindow : Window
         _placementSaveTimer.Tick += (_, _) =>
         {
             _placementSaveTimer.Stop();
-            if (WindowState == WindowState.Normal && !_placementTransient)
+            if (WindowState == WindowState.Normal && !_placementTransient && !IsNativeFullScreenFrame())
                 CacheCurrentNormalBounds();
             PersistWindowPlacement();
         };
@@ -156,12 +156,14 @@ public partial class MainWindow : Window
             screen.WorkingArea.X, screen.WorkingArea.Y,
             screen.WorkingArea.Width, screen.WorkingArea.Height, screen.Scaling)).ToArray();
         var restoration = WindowPlacementPolicy.Resolve(ViewModel?.MainWindowPlacement, MinWidth, MinHeight, displays);
+        DisplayWorkArea? restoredDisplay = null;
         if (restoration.NormalBounds is { } bounds)
         {
             var display = displays.First(item =>
                 bounds.X >= item.X && bounds.Y >= item.Y
                 && (long)bounds.X + bounds.Width <= (long)item.X + item.Width
                 && (long)bounds.Y + bounds.Height <= (long)item.Y + item.Height);
+            restoredDisplay = display;
             var frameSize = FrameSize ?? ClientSize;
             var chromeWidth = Math.Max(0, frameSize.Width - ClientSize.Width);
             var chromeHeight = Math.Max(0, frameSize.Height - ClientSize.Height);
@@ -170,22 +172,42 @@ public partial class MainWindow : Window
             Height = Math.Max(MinHeight, bounds.Height / display.Scaling - chromeHeight);
         }
         _stableWindowMode = restoration.Mode;
-        CacheCurrentNormalBounds();
-        if (_stableWindowMode == "maximized")
-            WindowState = WindowState.Maximized;
-        Opacity = 1;
-        ShowInTaskbar = true;
         DispatcherTimer.RunOnce(() =>
         {
-            _placementCaptureEnabled = true;
-            _placementTransient = WindowState is WindowState.Minimized or WindowState.FullScreen;
-        }, TimeSpan.FromMilliseconds(500));
+            if (restoration.NormalBounds is { } accepted && restoredDisplay is { } display)
+            {
+                var frameSize = FrameSize ?? ClientSize;
+                Width = Math.Max(MinWidth, Width + accepted.Width / display.Scaling - frameSize.Width);
+                Height = Math.Max(MinHeight, Height + accepted.Height / display.Scaling - frameSize.Height);
+                Position = new PixelPoint(accepted.X, accepted.Y);
+            }
+            CacheCurrentNormalBounds();
+            _normalWindowBounds = WindowPlacementPolicy.SeedNormalBounds(restoration, _normalWindowBounds!);
+            DispatcherTimer.RunOnce(() =>
+            {
+                if (_stableWindowMode == "maximized")
+                    WindowState = WindowState.Maximized;
+                Opacity = 1;
+                ShowInTaskbar = true;
+                DispatcherTimer.RunOnce(() =>
+                {
+                    _placementCaptureEnabled = true;
+                    _placementTransient = WindowState is WindowState.Minimized or WindowState.FullScreen
+                        || IsNativeFullScreenFrame();
+                }, TimeSpan.FromMilliseconds(500));
+            }, TimeSpan.Zero);
+        }, TimeSpan.Zero);
     }
 
     private void ScheduleNormalWindowPlacement()
     {
         if (!_placementCaptureEnabled || _placementTransient || WindowState != WindowState.Normal)
             return;
+        if (IsNativeFullScreenFrame())
+        {
+            _placementSaveTimer.Stop();
+            return;
+        }
         _stableWindowMode = "normal";
         _placementSaveTimer.Stop();
         _placementSaveTimer.Start();
@@ -202,6 +224,24 @@ public partial class MainWindow : Window
             Width = (int)Math.Round(frameSize.Width * scale),
             Height = (int)Math.Round(frameSize.Height * scale),
         };
+    }
+
+    private bool IsNativeFullScreenFrame()
+    {
+        if (!OperatingSystem.IsMacOS())
+            return false;
+        var scale = (Screens.ScreenFromWindow(this)?.Scaling).GetValueOrDefault(RenderScaling);
+        var frameSize = FrameSize ?? ClientSize;
+        var frame = new WindowBounds
+        {
+            X = Position.X,
+            Y = Position.Y,
+            Width = (int)Math.Round(frameSize.Width * scale),
+            Height = (int)Math.Round(frameSize.Height * scale),
+        };
+        var displays = Screens.All.Select(screen => new DisplayWorkArea(
+            screen.Bounds.X, screen.Bounds.Y, screen.Bounds.Width, screen.Bounds.Height, screen.Scaling));
+        return WindowPlacementPolicy.IsFullDisplayFrame(frame, displays);
     }
 
     private void OnWindowStateChanged()
@@ -227,7 +267,7 @@ public partial class MainWindow : Window
         DispatcherTimer.RunOnce(() =>
         {
             _placementTransient = false;
-            if (WindowState != WindowState.Normal)
+            if (WindowState != WindowState.Normal || IsNativeFullScreenFrame())
                 return;
             CacheCurrentNormalBounds();
             _stableWindowMode = "normal";
