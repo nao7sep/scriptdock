@@ -249,11 +249,6 @@ public partial class MainWindow : Window
     private void FlushWindowPlacement()
     {
         _placementSaveTimer.Stop();
-        if (_placementCaptureEnabled && !_placementTransient && WindowState == WindowState.Normal)
-        {
-            CacheCurrentNormalBounds();
-            _stableWindowMode = "normal";
-        }
         PersistWindowPlacement();
     }
 
