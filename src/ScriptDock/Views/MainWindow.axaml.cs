@@ -42,10 +42,26 @@ public partial class MainWindow : Window
     private double _headerChromeHeight = WindowMetrics.HeaderHeight;
     private double _statusChromeHeight = WindowMetrics.StatusBarHeight;
     private double _operationalErrorChromeHeight;
+    private readonly DispatcherTimer _placementSaveTimer;
+    private WindowBounds? _normalWindowBounds;
+    private string _stableWindowMode = "normal";
+    private bool _placementCaptureEnabled;
+    private bool _placementTransient;
 
     public MainWindow()
     {
         InitializeComponent();
+
+        _scriptsColumnFloor = BodyGrid.ColumnDefinitions[0].MinWidth;
+        _recentColumnFloor = BodyGrid.ColumnDefinitions[2].MinWidth;
+        _placementSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        _placementSaveTimer.Tick += (_, _) =>
+        {
+            _placementSaveTimer.Stop();
+            if (WindowState == WindowState.Normal && !_placementTransient)
+                CacheCurrentNormalBounds();
+            PersistWindowPlacement();
+        };
 
         if (OperatingSystem.IsWindows())
         {
@@ -54,6 +70,8 @@ public partial class MainWindow : Window
         }
 
         Loaded += OnLoaded;
+        Opened += (_, _) => PrepareWindowPlacement();
+        PositionChanged += (_, _) => ScheduleNormalWindowPlacement();
         Closing += OnClosing;
         ConsoleScroll.ScrollChanged += OnConsoleScrollChanged;
         ConsoleScroll.LayoutUpdated += OnConsoleLayoutUpdated;
@@ -70,8 +88,6 @@ public partial class MainWindow : Window
             // Preserve the XAML pane floors separately from the font-dependent measured header widths.
             // Every remeasure starts from these values, so changing from a wide font back to a narrower
             // one may shrink the native minimum again instead of retaining the historical maximum.
-            _scriptsColumnFloor = BodyGrid.ColumnDefinitions[0].MinWidth;
-            _recentColumnFloor = BodyGrid.ColumnDefinitions[2].MinWidth;
             RecalculateMinimums();
 
             // Seed the user's pane INTENT from the persisted values (pixels), defaulting to the
@@ -123,7 +139,122 @@ public partial class MainWindow : Window
     private void OnWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
     {
         if (e.Property == ClientSizeProperty || e.Property == BoundsProperty)
+        {
             ClampPanesToWindow();
+            ScheduleNormalWindowPlacement();
+        }
+        else if (e.Property == WindowStateProperty)
+        {
+            OnWindowStateChanged();
+        }
+    }
+
+    private void PrepareWindowPlacement()
+    {
+        RecalculateMinimums();
+        var displays = Screens.All.Select(screen => new DisplayWorkArea(
+            screen.WorkingArea.X, screen.WorkingArea.Y,
+            screen.WorkingArea.Width, screen.WorkingArea.Height, screen.Scaling)).ToArray();
+        var restoration = WindowPlacementPolicy.Resolve(ViewModel?.MainWindowPlacement, MinWidth, MinHeight, displays);
+        if (restoration.NormalBounds is { } bounds)
+        {
+            var display = displays.First(item =>
+                bounds.X >= item.X && bounds.Y >= item.Y
+                && (long)bounds.X + bounds.Width <= (long)item.X + item.Width
+                && (long)bounds.Y + bounds.Height <= (long)item.Y + item.Height);
+            var frameSize = FrameSize ?? ClientSize;
+            var chromeWidth = Math.Max(0, frameSize.Width - ClientSize.Width);
+            var chromeHeight = Math.Max(0, frameSize.Height - ClientSize.Height);
+            Position = new PixelPoint(bounds.X, bounds.Y);
+            Width = Math.Max(MinWidth, bounds.Width / display.Scaling - chromeWidth);
+            Height = Math.Max(MinHeight, bounds.Height / display.Scaling - chromeHeight);
+        }
+        _stableWindowMode = restoration.Mode;
+        CacheCurrentNormalBounds();
+        if (_stableWindowMode == "maximized")
+            WindowState = WindowState.Maximized;
+        Opacity = 1;
+        ShowInTaskbar = true;
+        DispatcherTimer.RunOnce(() =>
+        {
+            _placementCaptureEnabled = true;
+            _placementTransient = WindowState is WindowState.Minimized or WindowState.FullScreen;
+        }, TimeSpan.FromMilliseconds(500));
+    }
+
+    private void ScheduleNormalWindowPlacement()
+    {
+        if (!_placementCaptureEnabled || _placementTransient || WindowState != WindowState.Normal)
+            return;
+        _stableWindowMode = "normal";
+        _placementSaveTimer.Stop();
+        _placementSaveTimer.Start();
+    }
+
+    private void CacheCurrentNormalBounds()
+    {
+        var scale = (Screens.ScreenFromWindow(this)?.Scaling).GetValueOrDefault(RenderScaling);
+        var frameSize = FrameSize ?? ClientSize;
+        _normalWindowBounds = new WindowBounds
+        {
+            X = Position.X,
+            Y = Position.Y,
+            Width = (int)Math.Round(frameSize.Width * scale),
+            Height = (int)Math.Round(frameSize.Height * scale),
+        };
+    }
+
+    private void OnWindowStateChanged()
+    {
+        if (!_placementCaptureEnabled)
+            return;
+        if (WindowState is WindowState.Minimized or WindowState.FullScreen)
+        {
+            _placementTransient = true;
+            _placementSaveTimer.Stop();
+            return;
+        }
+        if (WindowState == WindowState.Maximized)
+        {
+            _placementTransient = false;
+            _placementSaveTimer.Stop();
+            _stableWindowMode = "maximized";
+            PersistWindowPlacement();
+            return;
+        }
+        _placementTransient = true;
+        _placementSaveTimer.Stop();
+        DispatcherTimer.RunOnce(() =>
+        {
+            _placementTransient = false;
+            if (WindowState != WindowState.Normal)
+                return;
+            CacheCurrentNormalBounds();
+            _stableWindowMode = "normal";
+            PersistWindowPlacement();
+        }, TimeSpan.FromMilliseconds(400));
+    }
+
+    private void PersistWindowPlacement()
+    {
+        if (!_placementCaptureEnabled || _normalWindowBounds is null)
+            return;
+        ViewModel?.PersistWindowPlacement(new WindowPlacement
+        {
+            NormalBounds = _normalWindowBounds,
+            Mode = _stableWindowMode,
+        });
+    }
+
+    private void FlushWindowPlacement()
+    {
+        _placementSaveTimer.Stop();
+        if (_placementCaptureEnabled && !_placementTransient && WindowState == WindowState.Normal)
+        {
+            CacheCurrentNormalBounds();
+            _stableWindowMode = "normal";
+        }
+        PersistWindowPlacement();
     }
 
     // Measure every font-dependent piece of fixed chrome against the CURRENT app font. The pane
@@ -245,6 +376,7 @@ public partial class MainWindow : Window
             vm.PersistPaneSizes(
                 _recentWidthIntent ?? BodyGrid.ColumnDefinitions[2].ActualWidth,
                 _consoleHeightIntent ?? LeftPanesGrid.RowDefinitions[2].ActualHeight);
+            FlushWindowPlacement();
             vm.Shutdown();
         }
         catch (Exception ex)
