@@ -42,11 +42,7 @@ public partial class MainWindow : Window
     private double _headerChromeHeight = WindowMetrics.HeaderHeight;
     private double _statusChromeHeight = WindowMetrics.StatusBarHeight;
     private double _operationalErrorChromeHeight;
-    private readonly DispatcherTimer _placementSaveTimer;
-    private WindowBounds? _normalWindowBounds;
-    private string _stableWindowMode = "normal";
-    private bool _placementCaptureEnabled;
-    private bool _placementTransient;
+    private WindowPlacementController? _placement;
 
     public MainWindow()
     {
@@ -54,15 +50,6 @@ public partial class MainWindow : Window
 
         _scriptsColumnFloor = BodyGrid.ColumnDefinitions[0].MinWidth;
         _recentColumnFloor = BodyGrid.ColumnDefinitions[2].MinWidth;
-        _placementSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
-        _placementSaveTimer.Tick += (_, _) =>
-        {
-            _placementSaveTimer.Stop();
-            if (WindowState == WindowState.Normal && !_placementTransient && !IsNativeFullScreenFrame())
-                CacheCurrentNormalBounds();
-            PersistWindowPlacement();
-        };
-
         if (OperatingSystem.IsWindows())
         {
             using var iconStream = AssetLoader.Open(new Uri("avares://ScriptDock/Assets/icon-win.png"));
@@ -70,8 +57,15 @@ public partial class MainWindow : Window
         }
 
         Loaded += OnLoaded;
-        Opened += (_, _) => PrepareWindowPlacement();
-        PositionChanged += (_, _) => ScheduleNormalWindowPlacement();
+        WindowViewport.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == ScrollViewer.ViewportProperty)
+                ClampPanesToWindow();
+        };
+        PositionChanged += (_, _) => ApplyNativeMinimum();
+        ScalingChanged += (_, _) => ApplyNativeMinimum();
+        Screens.Changed += OnScreensChanged;
+        Closed += (_, _) => Screens.Changed -= OnScreensChanged;
         Closing += OnClosing;
         ConsoleScroll.ScrollChanged += OnConsoleScrollChanged;
         ConsoleScroll.LayoutUpdated += OnConsoleLayoutUpdated;
@@ -141,155 +135,39 @@ public partial class MainWindow : Window
         if (e.Property == ClientSizeProperty || e.Property == BoundsProperty)
         {
             ClampPanesToWindow();
-            ScheduleNormalWindowPlacement();
-        }
-        else if (e.Property == WindowStateProperty)
-        {
-            OnWindowStateChanged();
         }
     }
 
-    private void PrepareWindowPlacement()
+    public void PrepareWindowPlacement()
     {
         RecalculateMinimums();
-        var displays = Screens.All.Select(screen => new DisplayWorkArea(
-            screen.WorkingArea.X, screen.WorkingArea.Y,
-            screen.WorkingArea.Width, screen.WorkingArea.Height, screen.Scaling)).ToArray();
-        var restoration = WindowPlacementPolicy.Resolve(ViewModel?.MainWindowPlacement, MinWidth, MinHeight, displays);
-        DisplayWorkArea? restoredDisplay = null;
-        if (restoration.NormalBounds is { } bounds)
+        _placement = new WindowPlacementController(this, ViewModel?.MainWindowPlacement,
+            placement => ViewModel?.PersistWindowPlacement(placement),
+            ex => Log.Warn("window placement failed", ex), ApplyNativeMinimum);
+    }
+
+    private void OnScreensChanged(object? sender, EventArgs e) => ApplyNativeMinimum();
+
+    private void ApplyNativeMinimum(Screen? target = null)
+    {
+        try
         {
-            var display = displays.First(item =>
-                bounds.X >= item.X && bounds.Y >= item.Y
-                && (long)bounds.X + bounds.Width <= (long)item.X + item.Width
-                && (long)bounds.Y + bounds.Height <= (long)item.Y + item.Height);
-            restoredDisplay = display;
-            var frameSize = FrameSize ?? ClientSize;
-            var chromeWidth = Math.Max(0, frameSize.Width - ClientSize.Width);
-            var chromeHeight = Math.Max(0, frameSize.Height - ClientSize.Height);
-            Position = new PixelPoint(bounds.X, bounds.Y);
-            Width = Math.Max(MinWidth, bounds.Width / display.Scaling - chromeWidth);
-            Height = Math.Max(MinHeight, bounds.Height / display.Scaling - chromeHeight);
+            var floor = new Size(LayoutRoot.MinWidth, LayoutRoot.MinHeight);
+            var screen = target ?? Screens.ScreenFromWindow(this) ?? Screens.Primary;
+            var client = ClientSize;
+            var frame = FrameSize ?? client;
+            var minimum = screen is null ? floor : WindowMetrics.CapMinimumToWorkArea(
+                floor, screen.WorkingArea, screen.Scaling,
+                new Size(Math.Max(0, frame.Width - client.Width), Math.Max(0, frame.Height - client.Height)));
+            MinWidth = minimum.Width;
+            MinHeight = minimum.Height;
         }
-        _stableWindowMode = restoration.Mode;
-        DispatcherTimer.RunOnce(() =>
+        catch (Exception ex)
         {
-            if (restoration.NormalBounds is { } accepted && restoredDisplay is { } display)
-            {
-                var frameSize = FrameSize ?? ClientSize;
-                Width = Math.Max(MinWidth, Width + accepted.Width / display.Scaling - frameSize.Width);
-                Height = Math.Max(MinHeight, Height + accepted.Height / display.Scaling - frameSize.Height);
-                Position = new PixelPoint(accepted.X, accepted.Y);
-            }
-            CacheCurrentNormalBounds();
-            _normalWindowBounds = WindowPlacementPolicy.SeedNormalBounds(restoration, _normalWindowBounds!);
-            DispatcherTimer.RunOnce(() =>
-            {
-                if (_stableWindowMode == "maximized")
-                    WindowState = WindowState.Maximized;
-                Opacity = 1;
-                ShowInTaskbar = true;
-                DispatcherTimer.RunOnce(() =>
-                {
-                    _placementCaptureEnabled = true;
-                    _placementTransient = WindowState is WindowState.Minimized or WindowState.FullScreen
-                        || IsNativeFullScreenFrame();
-                }, TimeSpan.FromMilliseconds(500));
-            }, TimeSpan.Zero);
-        }, TimeSpan.Zero);
-    }
-
-    private void ScheduleNormalWindowPlacement()
-    {
-        if (!_placementCaptureEnabled || _placementTransient || WindowState != WindowState.Normal)
-            return;
-        if (IsNativeFullScreenFrame())
-        {
-            _placementSaveTimer.Stop();
-            return;
+            // Leave the current native minimum intact when the display backend
+            // is unavailable; content still owns its full minimum and scrolling.
+            Log.Warn("window minimum work-area update failed", ex);
         }
-        _stableWindowMode = "normal";
-        _placementSaveTimer.Stop();
-        _placementSaveTimer.Start();
-    }
-
-    private void CacheCurrentNormalBounds()
-    {
-        var scale = (Screens.ScreenFromWindow(this)?.Scaling).GetValueOrDefault(RenderScaling);
-        var frameSize = FrameSize ?? ClientSize;
-        _normalWindowBounds = new WindowBounds
-        {
-            X = Position.X,
-            Y = Position.Y,
-            Width = (int)Math.Round(frameSize.Width * scale),
-            Height = (int)Math.Round(frameSize.Height * scale),
-        };
-    }
-
-    private bool IsNativeFullScreenFrame()
-    {
-        if (!OperatingSystem.IsMacOS())
-            return false;
-        var scale = (Screens.ScreenFromWindow(this)?.Scaling).GetValueOrDefault(RenderScaling);
-        var frameSize = FrameSize ?? ClientSize;
-        var frame = new WindowBounds
-        {
-            X = Position.X,
-            Y = Position.Y,
-            Width = (int)Math.Round(frameSize.Width * scale),
-            Height = (int)Math.Round(frameSize.Height * scale),
-        };
-        var displays = Screens.All.Select(screen => new DisplayWorkArea(
-            screen.Bounds.X, screen.Bounds.Y, screen.Bounds.Width, screen.Bounds.Height, screen.Scaling));
-        return WindowPlacementPolicy.IsFullDisplayFrame(frame, displays);
-    }
-
-    private void OnWindowStateChanged()
-    {
-        if (!_placementCaptureEnabled)
-            return;
-        if (WindowState is WindowState.Minimized or WindowState.FullScreen)
-        {
-            _placementTransient = true;
-            _placementSaveTimer.Stop();
-            return;
-        }
-        if (WindowState == WindowState.Maximized)
-        {
-            _placementTransient = false;
-            _placementSaveTimer.Stop();
-            _stableWindowMode = "maximized";
-            PersistWindowPlacement();
-            return;
-        }
-        _placementTransient = true;
-        _placementSaveTimer.Stop();
-        DispatcherTimer.RunOnce(() =>
-        {
-            _placementTransient = false;
-            if (WindowState != WindowState.Normal || IsNativeFullScreenFrame())
-                return;
-            CacheCurrentNormalBounds();
-            _stableWindowMode = "normal";
-            PersistWindowPlacement();
-        }, TimeSpan.FromMilliseconds(400));
-    }
-
-    private void PersistWindowPlacement()
-    {
-        if (!_placementCaptureEnabled || _normalWindowBounds is null)
-            return;
-        ViewModel?.PersistWindowPlacement(new WindowPlacement
-        {
-            NormalBounds = _normalWindowBounds,
-            Mode = _stableWindowMode,
-        });
-    }
-
-    private void FlushWindowPlacement()
-    {
-        _placementSaveTimer.Stop();
-        PersistWindowPlacement();
     }
 
     // Measure every font-dependent piece of fixed chrome against the CURRENT app font. The pane
@@ -320,12 +198,13 @@ public partial class MainWindow : Window
             ? OperationalErrorBar.DesiredSize.Height
             : 0;
 
-        MinWidth = WindowMetrics.MinWidthFor(BodyGrid.ColumnDefinitions.Select(c => c.MinWidth));
-        MinHeight = WindowMetrics.MinHeightFor(
+        LayoutRoot.MinWidth = WindowMetrics.MinWidthFor(BodyGrid.ColumnDefinitions.Select(c => c.MinWidth));
+        LayoutRoot.MinHeight = WindowMetrics.MinHeightFor(
             LeftPanesGrid.RowDefinitions.Select(r => r.MinHeight),
             _headerChromeHeight,
             _statusChromeHeight,
             _operationalErrorChromeHeight);
+        ApplyNativeMinimum();
         ClampPanesToWindow();
     }
 
@@ -347,7 +226,7 @@ public partial class MainWindow : Window
         {
             var recentColumn = BodyGrid.ColumnDefinitions[2];
             var maxRecent = WindowMetrics.MaxRecentWidth(
-                Width, BodyGrid.ColumnDefinitions[0].MinWidth, recentColumn.MinWidth);
+                Math.Max(WindowViewport.Viewport.Width, LayoutRoot.MinWidth), BodyGrid.ColumnDefinitions[0].MinWidth, recentColumn.MinWidth);
             recentColumn.Width = new GridLength(
                 WindowMetrics.DisplayFromIntent(recentIntent, recentColumn.MinWidth, maxRecent), GridUnitType.Pixel);
         }
@@ -356,7 +235,7 @@ public partial class MainWindow : Window
         {
             var consoleRow = LeftPanesGrid.RowDefinitions[2];
             var maxConsole = WindowMetrics.MaxConsoleHeight(
-                Height,
+                Math.Max(WindowViewport.Viewport.Height, LayoutRoot.MinHeight),
                 LeftPanesGrid.RowDefinitions[0].MinHeight,
                 consoleRow.MinHeight,
                 _headerChromeHeight,
@@ -411,7 +290,7 @@ public partial class MainWindow : Window
             vm.PersistPaneSizes(
                 _recentWidthIntent ?? BodyGrid.ColumnDefinitions[2].ActualWidth,
                 _consoleHeightIntent ?? LeftPanesGrid.RowDefinitions[2].ActualHeight);
-            FlushWindowPlacement();
+            _placement?.Flush();
             vm.Shutdown();
         }
         catch (Exception ex)

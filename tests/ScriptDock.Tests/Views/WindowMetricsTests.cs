@@ -22,6 +22,18 @@ namespace ScriptDock.Tests.Views;
 /// </summary>
 public sealed class WindowMetricsTests
 {
+    [Fact]
+    public void Native_minimum_uses_scaled_work_area_without_changing_the_content_floor()
+    {
+        var floor = new Avalonia.Size(1200, 800);
+        var capped = WindowMetrics.CapMinimumToWorkArea(
+            floor, new Avalonia.PixelRect(-1920, 40, 1600, 1000), 2, new Avalonia.Size(8, 30));
+        Assert.Equal(new Avalonia.Size(792, 470), capped);
+        Assert.Equal(new Avalonia.Size(1200, 800), floor);
+        Assert.Equal(floor, WindowMetrics.CapMinimumToWorkArea(
+            floor, new Avalonia.PixelRect(0, 0, 3840, 2160), 2, new Avalonia.Size(8, 30)));
+    }
+
     // Mirrors the live layout in Views/MainWindow.axaml. Kept here so the derivation assertions
     // read against a concrete, known set; the XAML guards below are what catch drift between this
     // list and the actual XAML.
