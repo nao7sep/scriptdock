@@ -139,6 +139,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public double? SavedRecentWidth => _state.RecentPaneWidth;
     public double? SavedConsoleHeight => _state.ConsoleHeight;
+    public int? WindowPositionX => _state.WindowPositionX;
+    public int? WindowPositionY => _state.WindowPositionY;
+    public double? WindowWidth => _state.WindowWidth;
+    public double? WindowHeight => _state.WindowHeight;
 
     /// <summary>Drive the lists' empty-state messages. Refreshed after each rebuild.</summary>
     public bool NoScripts => Scripts.Count == 0;
@@ -209,6 +213,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _state.ConsoleHeight = consoleHeight;
         _stateStore.Save(_state);
     });
+
+    public void PersistWindowGeometry(int x, int y, double width, double height) =>
+        Guard("save window geometry", () =>
+        {
+            _state.WindowPositionX = x;
+            _state.WindowPositionY = y;
+            _state.WindowWidth = width;
+            _state.WindowHeight = height;
+            _stateStore.Save(_state);
+        });
 
     public void Shutdown() => Guard("shutdown", () =>
     {

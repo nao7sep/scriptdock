@@ -252,6 +252,24 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public void PersistWindowGeometry_SavesFourPrimitiveValuesThroughAppState()
+    {
+        var configStore = new FakeJsonStore<AppConfig>();
+        var stateStore = new FakeJsonStore<AppState>();
+        var vm = new MainWindowViewModel(
+            configStore, stateStore, configStore.Value, stateStore.Value,
+            new ScriptScanner(), new FakeProcessRunner());
+
+        vm.PersistWindowGeometry(-1400, 80, 1100.5, 720.25);
+
+        Assert.Equal(1, stateStore.SaveCount);
+        Assert.Equal(-1400, vm.WindowPositionX);
+        Assert.Equal(80, vm.WindowPositionY);
+        Assert.Equal(1100.5, vm.WindowWidth);
+        Assert.Equal(720.25, vm.WindowHeight);
+    }
+
+    [Fact]
     public void TryApplySettings_SaveFailureDoesNotPublishCandidate()
     {
         var config = new AppConfig { RootDirs = ["/old"], UiFontFamily = "Inter" };

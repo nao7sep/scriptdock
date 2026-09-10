@@ -21,6 +21,34 @@ namespace ScriptDock.Tests.Views;
 public sealed class WindowMetricsTests
 {
     [Fact]
+    public void WindowGeometry_AllowsNegativeCoordinatesOnAConnectedDisplay()
+    {
+        Avalonia.PixelRect[] workingAreas =
+        [
+            new(0, 0, 1920, 1080),
+            new(-1600, 40, 1600, 1000),
+        ];
+
+        Assert.True(WindowMetrics.CanRestoreWindowGeometry(
+            -1400, 120, 1100, 720, workingAreas));
+    }
+
+    [Theory]
+    [InlineData(null, 20, 1100.0, 720.0)]
+    [InlineData(20, null, 1100.0, 720.0)]
+    [InlineData(20, 20, null, 720.0)]
+    [InlineData(20, 20, 1100.0, null)]
+    [InlineData(20, 20, 0.0, 720.0)]
+    [InlineData(20, 20, 1100.0, -1.0)]
+    [InlineData(3000, 20, 1100.0, 720.0)]
+    public void WindowGeometry_RejectsIncompleteInvalidOrDisconnectedValues(
+        int? x, int? y, double? width, double? height)
+    {
+        Assert.False(WindowMetrics.CanRestoreWindowGeometry(
+            x, y, width, height, [new Avalonia.PixelRect(0, 0, 1920, 1080)]));
+    }
+
+    [Fact]
     public void MainWindow_UsesInitialSizeWithoutAppOwnedStartupPosition()
     {
         var axaml = ReadMainWindowAxaml();

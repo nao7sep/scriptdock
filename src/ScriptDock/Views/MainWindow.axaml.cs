@@ -136,6 +136,34 @@ public partial class MainWindow : Window
         }
     }
 
+    public void RestoreWindowGeometry()
+    {
+        if (ViewModel is not { } vm)
+            return;
+
+        try
+        {
+            var target = Screens.All.FirstOrDefault(screen => WindowMetrics.CanRestoreWindowGeometry(
+                vm.WindowPositionX, vm.WindowPositionY, vm.WindowWidth, vm.WindowHeight,
+                [screen.WorkingArea]));
+            if (target is null)
+                return;
+
+            RecalculateMinimums();
+            ApplyNativeMinimum(target);
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Position = new PixelPoint(vm.WindowPositionX!.Value, vm.WindowPositionY!.Value);
+            Width = Math.Max(vm.WindowWidth!.Value, MinWidth);
+            Height = Math.Max(vm.WindowHeight!.Value, MinHeight);
+        }
+        catch (Exception ex)
+        {
+            // Placement is disposable. Keep the designed defaults if the display
+            // backend or saved values cannot be used.
+            Log.Warn("window geometry restore failed", ex);
+        }
+    }
+
     private void OnScreensChanged(object? sender, EventArgs e) => ApplyNativeMinimum();
 
     private void ApplyNativeMinimum(Screen? target = null)
@@ -280,6 +308,8 @@ public partial class MainWindow : Window
             vm.PersistPaneSizes(
                 _recentWidthIntent ?? BodyGrid.ColumnDefinitions[2].ActualWidth,
                 _consoleHeightIntent ?? LeftPanesGrid.RowDefinitions[2].ActualHeight);
+            if (WindowState == WindowState.Normal)
+                vm.PersistWindowGeometry(Position.X, Position.Y, Width, Height);
             vm.Shutdown();
         }
         catch (Exception ex)

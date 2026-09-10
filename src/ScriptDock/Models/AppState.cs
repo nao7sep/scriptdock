@@ -30,6 +30,11 @@ public sealed class AppState : IJsonNormalizable
     /// <summary>Persisted height of the Console pane; null until first saved.</summary>
     public double? ConsoleHeight { get; set; }
 
+    public int? WindowPositionX { get; set; }
+    public int? WindowPositionY { get; set; }
+    public double? WindowWidth { get; set; }
+    public double? WindowHeight { get; set; }
+
     /// <summary>Snapshot of the scripts that were running when this state was last saved, recorded
     /// so a relaunch can recapture them by PID + start-time. Replaced whenever the running set changes.</summary>
     public List<PersistedProcess> RunningProcesses { get; set; } = [];

@@ -24,6 +24,10 @@ public sealed class AppStateRoundTripTests
             // restores and re-clamps on load; they must survive the serializer untouched.
             RecentPaneWidth = 420,
             ConsoleHeight = 240,
+            WindowPositionX = -1400,
+            WindowPositionY = 80,
+            WindowWidth = 1100.5,
+            WindowHeight = 720.25,
             RecentlyRun =
             {
                 new RecentRun
@@ -52,6 +56,10 @@ public sealed class AppStateRoundTripTests
         Assert.Equal(state.KnownPaths, back.KnownPaths);
         Assert.Equal(420, back.RecentPaneWidth);
         Assert.Equal(240, back.ConsoleHeight);
+        Assert.Equal(-1400, back.WindowPositionX);
+        Assert.Equal(80, back.WindowPositionY);
+        Assert.Equal(1100.5, back.WindowWidth);
+        Assert.Equal(720.25, back.WindowHeight);
         Assert.Single(back.RecentlyRun);
         Assert.Equal("/a/x.command", back.RecentlyRun[0].Path);
         Assert.Equal(state.RecentlyRun[0].RanAt, back.RecentlyRun[0].RanAt);
