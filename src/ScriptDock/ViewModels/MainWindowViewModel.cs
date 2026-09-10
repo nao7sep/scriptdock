@@ -179,14 +179,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// quit, so there is nothing to lose). The view drives the actual quit confirmation.</summary>
     public bool ShouldConfirmQuit() => _config.KillProcessesOnClose && RunningCount > 0;
 
-    public WindowPlacement? MainWindowPlacement => _state.WindowPlacements.Main;
-
-    public void PersistWindowPlacement(WindowPlacement placement) => Guard("save window placement", () =>
-    {
-        _state.WindowPlacements.Main = placement;
-        _stateStore.Save(_state);
-    });
-
     /// <summary>Starts the console poll, builds the Recent list, and runs the first scan.</summary>
     public async Task InitializeAsync()
     {

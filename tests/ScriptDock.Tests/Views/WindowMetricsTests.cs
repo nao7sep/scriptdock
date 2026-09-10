@@ -12,16 +12,23 @@ namespace ScriptDock.Tests.Views;
 /// The window's minimum size is derived, not guessed (per the window-chrome conventions):
 /// <see cref="WindowMetrics"/> sums the live grid column/row minimums plus the fixed chrome
 /// (header bar, status bar, splitters, body margin) so the window can never shrink small enough
-/// to hide a pane or overlap the status bar, and the restore clamp in <c>MainWindow.OnLoaded</c>
-/// reuses the same constants for its bounds. These tests pin the derivation math directly (no
+/// to hide a pane or overlap the status bar. These tests pin the derivation math directly (no
 /// Avalonia headless harness, matching the suite's pure-helper style), guard that every body
 /// column and left-column row declares a non-zero minimum, and assert the live XAML track minimums
-/// match the values the helper and clamp are written against — so a future change to a minimum, a
-/// splitter, or the margin fails here rather than silently letting the window under-size or the
-/// clamp drift away from the layout.
+/// match the values the helper and pane-size clamps are written against — so a future change to a
+/// minimum, a splitter, or the margin fails here rather than silently letting the window under-size.
 /// </summary>
 public sealed class WindowMetricsTests
 {
+    [Fact]
+    public void MainWindow_UsesInitialSizeWithoutAppOwnedStartupPosition()
+    {
+        var axaml = ReadMainWindowAxaml();
+
+        Assert.Contains("Width=\"1100\" Height=\"720\"", axaml, System.StringComparison.Ordinal);
+        Assert.DoesNotContain("WindowStartupLocation", axaml, System.StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Native_minimum_uses_scaled_work_area_without_changing_the_content_floor()
     {
@@ -104,12 +111,11 @@ public sealed class WindowMetricsTests
     }
 
     [Fact]
-    public void RestoreClampBounds_EqualTheLayoutTrackMinimums()
+    public void PaneClampBounds_EqualTheLayoutTrackMinimums()
     {
-        // The restore clamp in MainWindow.OnLoaded uses each pane's own track minimum as the lower
-        // bound (Recent column min for the right pane, console row min for the console). Those lower
-        // bounds must equal what the XAML actually declares, so the clamp can never let a restored
-        // size fall below the minimum the layout enforces.
+        // MainWindow uses each pane's own track minimum as the lower bound (Recent column min for
+        // the right pane, console row min for the console). Those bounds must equal what the XAML
+        // declares, so the clamp can never let a persisted size fall below the layout minimum.
         var axaml = ReadMainWindowAxaml();
         var columnMins = BodyColumnMinWidths(axaml);
         var rowMins = LeftColumnRowMinHeights(axaml);

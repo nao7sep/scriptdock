@@ -8,7 +8,6 @@
         Title="ScriptDock"
         Icon="/Assets/icon.png"
         Width="1100" Height="720"
-        WindowStartupLocation="CenterScreen"
         KeyDown="OnWindowKeyDown"
         Background="{StaticResource AppBackgroundBrush}"
         RequestedThemeVariant="Dark"><!-- ScriptDock is dark-only; setting the variant on the
@@ -158,7 +157,7 @@
              height on every resize (ClampPanesToWindow) so neither can spill past the shrinking window. -->
         <Grid x:Name="BodyGrid" Grid.Row="2" Margin="12">
             <!-- Both body columns carry a real minimum width; WindowMetrics sums these (read from the
-                 live columns) to derive the window MinWidth and to back the restore clamp. These XAML
+                 live columns) to derive the window MinWidth and to back the pane-size clamp. These XAML
                  values are a floor: OnLoaded measures the Scripts and Recent header button rows and
                  raises each column minimum to fit them, so the right-aligned buttons can never overlap
                  a section title (a font-dependent width the header itself dictates). The Recent column

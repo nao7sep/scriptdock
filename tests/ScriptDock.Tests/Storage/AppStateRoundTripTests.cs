@@ -81,4 +81,17 @@ public sealed class AppStateRoundTripTests
 
         Assert.Contains("\"2026-06-17T00:15:41.123Z\"", json);
     }
+
+    [Fact]
+    public void ObsoleteWindowPlacement_IsDiscardedAndNotSavedAgain()
+    {
+        var state = JsonSerializer.Deserialize<AppState>("""
+            {"showHidden":true,"windowPlacements":{"main":{"normalBounds":{"x":20,"y":40,"width":1200,"height":800},"mode":"maximized"}}}
+            """, JsonOptions.Default)!;
+
+        var json = JsonSerializer.Serialize(state, JsonOptions.Default);
+
+        Assert.True(state.ShowHidden);
+        Assert.DoesNotContain("windowPlacements", json, StringComparison.Ordinal);
+    }
 }

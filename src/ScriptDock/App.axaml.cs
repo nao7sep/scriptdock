@@ -58,7 +58,6 @@ public partial class App : Application
             {
                 DataContext = viewModel,
             };
-            mainWindow.PrepareWindowPlacement();
             desktop.MainWindow = mainWindow;
             RegisterOwnerActivation(mainWindow);
 

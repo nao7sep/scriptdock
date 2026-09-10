@@ -5,8 +5,7 @@ using System.Linq;
 namespace ScriptDock.Views;
 
 /// <summary>
-/// Derives the main window's minimum size — and the bounds the restore-clamp uses — from the
-/// layout itself, per the window-chrome conventions: the minimum is the sum of the content
+/// Derives the main window's minimum size from the layout itself: the minimum is the sum of the content
 /// panes' real minimums plus the fixed chrome, never a hand-typed magic constant. The two body
 /// columns (the Scripts/console stack and Recent) and the two left-column rows (Scripts and the
 /// console) carry the real pane minimums; the header bar, status bar, splitters, and the BodyGrid
@@ -14,10 +13,9 @@ namespace ScriptDock.Views;
 /// </summary>
 /// <remarks>
 /// Kept as pure functions over the live column/row minimums (read from the grids by the caller)
-/// so the window minimum, the restore clamp, and the XAML track minimums can never drift apart,
-/// and so the derivation can be tested without a UI thread. <see cref="MainWindow"/> assigns
-/// <see cref="MinWidthFor"/> / <see cref="MinHeightFor"/> in <c>OnLoaded</c>, and the same
-/// constants back the restore-clamp reserves there — this type is the single source for all of it.
+/// so the window minimum and the XAML track minimums can never drift apart, and so the derivation
+/// can be tested without a UI thread. <see cref="MainWindow"/> assigns <see cref="MinWidthFor"/>
+/// and <see cref="MinHeightFor"/> in <c>OnLoaded</c>.
 /// </remarks>
 public static class WindowMetrics
 {
@@ -39,7 +37,7 @@ public static class WindowMetrics
     // Fixed chrome bar heights, measured from their XAML: the header Border (Padding 14,10 +
     // 1px bottom border + the ~26px wordmark/hamburger row) and the status Border (Padding 14,6 +
     // 1px top border + a single text line). These are named so the window minimum and the
-    // restore clamp reserve the same chrome the layout actually paints.
+    // pane-size clamps reserve the same chrome the layout actually paints.
     public const double HeaderHeight = 48;
     public const double StatusBarHeight = 31;
 
@@ -65,7 +63,7 @@ public static class WindowMetrics
     /// <summary>
     /// The widest the (fixed-size) Recent column may be at the given window width while the left
     /// column keeps its minimum — never below the Recent column's own minimum. Used both to clamp a
-    /// restored width and to re-clamp on resize, since a fixed-pixel column does not shrink itself.
+    /// persisted width and to re-clamp on resize, since a fixed-pixel column does not shrink itself.
     /// </summary>
     public static double MaxRecentWidth(double windowWidth, double leftColumnMin, double recentColumnMin)
         => Math.Max(recentColumnMin, windowWidth - (leftColumnMin + ColumnSplitter + BodyHorizontalMargin));

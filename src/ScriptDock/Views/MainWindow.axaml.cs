@@ -42,8 +42,6 @@ public partial class MainWindow : Window
     private double _headerChromeHeight = WindowMetrics.HeaderHeight;
     private double _statusChromeHeight = WindowMetrics.StatusBarHeight;
     private double _operationalErrorChromeHeight;
-    private WindowPlacementController? _placement;
-
     public MainWindow()
     {
         InitializeComponent();
@@ -136,14 +134,6 @@ public partial class MainWindow : Window
         {
             ClampPanesToWindow();
         }
-    }
-
-    public void PrepareWindowPlacement()
-    {
-        RecalculateMinimums();
-        _placement = new WindowPlacementController(this, ViewModel?.MainWindowPlacement,
-            placement => ViewModel?.PersistWindowPlacement(placement),
-            ex => Log.Warn("window placement failed", ex), ApplyNativeMinimum);
     }
 
     private void OnScreensChanged(object? sender, EventArgs e) => ApplyNativeMinimum();
@@ -290,7 +280,6 @@ public partial class MainWindow : Window
             vm.PersistPaneSizes(
                 _recentWidthIntent ?? BodyGrid.ColumnDefinitions[2].ActualWidth,
                 _consoleHeightIntent ?? LeftPanesGrid.RowDefinitions[2].ActualHeight);
-            _placement?.Flush();
             vm.Shutdown();
         }
         catch (Exception ex)
