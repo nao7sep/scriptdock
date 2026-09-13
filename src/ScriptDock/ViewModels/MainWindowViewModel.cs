@@ -143,6 +143,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public int? WindowPositionY => _state.WindowPositionY;
     public double? WindowWidth => _state.WindowWidth;
     public double? WindowHeight => _state.WindowHeight;
+    public bool WindowMaximized => _state.WindowMaximized;
 
     /// <summary>Drive the lists' empty-state messages. Refreshed after each rebuild.</summary>
     public bool NoScripts => Scripts.Count == 0;
@@ -214,15 +215,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _stateStore.Save(_state);
     });
 
-    public void PersistWindowGeometry(int x, int y, double width, double height) =>
-        Guard("save window geometry", () =>
-        {
-            _state.WindowPositionX = x;
-            _state.WindowPositionY = y;
-            _state.WindowWidth = width;
-            _state.WindowHeight = height;
-            _stateStore.Save(_state);
-        });
+    public void CaptureWindowPlacement(int x, int y, double width, double height, bool maximized)
+    {
+        _state.WindowPositionX = x;
+        _state.WindowPositionY = y;
+        _state.WindowWidth = width;
+        _state.WindowHeight = height;
+        _state.WindowMaximized = maximized;
+    }
 
     public void Shutdown() => Guard("shutdown", () =>
     {

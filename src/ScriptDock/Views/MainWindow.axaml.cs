@@ -42,6 +42,8 @@ public partial class MainWindow : Window
     private double _headerChromeHeight = WindowMetrics.HeaderHeight;
     private double _statusChromeHeight = WindowMetrics.StatusBarHeight;
     private double _operationalErrorChromeHeight;
+    private (int X, int Y, double Width, double Height)? _normalGeometry;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -60,7 +62,13 @@ public partial class MainWindow : Window
             if (e.Property == ScrollViewer.ViewportProperty)
                 ClampPanesToWindow();
         };
-        PositionChanged += (_, _) => ApplyNativeMinimum();
+        PositionChanged += (_, _) =>
+        {
+            RememberNormalGeometryAfterNativeEvents();
+            ApplyNativeMinimum();
+        };
+        Resized += (_, _) => RememberNormalGeometryAfterNativeEvents();
+        Opened += (_, _) => RememberNormalGeometry();
         ScalingChanged += (_, _) => ApplyNativeMinimum();
         Screens.Changed += OnScreensChanged;
         Closed += (_, _) => Screens.Changed -= OnScreensChanged;
@@ -155,6 +163,9 @@ public partial class MainWindow : Window
             Position = new PixelPoint(vm.WindowPositionX!.Value, vm.WindowPositionY!.Value);
             Width = Math.Max(vm.WindowWidth!.Value, MinWidth);
             Height = Math.Max(vm.WindowHeight!.Value, MinHeight);
+            _normalGeometry = (Position.X, Position.Y, Width, Height);
+            WindowState = WindowMetrics.RestoredWindowState(
+                vm.WindowMaximized, OperatingSystem.IsWindows());
         }
         catch (Exception ex)
         {
@@ -301,6 +312,15 @@ public partial class MainWindow : Window
                 return;
             }
 
+            RememberNormalGeometry();
+            if (WindowState is WindowState.Normal or WindowState.Maximized
+                && _normalGeometry is { } normal)
+            {
+                vm.CaptureWindowPlacement(
+                    normal.X, normal.Y, normal.Width, normal.Height,
+                    OperatingSystem.IsWindows() && WindowState == WindowState.Maximized);
+            }
+
             // Persist the stored INTENT, not the live ActualWidth/ActualHeight — those may have been
             // clamped down by a small window, and saving a clamped size would lose the user's intent.
             // Falls back to the live size only if no intent was ever established (defensive; OnLoaded
@@ -308,8 +328,6 @@ public partial class MainWindow : Window
             vm.PersistPaneSizes(
                 _recentWidthIntent ?? BodyGrid.ColumnDefinitions[2].ActualWidth,
                 _consoleHeightIntent ?? LeftPanesGrid.RowDefinitions[2].ActualHeight);
-            if (WindowState == WindowState.Normal)
-                vm.PersistWindowGeometry(Position.X, Position.Y, Width, Height);
             vm.Shutdown();
         }
         catch (Exception ex)
@@ -317,6 +335,27 @@ public partial class MainWindow : Window
             Log.Error("ui: window close failed", ex);
         }
     }
+
+    private void RememberNormalGeometry()
+    {
+        if (WindowState != WindowState.Normal)
+            return;
+
+        // Avalonia reports macOS title-bar zoom as Normal. Judge the settled native frame too,
+        // otherwise the zoomed rectangle replaces the actual normal rectangle.
+        var screen = Screens.ScreenFromWindow(this);
+        if (screen is not null
+            && WindowMetrics.IsMaximizedGeometry(
+                FrameSize ?? new Size(Width, Height), screen.WorkingArea, screen.Scaling))
+        {
+            return;
+        }
+
+        _normalGeometry = (Position.X, Position.Y, Width, Height);
+    }
+
+    private void RememberNormalGeometryAfterNativeEvents() =>
+        Dispatcher.UIThread.Post(RememberNormalGeometry);
 
     // Console: keep the view glued to the latest output unless the user has scrolled up to read.
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

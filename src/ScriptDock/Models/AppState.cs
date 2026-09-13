@@ -34,6 +34,7 @@ public sealed class AppState : IJsonNormalizable
     public int? WindowPositionY { get; set; }
     public double? WindowWidth { get; set; }
     public double? WindowHeight { get; set; }
+    public bool WindowMaximized { get; set; }
 
     /// <summary>Snapshot of the scripts that were running when this state was last saved, recorded
     /// so a relaunch can recapture them by PID + start-time. Replaced whenever the running set changes.</summary>

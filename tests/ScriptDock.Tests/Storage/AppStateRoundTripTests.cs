@@ -28,6 +28,7 @@ public sealed class AppStateRoundTripTests
             WindowPositionY = 80,
             WindowWidth = 1100.5,
             WindowHeight = 720.25,
+            WindowMaximized = true,
             RecentlyRun =
             {
                 new RecentRun
@@ -60,6 +61,7 @@ public sealed class AppStateRoundTripTests
         Assert.Equal(80, back.WindowPositionY);
         Assert.Equal(1100.5, back.WindowWidth);
         Assert.Equal(720.25, back.WindowHeight);
+        Assert.True(back.WindowMaximized);
         Assert.Single(back.RecentlyRun);
         Assert.Equal("/a/x.command", back.RecentlyRun[0].Path);
         Assert.Equal(state.RecentlyRun[0].RanAt, back.RecentlyRun[0].RanAt);
