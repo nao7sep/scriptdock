@@ -47,6 +47,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        MacMenus.Attach(this, includeWindowMenu: true);
 
         _scriptsColumnFloor = BodyGrid.ColumnDefinitions[0].MinWidth;
         _recentColumnFloor = BodyGrid.ColumnDefinitions[2].MinWidth;
@@ -461,6 +462,12 @@ public partial class MainWindow : Window
     }
 
     private void OnSettingsClick(object? sender, RoutedEventArgs e) => _ = OpenSettingsAsync();
+
+    /// <summary>The macOS app menu's Settings item; the same action as the in-window menu's.</summary>
+    internal void ShowSettingsFromMenu() => OnSettingsClick(null, new RoutedEventArgs());
+
+    /// <summary>The macOS app menu's About item; the same action as the in-window menu's.</summary>
+    internal void ShowAboutFromMenu() => OnAboutClick(null, new RoutedEventArgs());
 
     private void OnShortcutsClick(object? sender, RoutedEventArgs e) => _ = ShowShortcutsAsync();
 
