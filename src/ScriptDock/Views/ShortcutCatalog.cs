@@ -9,7 +9,6 @@ namespace ScriptDock.Views;
 public enum ShortcutGroup
 {
     Commands,
-    Focus,
     Scripts,
     Recent,
     Navigation,
@@ -25,9 +24,6 @@ public enum ShortcutAction
     ToggleShowHidden,
     OpenSettings,
     ShowShortcuts,
-    FocusScripts,
-    FocusRecent,
-    FocusConsole,
 }
 
 /// <summary>
@@ -54,7 +50,6 @@ public static class ShortcutCatalog
     public static readonly IReadOnlyList<ShortcutGroup> GroupOrder =
     [
         ShortcutGroup.Commands,
-        ShortcutGroup.Focus,
         ShortcutGroup.Scripts,
         ShortcutGroup.Recent,
         ShortcutGroup.Navigation,
@@ -63,7 +58,6 @@ public static class ShortcutCatalog
     public static string GroupHeader(ShortcutGroup group) => group switch
     {
         ShortcutGroup.Commands => "Commands",
-        ShortcutGroup.Focus => "Focus",
         ShortcutGroup.Scripts => "Scripts",
         ShortcutGroup.Recent => "Recent",
         ShortcutGroup.Navigation => "Navigation",
@@ -98,11 +92,6 @@ public static class ShortcutCatalog
             Command(ShortcutGroup.Commands, "Toggle hidden scripts", cmd | KeyModifiers.Shift, cmdLabel, Key.H, "Shift+H", ShortcutAction.ToggleShowHidden),
             Command(ShortcutGroup.Commands, "Settings", cmd, cmdLabel, Key.OemComma, "Comma", ShortcutAction.OpenSettings),
             Command(ShortcutGroup.Commands, "Keyboard shortcuts", cmd, cmdLabel, Key.OemQuestion, "Slash", ShortcutAction.ShowShortcuts),
-
-            // Focus — jump to a pane without the mouse (numbered to match the layout).
-            Command(ShortcutGroup.Focus, "Scripts list", cmd, cmdLabel, Key.D1, "1", ShortcutAction.FocusScripts),
-            Command(ShortcutGroup.Focus, "Recent list", cmd, cmdLabel, Key.D2, "2", ShortcutAction.FocusRecent),
-            Command(ShortcutGroup.Focus, "Console input", cmd, cmdLabel, Key.D3, "3", ShortcutAction.FocusConsole),
 
             // Scripts — running the selection is owned by the tile (pointer + keys), listed for discoverability.
             Display(ShortcutGroup.Scripts, "Run or restart the selected script", "Double-click/Enter/Space"),

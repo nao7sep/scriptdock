@@ -235,7 +235,6 @@ public sealed class MacMenuBarTests
         var typed = new Dictionary<Key, string>
         {
             [Key.R] = "r", [Key.H] = "h", [Key.OemComma] = ",", [Key.OemQuestion] = "/",
-            [Key.D1] = "1", [Key.D2] = "2", [Key.D3] = "3",
         };
         foreach (var shortcut in ShortcutCatalog.Build(window).Where(item => item.Gesture is not null))
         {

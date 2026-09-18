@@ -448,15 +448,6 @@ public partial class MainWindow : Window
             case ShortcutAction.ShowShortcuts:
                 _ = ShowShortcutsAsync();
                 break;
-            case ShortcutAction.FocusScripts:
-                ScriptsList.Focus();
-                break;
-            case ShortcutAction.FocusRecent:
-                RecentList.Focus();
-                break;
-            case ShortcutAction.FocusConsole:
-                ConsoleInput.Focus(); // no-op when disabled (no input-accepting run selected)
-                break;
         }
     }
 
