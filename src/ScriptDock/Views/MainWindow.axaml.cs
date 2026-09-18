@@ -47,7 +47,6 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        MacMenus.Attach(this, includeWindowMenu: true);
 
         _scriptsColumnFloor = BodyGrid.ColumnDefinitions[0].MinWidth;
         _recentColumnFloor = BodyGrid.ColumnDefinitions[2].MinWidth;

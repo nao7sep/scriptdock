@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using Avalonia;
 using ScriptDock.Services;
 using ScriptDock.Storage;
+using ScriptDock.Views;
 
 namespace ScriptDock;
 
@@ -77,6 +78,7 @@ sealed class Program
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
+            .With(MacMenuBar.PlatformOptions())
             .WithInterFont()
             .LogToTrace();
 
