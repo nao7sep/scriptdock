@@ -6,13 +6,28 @@
              x:DataType="vm:SettingsDialogViewModel">
     <StackPanel Spacing="14">
 
-        <!-- Appearance: the UI (chrome) font leads, set apart from the scanning/process settings. The
-             read-only output console keeps its own monospace font and is unaffected by this. -->
+        <!-- Appearance: the theme and the UI (chrome) font lead, set apart from the scanning/process
+             settings. The theme is the platform radio group (one tab stop, arrow keys move and select),
+             grouped by its shared parent rather than a GroupName, which Avalonia tracks across every
+             dialog not yet in a window. It is part of the draft and applies on Save. -->
+        <StackPanel Spacing="6">
+            <TextBlock Text="Theme" Classes="cardHeader"/>
+            <StackPanel x:Name="ThemeChoices" Orientation="Horizontal" Spacing="20"
+                        AutomationProperties.Name="Theme">
+                <RadioButton Content="System" IsChecked="{Binding IsThemeSystem}"/>
+                <RadioButton Content="Light" IsChecked="{Binding IsThemeLight}"/>
+                <RadioButton Content="Dark" IsChecked="{Binding IsThemeDark}"/>
+            </StackPanel>
+            <TextBlock Text="System follows the OS appearance."
+                       Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- The read-only output console keeps its own monospace font and is unaffected by the UI font. -->
         <StackPanel Spacing="6">
             <TextBlock Text="UI font" Classes="cardHeader"/>
             <ctl:ComposingTextBox x:Name="UiFontEntry" Text="{Binding UiFontFamily}" PlaceholderText="Inter"/>
             <TextBlock Text="Comma-separated; the first installed family is used. Blank uses the default (Inter)."
-                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
+                       Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
         </StackPanel>
 
         <!-- Root directories: chosen with the native folder picker, not typed — they are
@@ -20,7 +35,7 @@
         <StackPanel Spacing="6">
             <TextBlock Text="Root directories" Classes="cardHeader"/>
             <ListBox x:Name="RootList" ItemsSource="{Binding RootDirs}" Height="96"
-                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
+                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
             <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
                 <Button Content="Add…" Classes="tool" Click="OnAddRootClick"/>
                 <Button Content="Remove" Classes="tool" Click="OnRemoveRootClick"/>
@@ -30,14 +45,14 @@
                   AutomationProperties.Name="{Binding RootPickerResult}"
                   AutomationProperties.LiveSetting="Assertive">
                 <TextBlock Text="{Binding RootPickerResult}" VerticalAlignment="Top"
-                           Foreground="{StaticResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"/>
+                           Foreground="{DynamicResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"/>
                 <Button x:Name="CloseRootPickerResult" Grid.Column="1"
                         Classes="resultClose" VerticalAlignment="Top"
                         Click="OnCloseRootPickerResult"
                         AutomationProperties.Name="Close root-directory result"
                         ToolTip.Tip="Close">
                     <Path Width="10" Height="10" Stretch="Uniform"
-                          Stroke="{StaticResource DangerTextBrush}" StrokeThickness="1.8"
+                          Stroke="{DynamicResource DangerTextBrush}" StrokeThickness="1.8"
                           StrokeLineCap="Round" Data="M1,1 L9,9 M9,1 L1,9"/>
                 </Button>
             </Grid>
@@ -47,7 +62,7 @@
         <StackPanel Spacing="6">
             <TextBlock Text="Extensions" Classes="cardHeader"/>
             <ListBox x:Name="ExtList" ItemsSource="{Binding Extensions}" Height="80"
-                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
+                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
             <DockPanel>
                 <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemoveExtClick"/>
                 <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddExtClick"/>
@@ -60,7 +75,7 @@
             <Grid x:Name="ExtensionErrorResult" IsVisible="{Binding HasExtensionError}"
                   AutomationProperties.LiveSetting="Assertive">
                 <TextBlock Text="{Binding ExtensionError}"
-                           Foreground="{StaticResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"/>
+                           Foreground="{DynamicResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"/>
             </Grid>
         </StackPanel>
 
@@ -68,7 +83,7 @@
         <StackPanel Spacing="6">
             <TextBlock Text="Ignore patterns (regex over full path)" Classes="cardHeader"/>
             <ListBox x:Name="PatternList" ItemsSource="{Binding IgnorePatterns}" Height="96"
-                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
+                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
             <DockPanel>
                 <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemovePatternClick"/>
                 <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddPatternClick"/>
@@ -81,7 +96,7 @@
             <Grid x:Name="PatternErrorResult" IsVisible="{Binding HasPatternError}"
                   AutomationProperties.LiveSetting="Assertive">
                 <TextBlock Text="{Binding PatternError}"
-                           Foreground="{StaticResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"/>
+                           Foreground="{DynamicResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"/>
             </Grid>
         </StackPanel>
 
@@ -97,7 +112,7 @@
         <Grid x:Name="SaveErrorResult" IsVisible="{Binding HasSaveError}"
               AutomationProperties.LiveSetting="Assertive">
             <TextBlock Text="{Binding SaveError}"
-                       Foreground="{StaticResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"/>
+                       Foreground="{DynamicResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"/>
         </Grid>
 
     </StackPanel>

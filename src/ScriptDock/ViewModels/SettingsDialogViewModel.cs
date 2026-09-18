@@ -27,6 +27,7 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     private readonly bool _originalKillProcessesOnClose;
     private readonly bool _originalRecaptureProcessesOnLaunch;
     private readonly string _originalUiFontFamily;
+    private readonly ThemePreference _originalTheme;
 
     public ObservableCollection<string> RootDirs { get; }
     public ObservableCollection<string> Extensions { get; }
@@ -55,6 +56,14 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsDirty))]
     private string _uiFontFamily = string.Empty;
 
+    // The app theme, shown as a radio group bound to the three IsTheme* flags.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDirty))]
+    [NotifyPropertyChangedFor(nameof(IsThemeSystem))]
+    [NotifyPropertyChangedFor(nameof(IsThemeLight))]
+    [NotifyPropertyChangedFor(nameof(IsThemeDark))]
+    private ThemePreference _theme;
+
     // Process-lifecycle settings. NotifyPropertyChangedFor keeps IsDirty live as they toggle.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsDirty))]
@@ -72,6 +81,8 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         _originalKillProcessesOnClose = config.KillProcessesOnClose;
         _originalRecaptureProcessesOnLaunch = config.RecaptureProcessesOnLaunch;
         _originalUiFontFamily = config.UiFontFamily;
+        _originalTheme = config.Theme;
+        _theme = config.Theme;
         _killProcessesOnClose = config.KillProcessesOnClose;          // field, not property: no dirty flip during construction
         _recaptureProcessesOnLaunch = config.RecaptureProcessesOnLaunch;
         _uiFontFamily = config.UiFontFamily;
@@ -91,7 +102,27 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         !IgnorePatterns.SequenceEqual(_originalPatterns) ||
         KillProcessesOnClose != _originalKillProcessesOnClose ||
         RecaptureProcessesOnLaunch != _originalRecaptureProcessesOnLaunch ||
-        UiFontFamily != _originalUiFontFamily;
+        UiFontFamily != _originalUiFontFamily ||
+        Theme != _originalTheme;
+
+    // One flag per radio: checking one selects its theme; the others clear through the group.
+    public bool IsThemeSystem
+    {
+        get => Theme == ThemePreference.System;
+        set { if (value) Theme = ThemePreference.System; }
+    }
+
+    public bool IsThemeLight
+    {
+        get => Theme == ThemePreference.Light;
+        set { if (value) Theme = ThemePreference.Light; }
+    }
+
+    public bool IsThemeDark
+    {
+        get => Theme == ThemePreference.Dark;
+        set { if (value) Theme = ThemePreference.Dark; }
+    }
 
     public bool HasExtensionError => ExtensionError.Length > 0;
     public bool HasPatternError => PatternError.Length > 0;

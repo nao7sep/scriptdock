@@ -369,6 +369,11 @@ public partial class MainWindow : Window
         {
             _scrollConsolePending = true; // follow new output — but only after it has been laid out
         }
+        else if (e.PropertyName == nameof(MainWindowViewModel.Theme) && sender is MainWindowViewModel vm)
+        {
+            // The theme is app-wide: when Settings commits a new one, every window and title bar follows.
+            AppTheme.Apply(vm.Theme);
+        }
         else if (e.PropertyName == nameof(MainWindowViewModel.HasOperationalError))
         {
             ScheduleMinimumRemeasure();

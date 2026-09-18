@@ -1,115 +1,131 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="ScriptDock.App"
-             xmlns:conv="using:ScriptDock.Converters"
              Name="ScriptDock"
-             RequestedThemeVariant="Dark">
+             RequestedThemeVariant="Default">
 
     <Application.Resources>
-        <!-- Semantic dark palette. ScriptDock is dark-only by design (no theme switch), so the
-             tokens are a single flat set rather than per-variant dictionaries. This is the one
-             source of truth for the app's colours: code that cannot reach a StaticResource (the
-             script-tile colour converter and the code-built dialogs) resolves these by key via
-             ScriptDock.Palette, so nothing duplicates a hex value. -->
-        <Color x:Key="AppBackground">#0F181D</Color>
-        <Color x:Key="Surface">#16252B</Color>
-        <Color x:Key="Border">#2B414A</Color>
-        <Color x:Key="TextPrimary">#E8F2F4</Color>
-        <Color x:Key="TextSecondary">#93A9B0</Color>
+        <ResourceDictionary>
+            <!-- The theme palette, one complete set per theme (app-chrome conventions, Theme): the one
+                 source of truth for ScriptDock's colours. Every surface reads it through DynamicResource,
+                 and the code-built dialogs bind it the same way, so a theme change repaints open windows.
+                 Dark is the electric console; light is the same console by day, on cool teal-gray paper. -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#EEF4F6"/>
+                    <SolidColorBrush x:Key="SurfaceBrush" Color="#FAFCFD"/>
+                    <SolidColorBrush x:Key="BorderBrush" Color="#CFDDE2"/>
+                    <!-- A text field is identified by its outline alone, so it holds 3:1 against its fill and surroundings. -->
+                    <SolidColorBrush x:Key="FieldBorderBrush" Color="#748A92"/>
+                    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#0F2329"/>
+                    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#4C636B"/>
+                    <!-- Electric console: the cyan action. Dark uses bright cyan under dark ink; light a deeper cyan under white, which also marks focus on a pale surface. -->
+                    <SolidColorBrush x:Key="AccentBrush" Color="#0E7490"/>
+                    <SolidColorBrush x:Key="AccentHoverBrush" Color="#155E75"/>
+                    <SolidColorBrush x:Key="AccentForegroundBrush" Color="#FFFFFF"/>
+                    <SolidColorBrush x:Key="AccentDisabledBrush" Color="#C9DEE4"/>
+                    <SolidColorBrush x:Key="AccentForegroundDisabledBrush" Color="#4C636B"/>
+                    <SolidColorBrush x:Key="InactiveActionBrush" Color="#B7C9CF"/>
+                    <SolidColorBrush x:Key="InactiveActionForegroundBrush" Color="#0F2329"/>
+                    <!-- Danger stays a separate semantic red. -->
+                    <SolidColorBrush x:Key="DangerBrush" Color="#BE3455"/>
+                    <SolidColorBrush x:Key="DangerHoverBrush" Color="#A62B48"/>
+                    <SolidColorBrush x:Key="ErrorSurfaceBrush" Color="#FBEBEE"/>
+                    <!-- State colours. DangerText is danger red as text (validation errors, removed scripts); ScriptNew is the orange dot flagging a newly-found script; ScriptHidden dims hidden scripts; Running is the green run indicator. -->
+                    <SolidColorBrush x:Key="DangerTextBrush" Color="#B4233F"/>
+                    <SolidColorBrush x:Key="ScriptNewBrush" Color="#C2410C"/>
+                    <SolidColorBrush x:Key="ScriptHiddenBrush" Color="#52676F"/>
+                    <SolidColorBrush x:Key="RunningBrush" Color="#15803D"/>
+                    <SolidColorBrush x:Key="ContentWellBrush" Color="#FFFFFF"/>
+                    <SolidColorBrush x:Key="SelectionBrush" Color="#D5EEF4"/>
+                    <SolidColorBrush x:Key="SelectionHoverBrush" Color="#C7E6EE"/>
+                    <SolidColorBrush x:Key="SelectionSecondaryBrush" Color="#3F555C"/>
+                    <SolidColorBrush x:Key="ChipBackgroundBrush" Color="#F1F6F8"/>
+                    <SolidColorBrush x:Key="ChipHoverBrush" Color="#E3EDF1"/>
+                    <SolidColorBrush x:Key="ChipSelectedBrush" Color="#D5EEF4"/>
+                    <SolidColorBrush x:Key="DisabledInputBrush" Color="#F1F5F7"/>
+                    <SolidColorBrush x:Key="DisabledInputBorderBrush" Color="#DCE5E9"/>
+                    <SolidColorBrush x:Key="DisabledTextBrush" Color="#7B9199"/>
+                    <!-- Fluent's scroll-bar thumb, remapped to the palette: a resting thumb holds 3:1 against the
+                         surfaces it scrolls over, and strengthens to secondary text on hover and press. -->
+                    <SolidColorBrush x:Key="ScrollBarPanningThumbBackground" Color="#748A92"/>
+                    <SolidColorBrush x:Key="ScrollBarThumbFill" Color="#748A92"/>
+                    <SolidColorBrush x:Key="ScrollBarThumbFillPointerOver" Color="#4C636B"/>
+                    <SolidColorBrush x:Key="ScrollBarThumbFillPressed" Color="#4C636B"/>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0F181D"/>
+                    <SolidColorBrush x:Key="SurfaceBrush" Color="#16252B"/>
+                    <SolidColorBrush x:Key="BorderBrush" Color="#2B414A"/>
+                    <!-- A text field is identified by its outline alone, so it holds 3:1 against its fill and surroundings. -->
+                    <SolidColorBrush x:Key="FieldBorderBrush" Color="#65808A"/>
+                    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#E8F2F4"/>
+                    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#93A9B0"/>
+                    <!-- Electric console: the cyan action. Dark uses bright cyan under dark ink; light a deeper cyan under white, which also marks focus on a pale surface. -->
+                    <SolidColorBrush x:Key="AccentBrush" Color="#22D3EE"/>
+                    <SolidColorBrush x:Key="AccentHoverBrush" Color="#67E8F9"/>
+                    <SolidColorBrush x:Key="AccentForegroundBrush" Color="#062126"/>
+                    <SolidColorBrush x:Key="AccentDisabledBrush" Color="#174650"/>
+                    <SolidColorBrush x:Key="AccentForegroundDisabledBrush" Color="#B4C4C8"/>
+                    <SolidColorBrush x:Key="InactiveActionBrush" Color="#3B5962"/>
+                    <SolidColorBrush x:Key="InactiveActionForegroundBrush" Color="#D4E0E3"/>
+                    <!-- Danger stays a separate semantic red. -->
+                    <SolidColorBrush x:Key="DangerBrush" Color="#BE3455"/>
+                    <SolidColorBrush x:Key="DangerHoverBrush" Color="#C83A58"/>
+                    <SolidColorBrush x:Key="ErrorSurfaceBrush" Color="#2B171B"/>
+                    <!-- State colours. DangerText is danger red as text (validation errors, removed scripts); ScriptNew is the orange dot flagging a newly-found script; ScriptHidden dims hidden scripts; Running is the green run indicator. -->
+                    <SolidColorBrush x:Key="DangerTextBrush" Color="#FB7185"/>
+                    <SolidColorBrush x:Key="ScriptNewBrush" Color="#FB923C"/>
+                    <SolidColorBrush x:Key="ScriptHiddenBrush" Color="#889FA7"/>
+                    <SolidColorBrush x:Key="RunningBrush" Color="#4ADE80"/>
+                    <SolidColorBrush x:Key="ContentWellBrush" Color="#081216"/>
+                    <SolidColorBrush x:Key="SelectionBrush" Color="#153843"/>
+                    <SolidColorBrush x:Key="SelectionHoverBrush" Color="#1B4653"/>
+                    <SolidColorBrush x:Key="SelectionSecondaryBrush" Color="#B4C4C8"/>
+                    <SolidColorBrush x:Key="ChipBackgroundBrush" Color="#14242B"/>
+                    <SolidColorBrush x:Key="ChipHoverBrush" Color="#1B3139"/>
+                    <SolidColorBrush x:Key="ChipSelectedBrush" Color="#193640"/>
+                    <SolidColorBrush x:Key="DisabledInputBrush" Color="#081115"/>
+                    <SolidColorBrush x:Key="DisabledInputBorderBrush" Color="#182A31"/>
+                    <SolidColorBrush x:Key="DisabledTextBrush" Color="#5F747B"/>
+                    <!-- Fluent's scroll-bar thumb, remapped to the palette: a resting thumb holds 3:1 against the
+                         surfaces it scrolls over, and strengthens to secondary text on hover and press. -->
+                    <SolidColorBrush x:Key="ScrollBarPanningThumbBackground" Color="#5B7680"/>
+                    <SolidColorBrush x:Key="ScrollBarThumbFill" Color="#5B7680"/>
+                    <SolidColorBrush x:Key="ScrollBarThumbFillPointerOver" Color="#93A9B0"/>
+                    <SolidColorBrush x:Key="ScrollBarThumbFillPressed" Color="#93A9B0"/>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
 
-        <!-- Electric console: cyan actions use dark ink; danger remains a separate semantic red. -->
-        <Color x:Key="Accent">#22D3EE</Color>
-        <Color x:Key="AccentHover">#67E8F9</Color>
-        <Color x:Key="AccentForeground">#062126</Color>
-        <Color x:Key="AccentDisabled">#174650</Color>
-        <Color x:Key="AccentForegroundDisabled">#B4C4C8</Color>
-        <Color x:Key="InactiveAction">#3B5962</Color>
-        <Color x:Key="InactiveActionForeground">#D4E0E3</Color>
-        <Color x:Key="Danger">#BE3455</Color>
-        <Color x:Key="DangerHover">#C83A58</Color>
-        <Color x:Key="ErrorSurface">#2B171B</Color>
+            <!-- The scroll-bar track stays transparent in both themes; thickness, hit target, geometry, and
+                 keyboard behavior stay with the native Fluent control. -->
+            <SolidColorBrush x:Key="ScrollBarTrackFill" Color="Transparent"/>
+            <SolidColorBrush x:Key="ScrollBarTrackFillPointerOver" Color="Transparent"/>
+            <SolidColorBrush x:Key="ScrollBarBackground" Color="Transparent"/>
+            <SolidColorBrush x:Key="ScrollBarBackgroundPointerOver" Color="Transparent"/>
 
-        <!-- State colours. DangerText is danger red as *text* on a dark surface (validation
-             errors, removed scripts) — lighter than the danger button fill for legibility.
-             ScriptNew is the orange dot flagging a newly-found script — an accent, not a
-             background tint; ScriptHidden
-             dims hidden scripts; Running is the green run indicator. -->
-        <Color x:Key="DangerText">#FB7185</Color>
-        <Color x:Key="ScriptNew">#FB923C</Color>
-        <Color x:Key="ScriptHidden">#718991</Color>
-        <Color x:Key="Running">#4ADE80</Color>
-        <Color x:Key="ContentWell">#081216</Color>
-        <Color x:Key="Selection">#153843</Color>
-        <Color x:Key="SelectionHover">#1B4653</Color>
-        <Color x:Key="SelectionSecondary">#B4C4C8</Color>
-        <Color x:Key="ChipBackground">#14242B</Color>
-        <Color x:Key="ChipHover">#1B3139</Color>
-        <Color x:Key="ChipSelected">#193640</Color>
-        <Color x:Key="DisabledInput">#081115</Color>
-        <Color x:Key="DisabledInputBorder">#182A31</Color>
-        <Color x:Key="DisabledText">#5F747B</Color>
-
-        <SolidColorBrush x:Key="AppBackgroundBrush" Color="{StaticResource AppBackground}"/>
-        <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource Surface}"/>
-        <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource Border}"/>
-        <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimary}"/>
-        <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondary}"/>
-
-        <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource Accent}"/>
-        <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHover}"/>
-        <SolidColorBrush x:Key="AccentForegroundBrush" Color="{StaticResource AccentForeground}"/>
-        <SolidColorBrush x:Key="AccentDisabledBrush" Color="{StaticResource AccentDisabled}"/>
-        <SolidColorBrush x:Key="AccentForegroundDisabledBrush" Color="{StaticResource AccentForegroundDisabled}"/>
-        <SolidColorBrush x:Key="InactiveActionBrush" Color="{StaticResource InactiveAction}"/>
-        <SolidColorBrush x:Key="InactiveActionForegroundBrush" Color="{StaticResource InactiveActionForeground}"/>
-        <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource Danger}"/>
-        <SolidColorBrush x:Key="DangerHoverBrush" Color="{StaticResource DangerHover}"/>
-        <SolidColorBrush x:Key="ErrorSurfaceBrush" Color="{StaticResource ErrorSurface}"/>
-
-        <SolidColorBrush x:Key="DangerTextBrush" Color="{StaticResource DangerText}"/>
-        <SolidColorBrush x:Key="ScriptNewBrush" Color="{StaticResource ScriptNew}"/>
-        <SolidColorBrush x:Key="ScriptHiddenBrush" Color="{StaticResource ScriptHidden}"/>
-        <SolidColorBrush x:Key="RunningBrush" Color="{StaticResource Running}"/>
-        <SolidColorBrush x:Key="ContentWellBrush" Color="{StaticResource ContentWell}"/>
-        <SolidColorBrush x:Key="SelectionBrush" Color="{StaticResource Selection}"/>
-        <SolidColorBrush x:Key="SelectionHoverBrush" Color="{StaticResource SelectionHover}"/>
-        <SolidColorBrush x:Key="SelectionSecondaryBrush" Color="{StaticResource SelectionSecondary}"/>
-        <SolidColorBrush x:Key="ChipBackgroundBrush" Color="{StaticResource ChipBackground}"/>
-        <SolidColorBrush x:Key="ChipHoverBrush" Color="{StaticResource ChipHover}"/>
-        <SolidColorBrush x:Key="ChipSelectedBrush" Color="{StaticResource ChipSelected}"/>
-        <SolidColorBrush x:Key="DisabledInputBrush" Color="{StaticResource DisabledInput}"/>
-        <SolidColorBrush x:Key="DisabledInputBorderBrush" Color="{StaticResource DisabledInputBorder}"/>
-        <SolidColorBrush x:Key="DisabledTextBrush" Color="{StaticResource DisabledText}"/>
-
-        <conv:ScriptItemColorConverter x:Key="ScriptColor"/>
-
-        <!-- Scroll-bar theming. Fluent's default ScrollBar thumb/track brushes are NOT remapped to
-             this app's custom palette, so left alone the bar reads off-theme. Remap only those
-             palette resources and leave thickness, hit target, geometry, and keyboard behavior to
-             the native Fluent control. -->
-        <SolidColorBrush x:Key="ScrollBarPanningThumbBackground" Color="{StaticResource Border}"/>
-        <SolidColorBrush x:Key="ScrollBarThumbFill" Color="{StaticResource Border}"/>
-        <SolidColorBrush x:Key="ScrollBarThumbFillPointerOver" Color="{StaticResource TextSecondary}"/>
-        <SolidColorBrush x:Key="ScrollBarThumbFillPressed" Color="{StaticResource TextSecondary}"/>
-        <SolidColorBrush x:Key="ScrollBarTrackFill" Color="Transparent"/>
-        <SolidColorBrush x:Key="ScrollBarTrackFillPointerOver" Color="Transparent"/>
-        <SolidColorBrush x:Key="ScrollBarBackground" Color="Transparent"/>
-        <SolidColorBrush x:Key="ScrollBarBackgroundPointerOver" Color="Transparent"/>
-
-        <!-- The app-wide UI (chrome) font. The default is the bundled Inter; the view model overrides
-             this resource at runtime from the configured UI font, and the Window style below binds it
-             via DynamicResource so the change applies live across every window. -->
-        <!-- The collection URI, not the bare name: bare "Inter" falls back to the platform font. -->
-        <FontFamily x:Key="AppFontFamily">fonts:Inter#Inter</FontFamily>
+            <!-- The app-wide UI (chrome) font. The default is the bundled Inter; the view model overrides
+                 this resource at runtime from the configured UI font, and the Window style below binds it
+                 via DynamicResource so the change applies live across every window. -->
+            <!-- The collection URI, not the bare name: bare "Inter" falls back to the platform font. -->
+            <FontFamily x:Key="AppFontFamily">fonts:Inter#Inter</FontFamily>
+        </ResourceDictionary>
     </Application.Resources>
 
     <Application.Styles>
         <FluentTheme>
             <FluentTheme.Palettes>
+                <!-- Fluent's own accent, window region, and error text, per theme; they repeat the
+                     palette's Accent, AppBackground, and DangerText values (a palette entry takes a
+                     color, not a brush). -->
+                <ColorPaletteResources x:Key="Light"
+                                       Accent="#0E7490"
+                                       RegionColor="#EEF4F6"
+                                       ErrorText="#B4233F"/>
                 <ColorPaletteResources x:Key="Dark"
-                                       Accent="{StaticResource Accent}"
-                                       RegionColor="{StaticResource AppBackground}"
-                                       ErrorText="{StaticResource Danger}"/>
+                                       Accent="#22D3EE"
+                                       RegionColor="#0F181D"
+                                       ErrorText="#FB7185"/>
             </FluentTheme.Palettes>
         </FluentTheme>
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml"/>
@@ -157,22 +173,22 @@
             <Setter Property="CornerRadius" Value="6"/>
         </Style>
         <Style Selector="Button.accent">
-            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource AccentForegroundBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentForegroundBrush}"/>
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
         <Style Selector="Button.accent /template/ ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource AccentForegroundBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentForegroundBrush}"/>
         </Style>
         <Style Selector="Button.accent:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource AccentHoverBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource AccentForegroundBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentForegroundBrush}"/>
         </Style>
         <Style Selector="Button.accent:focus /template/ ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource AccentHoverBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource AccentForegroundBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentForegroundBrush}"/>
         </Style>
 
         <!-- Avalonia drops the :focus match when a native window deactivates even though the
@@ -180,48 +196,70 @@
              action snaps back to its brighter base accent. DialogBase owns this class so the
              same muted treatment covers every app-authored dialog and startup notice. -->
         <Style Selector="Window.windowInactive Button.accent /template/ ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource InactiveActionBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource InactiveActionForegroundBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource InactiveActionBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource InactiveActionForegroundBrush}"/>
         </Style>
         <Style Selector="Window.windowInactive Button.accent:focus /template/ ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource InactiveActionBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource InactiveActionForegroundBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource InactiveActionBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource InactiveActionForegroundBrush}"/>
         </Style>
         <!-- Disabled commit remains readable while clearly receding from the live cyan action. -->
         <Style Selector="Button.accent:disabled">
             <Setter Property="Opacity" Value="1"/>
-            <Setter Property="Background" Value="{StaticResource AccentDisabledBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource AccentForegroundDisabledBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AccentDisabledBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentForegroundDisabledBrush}"/>
         </Style>
         <Style Selector="Button.accent:disabled /template/ ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource AccentDisabledBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource AccentForegroundDisabledBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AccentDisabledBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentForegroundDisabledBrush}"/>
         </Style>
 
         <!-- Dialog destructive button -->
         <Style Selector="Button.destructive">
-            <Setter Property="Background" Value="{StaticResource DangerBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource DangerBrush}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
         <Style Selector="Button.destructive /template/ ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource DangerBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource DangerBrush}"/>
             <Setter Property="Foreground" Value="White"/>
         </Style>
         <Style Selector="Button.destructive:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource DangerHoverBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource DangerHoverBrush}"/>
             <Setter Property="Foreground" Value="White"/>
         </Style>
         <Style Selector="Button.destructive:focus /template/ ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource DangerHoverBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource DangerHoverBrush}"/>
             <Setter Property="Foreground" Value="White"/>
+        </Style>
+
+        <!-- State colours. The models and view models expose state (a script's flags, a run's
+             lifecycle) and these styles map it to theme brushes, so an open window repaints when the
+             theme changes. Later rules win, so a removed script reads red even when also hidden. -->
+        <Style Selector="TextBlock.scriptName">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.scriptName.hidden">
+            <Setter Property="Foreground" Value="{DynamicResource ScriptHiddenBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.scriptName.removed">
+            <Setter Property="Foreground" Value="{DynamicResource DangerTextBrush}"/>
+        </Style>
+        <Style Selector="Border.statePill">
+            <Setter Property="Background" Value="{DynamicResource TextSecondaryBrush}"/>
+        </Style>
+        <Style Selector="Border.statePill.running">
+            <Setter Property="Background" Value="{DynamicResource RunningBrush}"/>
+        </Style>
+        <Style Selector="Border.statePill.failed">
+            <Setter Property="Background" Value="{DynamicResource DangerTextBrush}"/>
         </Style>
 
         <!-- Launcher surfaces: card panels, card headers, and compact toolbar buttons. -->
         <Style Selector="Border.card">
-            <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="8"/>
             <Setter Property="Padding" Value="10"/>
@@ -232,7 +270,7 @@
              buttons (Scripts/Recent) or just a title (Output); horizontal-only padding leaves the
              centered content to sit consistently within that height. -->
         <Style Selector="Border.sectionHeader">
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="0,0,0,1"/>
             <Setter Property="Height" Value="46"/>
             <Setter Property="Padding" Value="10,0"/>
@@ -240,7 +278,7 @@
         <Style Selector="TextBlock.cardHeader">
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         </Style>
         <Style Selector="Button.tool">
             <Setter Property="Padding" Value="12,6"/>
@@ -251,40 +289,40 @@
         <Style Selector="Button.resultClose">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="{StaticResource DangerTextBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource DangerTextBrush}"/>
             <Setter Property="Padding" Value="4"/>
             <Setter Property="MinWidth" Value="20"/>
             <Setter Property="MinHeight" Value="20"/>
             <Setter Property="CornerRadius" Value="4"/>
         </Style>
         <Style Selector="Button.resultClose:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource ChipHoverBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource ChipHoverBrush}"/>
         </Style>
         <Style Selector="Button.resultClose:focus /template/ ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource ChipHoverBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource ChipHoverBrush}"/>
         </Style>
         <Style Selector="TextBox.invalid">
-            <Setter Property="BorderBrush" Value="{StaticResource DangerTextBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DangerTextBrush}"/>
             <Setter Property="BorderThickness" Value="2"/>
         </Style>
 
         <!-- Lists are recessed content wells; selected rows use a quiet cyan tint, not a solid accent. -->
         <Style Selector="ListBox">
-            <Setter Property="Background" Value="{StaticResource ContentWellBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource ContentWellBrush}"/>
         </Style>
         <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource ChipHoverBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource ChipHoverBrush}"/>
         </Style>
         <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource SelectionBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource SelectionBrush}"/>
         </Style>
         <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource SelectionHoverBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource SelectionHoverBrush}"/>
         </Style>
 
-        <!-- Consistent text-input border colour (the Fluent default reads near-black). -->
+        <!-- A text field's resting outline is its only boundary, so it takes the 3:1 field border. -->
         <Style Selector="TextBox">
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource FieldBorderBrush}"/>
             <!-- A single-line field states that its text centres and that its padding is
                  symmetric. That is the whole of the intent; if Avalonia's text layout
                  still lands the line slightly off, that is the toolkit's, not something
@@ -293,14 +331,14 @@
             <Setter Property="Padding" Value="8,6"/>
         </Style>
         <Style Selector="TextBox.stdin:disabled">
-            <Setter Property="Background" Value="{StaticResource DisabledInputBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource DisabledTextBrush}"/>
-            <Setter Property="PlaceholderForeground" Value="{StaticResource DisabledTextBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource DisabledInputBorderBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource DisabledInputBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource DisabledTextBrush}"/>
+            <Setter Property="PlaceholderForeground" Value="{DynamicResource DisabledTextBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DisabledInputBorderBrush}"/>
         </Style>
         <Style Selector="TextBox.stdin:disabled /template/ Border#PART_BorderElement">
-            <Setter Property="Background" Value="{StaticResource DisabledInputBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource DisabledInputBorderBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource DisabledInputBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DisabledInputBorderBrush}"/>
         </Style>
 
     </Application.Styles>

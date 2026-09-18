@@ -18,4 +18,6 @@ public sealed class ScriptItem
 
     /// <summary>True when the script was newly found in the latest scan — flagged by an accent dot.</summary>
     public bool IsNew => Flag == ScriptFlag.New;
+
+    public bool IsRemoved => Flag == ScriptFlag.Removed;
 }

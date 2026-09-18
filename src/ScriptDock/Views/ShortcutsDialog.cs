@@ -37,9 +37,8 @@ public sealed class ShortcutsDialog : DialogBase
                 Text = ShortcutCatalog.GroupHeader(group),
                 FontWeight = FontWeight.SemiBold,
                 FontSize = 13,
-                Foreground = Palette.Brush("TextSecondaryBrush"),
                 Margin = new Thickness(2, 0, 0, 6),
-            });
+            }.Themed(TextBlock.ForegroundProperty, "TextSecondaryBrush"));
             sections.Children.Add(BuildCard(rows));
         }
 
@@ -60,18 +59,18 @@ public sealed class ShortcutsDialog : DialogBase
         {
             stack.Children.Add(BuildRow(rows[i]));
             if (i < rows.Count - 1)
-                stack.Children.Add(new Border { Height = 1, Background = Palette.Brush("BorderBrush") });
+                stack.Children.Add(new Border { Height = 1 }.Themed(Border.BackgroundProperty, "BorderBrush"));
         }
 
         return new Border
         {
-            BorderBrush = Palette.Brush("BorderBrush"),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
-            Background = Palette.Brush("SurfaceBrush"),
             Padding = new Thickness(14, 4),
             Child = stack,
-        };
+        }
+            .Themed(Border.BorderBrushProperty, "BorderBrush")
+            .Themed(Border.BackgroundProperty, "SurfaceBrush");
     }
 
     // Description on the left (wrapping), key on the right.
@@ -88,9 +87,8 @@ public sealed class ShortcutsDialog : DialogBase
         {
             Text = item.Description,
             TextWrapping = TextWrapping.Wrap,
-            Foreground = Palette.Brush("TextPrimaryBrush"),
             VerticalAlignment = VerticalAlignment.Center,
-        };
+        }.Themed(TextBlock.ForegroundProperty, "TextPrimaryBrush");
         Grid.SetColumn(description, 0);
         grid.Children.Add(description);
 
@@ -105,10 +103,8 @@ public sealed class ShortcutsDialog : DialogBase
     // other fleet shortcut modals (DayNote, ZipKit). Used for every row — including the non-key
     // affordances (e.g. "Double-click / Enter / Space") — so the whole right column is boxed
     // consistently rather than mixing boxed keys with plain affordance text.
-    private Border Keycap(string label) => new()
+    private Border Keycap(string label) => new Border
     {
-        Background = Palette.Brush("AppBackgroundBrush"),
-        BorderBrush = Palette.Brush("BorderBrush"),
         BorderThickness = new Thickness(1),
         CornerRadius = new CornerRadius(5),
         Padding = new Thickness(8, 3),
@@ -119,7 +115,8 @@ public sealed class ShortcutsDialog : DialogBase
             Text = label,
             FontWeight = FontWeight.SemiBold,
             FontSize = 12,
-            Foreground = Palette.Brush("TextPrimaryBrush"),
-        },
-    };
+        }.Themed(TextBlock.ForegroundProperty, "TextPrimaryBrush"),
+    }
+        .Themed(Border.BackgroundProperty, "AppBackgroundBrush")
+        .Themed(Border.BorderBrushProperty, "BorderBrush");
 }

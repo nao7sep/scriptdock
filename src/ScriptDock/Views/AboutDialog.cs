@@ -38,10 +38,9 @@ public sealed class AboutDialog : DialogBase
         _launchErrorMessage = new TextBlock
         {
             FontSize = 12,
-            Foreground = Palette.Brush("TextPrimaryBrush"),
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
-        };
+        }.Themed(TextBlock.ForegroundProperty, "TextPrimaryBrush");
         var dismissMark = new Shapes.Path
         {
             Width = 10,
@@ -70,15 +69,15 @@ public sealed class AboutDialog : DialogBase
         Grid.SetColumn(dismissLaunchError, 1);
         _launchError = new Border
         {
-            Background = Palette.Brush("ErrorSurfaceBrush"),
-            BorderBrush = Palette.Brush("DangerTextBrush"),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(6),
             Padding = new Thickness(9, 7),
             Margin = new Thickness(0, 0, 0, 16),
             IsVisible = false,
             Child = launchErrorContent,
-        };
+        }
+            .Themed(Border.BackgroundProperty, "ErrorSurfaceBrush")
+            .Themed(Border.BorderBrushProperty, "DangerTextBrush");
         dismissLaunchError.Click += (_, _) => _launchError.IsVisible = false;
         AutomationProperties.SetLiveSetting(_launchError, AutomationLiveSetting.Assertive);
 
@@ -88,7 +87,8 @@ public sealed class AboutDialog : DialogBase
             Children =
             {
                 new TextBlock { Text = "ScriptDock", FontSize = 20, FontWeight = FontWeight.Bold, Margin = new Thickness(0, 0, 0, 4) },
-                new TextBlock { Text = $"Version {version}", FontSize = 13, Foreground = Palette.Brush("TextSecondaryBrush"), Margin = new Thickness(0, 0, 0, 12) },
+                new TextBlock { Text = $"Version {version}", FontSize = 13, Margin = new Thickness(0, 0, 0, 12) }
+                    .Themed(TextBlock.ForegroundProperty, "TextSecondaryBrush"),
                 new TextBlock
                 {
                     Text = "Finds the launcher scripts across your repos and runs and reliably restarts them as processes it owns.",
@@ -104,7 +104,8 @@ public sealed class AboutDialog : DialogBase
                     Children = { githubButton, issuesButton },
                 },
                 _launchError,
-                new TextBlock { Text = "© 2026 Yoshinao Inoguchi — GNU GPL v3 or later", FontSize = 12, Foreground = Palette.Brush("TextSecondaryBrush") },
+                new TextBlock { Text = "© 2026 Yoshinao Inoguchi — GNU GPL v3 or later", FontSize = 12 }
+                    .Themed(TextBlock.ForegroundProperty, "TextSecondaryBrush"),
             },
         };
 

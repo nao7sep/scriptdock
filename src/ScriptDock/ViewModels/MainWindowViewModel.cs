@@ -170,6 +170,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// rather than performed.</summary>
     public event EventHandler? ConsoleInputFocusRequested;
 
+    /// <summary>The saved theme. The view applies it app-wide (AppTheme) at startup and whenever
+    /// Settings commits a change, which raises this property; the view model never touches the
+    /// application.</summary>
+    public ThemePreference Theme => _config.Theme;
+
     /// <summary>Raised after a saved UI-font change updates the dynamic app resource. The window
     /// owns measurement and native minimum sizing, so it remeasures after the new font lays out.</summary>
     public event EventHandler? UiFontChanged;
@@ -287,6 +292,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             KillProcessesOnClose = draft.KillProcessesOnClose,
             RecaptureProcessesOnLaunch = draft.RecaptureProcessesOnLaunch,
             UiFontFamily = draft.UiFontFamily.Trim(),
+            Theme = draft.Theme,
         };
 
         try
@@ -307,6 +313,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _config.KillProcessesOnClose = candidate.KillProcessesOnClose;
         _config.RecaptureProcessesOnLaunch = candidate.RecaptureProcessesOnLaunch;
         _config.UiFontFamily = candidate.UiFontFamily;
+        var themeChanged = _config.Theme != candidate.Theme;
+        _config.Theme = candidate.Theme;
+        if (themeChanged)
+            OnPropertyChanged(nameof(Theme));
         ApplyUiFont();
         if (fontChanged)
             UiFontChanged?.Invoke(this, EventArgs.Empty);

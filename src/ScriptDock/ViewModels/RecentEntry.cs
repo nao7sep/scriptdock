@@ -1,6 +1,5 @@
 using System;
 using System.Globalization;
-using Avalonia.Media;
 using ScriptDock.Models;
 using ScriptDock.Services;
 
@@ -48,15 +47,11 @@ public sealed class RecentEntry
         _ => "Idle",
     };
 
-    /// <summary>Background brush for the state pill, resolved from the shared palette: green when
-    /// running, red on a failure or non-zero exit, muted gray for done/idle. Distinguishes states
-    /// at a glance without relying on the text alone.</summary>
-    public IBrush StatePillBrush => Palette.Brush(Kind switch
-    {
-        PillKind.Running => "RunningBrush",
-        PillKind.Failed or PillKind.ExitedError => "DangerTextBrush",
-        _ => "TextSecondaryBrush",
-    });
+    /// <summary>Whether the state pill reads as a failure. With <see cref="IsRunning"/> it is the
+    /// pill's colour state, which the view maps to theme brushes: green when running, red on a
+    /// failure or non-zero exit, muted gray for done/idle. Distinguishes states at a glance
+    /// without relying on the text alone.</summary>
+    public bool IsPillFailed => Kind is PillKind.Failed or PillKind.ExitedError;
 
     // The run's display lifecycle, derived once so the pill text and brush can't disagree, and so
     // the "no live process means Idle" and "Exited 0/null vs non-zero" rules live in one place

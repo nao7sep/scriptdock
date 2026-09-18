@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Serialization;
 using ScriptDock.Storage;
 
 namespace ScriptDock.Models;
@@ -31,6 +32,11 @@ public sealed class AppConfig : IJsonNormalizable
     /// <summary>The UI (chrome) font family. Family only; an empty value falls back to the bundled
     /// default (Inter). Applied app-wide; the read-only output console keeps its own monospace font.</summary>
     public string UiFontFamily { get; set; } = DefaultUiFontFamily;
+
+    /// <summary>The app theme. System follows the OS; applied app-wide before the main window exists
+    /// and again on each Save.</summary>
+    [JsonConverter(typeof(ThemePreferenceJsonConverter))]
+    public ThemePreference Theme { get; set; } = ThemePreference.System;
 
     /// <summary>Root directories scanned for scripts.</summary>
     public List<string> RootDirs { get; set; } = [];
