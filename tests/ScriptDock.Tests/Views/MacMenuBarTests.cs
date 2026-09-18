@@ -236,9 +236,13 @@ public sealed class MacMenuBarTests
         {
             [Key.R] = "r", [Key.H] = "h", [Key.OemComma] = ",", [Key.OemQuestion] = "/",
         };
+        var command = ShortcutCatalog.CommandModifier(window);
         foreach (var shortcut in ShortcutCatalog.Build(window).Where(item => item.Gesture is not null))
         {
+            // A key without Command cannot match any item in the bar.
             var gesture = shortcut.Gesture!;
+            if (!gesture.KeyModifiers.HasFlag(command))
+                continue;
             Assert.True(typed.ContainsKey(gesture.Key), $"No typed character for {gesture.Key}");
             var shift = gesture.KeyModifiers.HasFlag(KeyModifiers.Shift);
             var characters = shift ? typed[gesture.Key].ToUpperInvariant() : typed[gesture.Key];
