@@ -13,9 +13,17 @@ namespace ScriptDock.Tests.Views;
 /// The macOS emoji picker hands its choice back while the window is in the background, after Avalonia
 /// has dropped the window's focused element, so the text is raised on the window itself. These check
 /// that such text reaches the text field that had focus, at its caret, and that nothing else changes.
+/// The handler is installed on macOS only, so the rest skip elsewhere.
 /// </summary>
 public sealed class BackgroundTextInputTests
 {
+    [AvaloniaFact]
+    public void The_handler_is_installed_on_macOS_only()
+    {
+        BackgroundTextInput.Install();
+        Assert.Equal(OperatingSystem.IsMacOS(), BackgroundTextInput.Installed);
+    }
+
     [AvaloniaFact]
     public void Text_raised_on_a_background_window_goes_to_its_last_text_field_at_the_caret()
     {
@@ -110,6 +118,7 @@ public sealed class BackgroundTextInputTests
 
         public Scene(string text)
         {
+            Assert.SkipUnless(OperatingSystem.IsMacOS(), "The handler is installed on macOS only.");
             BackgroundTextInput.Install();
             Field = new TextBox { Text = text };
             Button = new Button { Content = "Other" };

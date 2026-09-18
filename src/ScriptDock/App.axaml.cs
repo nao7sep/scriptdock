@@ -42,7 +42,7 @@ public partial class App : Application
                 showSettings: () => _mainWindow?.ShowSettingsFromMenu(),
                 canShowAppDialogs: () => _mainWindow is { IsActive: true });
 
-            // An emoji chosen in the macOS picker arrives while the window is in the background.
+            // An emoji chosen in the macOS picker arrives while the window is in the background; macOS only.
             BackgroundTextInput.Install();
 
             if (StartupFailureMessage is { } startupFailure)

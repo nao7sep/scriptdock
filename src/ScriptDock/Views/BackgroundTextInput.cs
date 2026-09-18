@@ -13,22 +13,28 @@ namespace ScriptDock.Views;
 /// 11.3.1 a window that loses the keyboard also drops its focused element (Avalonia PR 18990, issue
 /// 20616). The emoji then reaches the window itself and is lost; Avalonia refocuses the field only
 /// once the window is in front again. A window in front with nothing focused is left alone: keys
-/// typed into it go nowhere, as before.
+/// typed into it go nowhere, as before. macOS only: the defect is in Avalonia's macOS backend, and on
+/// Windows the emoji panel inserts into the focused field without help.
 /// </summary>
 internal static class BackgroundTextInput
 {
     private static readonly ConditionalWeakTable<TopLevel, WeakReference<TextBox>> s_lastField = new();
-    private static bool s_installed;
 
     // Whether a window is in front; tests replace it, since a headless window cannot be put behind.
     internal static Func<WindowBase, bool> IsInFront = window => window.IsActive;
 
-    /// <summary>Starts remembering each window's text field and handing it background text.</summary>
+    /// <summary>Whether <see cref="Install"/> has installed the handler in this process.</summary>
+    internal static bool Installed { get; private set; }
+
+    /// <summary>
+    /// Starts remembering each window's text field and handing it background text. Does nothing off
+    /// macOS.
+    /// </summary>
     public static void Install()
     {
-        if (s_installed)
+        if (!OperatingSystem.IsMacOS() || Installed)
             return;
-        s_installed = true;
+        Installed = true;
         InputElement.GotFocusEvent.AddClassHandler<TextBox>((field, _) => Remember(field));
         InputElement.TextInputEvent.AddClassHandler<WindowBase>(Deliver);
     }
