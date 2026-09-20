@@ -22,14 +22,12 @@ namespace ScriptDock.Tests.I18n;
 /// to a control without the translator — a whole group heading showed as <c>tasks.overdue</c> in
 /// another app before this check existed. These open each surface and read what is actually drawn.
 /// </summary>
-public class RenderedKeyTests
+public class RenderedKeyTests : WindowTest
 {
     [AvaloniaFact]
     public void the_about_dialog_shows_no_key()
     {
-        var dialog = new AboutDialog(_ => false);
-        dialog.Show();
-        Dispatcher.UIThread.RunJobs();
+        var dialog = Show(new AboutDialog(_ => false));
 
         AssertNoKeys(dialog);
     }
@@ -37,11 +35,8 @@ public class RenderedKeyTests
     [AvaloniaFact]
     public void the_shortcuts_dialog_shows_no_key()
     {
-        var window = new Window();
-        window.Show();
-        var dialog = new ShortcutsDialog(ShortcutCatalog.Build(window));
-        dialog.Show();
-        Dispatcher.UIThread.RunJobs();
+        var window = Show(new Window());
+        var dialog = Show(new ShortcutsDialog(ShortcutCatalog.Build(window)));
 
         AssertNoKeys(dialog);
     }
@@ -51,9 +46,7 @@ public class RenderedKeyTests
     {
         var draft = new SettingsDialogViewModel(new AppConfig());
         var view = new SettingsView { DataContext = draft };
-        var window = new Window { Content = view, Width = 600, Height = 900 };
-        window.Show();
-        Dispatcher.UIThread.RunJobs();
+        var window = Show(new Window { Content = view, Width = 600, Height = 900 });
 
         AssertNoKeys(window);
 

@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.VisualTree;
 
 namespace ScriptDock.I18n;
 
@@ -101,7 +102,8 @@ internal static class Localized
 
     // Every control that holds a key, so a language change can reach it. The table holds its controls
     // weakly, so a closed window's controls are collected as they always were. The value is one shared
-    // marker: a value that referred to its own control would keep that control alive forever.
+    // marker: a value that referred to its own control would keep that control alive forever. Weak is
+    // not the same as gone, which is why RetranslateAll asks each holder whether it is still on screen.
     private static readonly ConditionalWeakTable<AvaloniaObject, object> s_holders = new();
     private static readonly object s_holdsAKey = new();
 
@@ -132,8 +134,16 @@ internal static class Localized
             target.SetValue(property, Localizer.T(catalogueKey));
         }
 
-        if (holdsKey)
-            s_holders.AddOrUpdate(target, s_holdsAKey);
+        if (!holdsKey || s_holders.TryGetValue(target, out _))
+            return;
+
+        s_holders.AddOrUpdate(target, s_holdsAKey);
+
+        // A visual that is off the tree is skipped by RetranslateAll, so it must be brought up to
+        // date when it comes back: a control built under one language, or hidden across a change,
+        // otherwise returns to the screen still speaking the old one.
+        if (target is Visual visual)
+            visual.AttachedToVisualTree += (holder, _) => Apply((AvaloniaObject)holder!);
     }
 
     private static AvaloniaProperty? Find(AvaloniaObject target, string name) =>
@@ -146,7 +156,16 @@ internal static class Localized
         var holders = new List<AvaloniaObject>();
         foreach (var entry in s_holders)
             holders.Add(entry.Key);
+
         foreach (var holder in holders)
+        {
+            // A visual that has left the tree — a closed window and everything it held — is nobody's
+            // text any more, and it is not inert either: its template bindings still listen, and the
+            // glyph runs behind its text were disposed with its window, so writing words into it now
+            // throws rather than translating anything. Attachment brings it back, above.
+            if (holder is Visual visual && !visual.IsAttachedToVisualTree())
+                continue;
             Apply(holder);
+        }
     }
 }

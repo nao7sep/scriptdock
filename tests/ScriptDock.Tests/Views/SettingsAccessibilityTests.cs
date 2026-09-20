@@ -12,15 +12,14 @@ using Xunit;
 
 namespace ScriptDock.Tests.Views;
 
-public sealed class SettingsAccessibilityTests
+public sealed class SettingsAccessibilityTests : WindowTest
 {
     [AvaloniaFact]
     public void Validation_marks_the_field_and_announces_the_associated_explanation()
     {
         var vm = new SettingsDialogViewModel(new AppConfig());
         var view = new SettingsView { DataContext = vm };
-        var host = new Window { Content = view, Width = 600, Height = 800 };
-        host.Show();
+        Show(new Window { Content = view, Width = 600, Height = 800 });
 
         vm.AddExtension("bad extension");
         Dispatcher.UIThread.RunJobs();
@@ -39,8 +38,7 @@ public sealed class SettingsAccessibilityTests
     {
         var vm = new SettingsDialogViewModel(new AppConfig());
         var view = new SettingsView { DataContext = vm };
-        var host = new Window { Content = view, Width = 600, Height = 800 };
-        host.Show();
+        Show(new Window { Content = view, Width = 600, Height = 800 });
 
         vm.AddExtension("bad extension");
         vm.PatternErrorMessage = ScriptDock.I18n.Message.Of("settings.patternMultiline");
@@ -60,8 +58,7 @@ public sealed class SettingsAccessibilityTests
     {
         var vm = new SettingsDialogViewModel(new AppConfig());
         var view = new SettingsView { DataContext = vm };
-        var host = new Window { Content = view, Width = 600, Height = 800 };
-        host.Show();
+        Show(new Window { Content = view, Width = 600, Height = 800 });
 
         vm.ReportRootPickerFailure(new IOException("EACCES /private/tmp/hostile-sentinel"));
         Dispatcher.UIThread.RunJobs();

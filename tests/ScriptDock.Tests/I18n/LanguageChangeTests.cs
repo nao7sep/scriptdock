@@ -21,15 +21,13 @@ namespace ScriptDock.Tests.I18n;
 /// speaks the new language without being rebuilt, and nothing has to be restarted. A control assigned
 /// once in a constructor — which is most of this app's dialogs — must follow too.
 /// </summary>
-public class LanguageChangeTests
+public class LanguageChangeTests : WindowTest
 {
     [AvaloniaFact]
     public void markup_that_is_already_on_screen_follows_the_language()
     {
         var view = new SettingsView { DataContext = new SettingsDialogViewModel(new AppConfig()) };
-        var window = new Window { Content = view, Width = 600, Height = 900 };
-        window.Show();
-        Dispatcher.UIThread.RunJobs();
+        var window = Show(new Window { Content = view, Width = 600, Height = 900 });
 
         var header = Headers(window).Single(text => text.Text == English.Of("settings.theme"));
 
@@ -48,9 +46,7 @@ public class LanguageChangeTests
     [AvaloniaFact]
     public void a_dialog_built_in_code_follows_the_language()
     {
-        var dialog = new AboutDialog(_ => false);
-        dialog.Show();
-        Dispatcher.UIThread.RunJobs();
+        var dialog = Show(new AboutDialog(_ => false));
 
         var close = dialog.GetVisualDescendants().OfType<Button>()
             .Single(button => Equals(button.Content, English.Of("common.close")));
@@ -60,6 +56,31 @@ public class LanguageChangeTests
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(Localizer.T("common.close"), close.Content);
             Assert.Equal(Localizer.T("about.title"), dialog.Title);
+        }
+    }
+
+    [AvaloniaFact]
+    public void a_window_that_has_closed_is_left_alone_and_corrected_if_it_opens_again()
+    {
+        var block = new TextBlock();
+        Localized.SetText(block, "common.close");
+        var window = Show(new Window { Content = block });
+        Assert.Equal(English.Of("common.close"), block.Text);
+
+        window.Close();
+        window.Content = null;
+        Dispatcher.UIThread.RunJobs();
+
+        // Closed is not collected: the control is still in the retranslation table, and writing into
+        // it now would reach template bindings and glyph runs that went with its window.
+        using (Localizer.Speaking("ja"))
+        {
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(English.Of("common.close"), block.Text);
+
+            // Shown again, it catches up with the language it slept through.
+            Show(new Window { Content = block });
+            Assert.Equal(Localizer.T("common.close"), block.Text);
         }
     }
 
@@ -115,9 +136,7 @@ public class LanguageChangeTests
         var source = new EverythingChanged();
         var text = new TextBlock();
         text.Bind(TextBlock.TextProperty, new Binding(nameof(EverythingChanged.Words)) { Source = source });
-        var window = new Window { Content = text };
-        window.Show();
-        Dispatcher.UIThread.RunJobs();
+        Show(new Window { Content = text });
         Assert.Equal("before", text.Text);
 
         source.Words = "after";

@@ -5,7 +5,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
-using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ScriptDock.I18n;
 using ScriptDock.Models;
@@ -24,7 +23,7 @@ namespace ScriptDock.Tests.I18n;
 /// dialog in all ten languages and measure the text against the room it was given, with the real font
 /// and the real layout rather than by eye.
 /// </summary>
-public class LabelFitTests
+public class LabelFitTests : WindowTest
 {
     // A label may exceed its box by this much before it is called clipped: Skia's measurement and
     // Avalonia's arrangement round differently, and a fraction of a pixel is not a defect.
@@ -45,12 +44,9 @@ public class LabelFitTests
     {
         using var speaking = Localizer.Speaking(tag);
 
-        var dialog = new SettingsDialog(new SettingsDialogViewModel(new AppConfig()), _ => true);
-        dialog.Show();
-        Dispatcher.UIThread.RunJobs();
+        var dialog = Show(new SettingsDialog(new SettingsDialogViewModel(new AppConfig()), _ => true));
 
         AssertNothingClipped(dialog, tag, atLeast: 8);
-        dialog.Close();
     }
 
     [AvaloniaTheory]
@@ -68,15 +64,10 @@ public class LabelFitTests
     {
         using var speaking = Localizer.Speaking(tag);
 
-        var owner = new Window();
-        owner.Show();
-        var dialog = new ShortcutsDialog(ShortcutCatalog.Build(owner));
-        dialog.Show();
-        Dispatcher.UIThread.RunJobs();
+        var owner = Show(new Window());
+        var dialog = Show(new ShortcutsDialog(ShortcutCatalog.Build(owner)));
 
         AssertNothingClipped(dialog, tag, atLeast: 8);
-        dialog.Close();
-        owner.Close();
     }
 
     [AvaloniaTheory]
@@ -94,13 +85,10 @@ public class LabelFitTests
     {
         using var speaking = Localizer.Speaking(tag);
 
-        var dialog = new AboutDialog(_ => true);
-        dialog.Show();
-        Dispatcher.UIThread.RunJobs();
+        var dialog = Show(new AboutDialog(_ => true));
 
         // The About dialog's body wraps by design; its name, version, licence and button do not.
         AssertNothingClipped(dialog, tag, atLeast: 4);
-        dialog.Close();
     }
 
     private static void AssertNothingClipped(Visual root, string tag, int atLeast)

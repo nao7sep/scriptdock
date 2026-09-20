@@ -11,14 +11,12 @@ using Xunit;
 
 namespace ScriptDock.Tests.Views;
 
-public sealed class AboutDialogTests
+public sealed class AboutDialogTests : WindowTest
 {
     [AvaloniaFact]
     public void External_launch_failure_stays_in_the_about_dialog_and_preserves_reachable_actions()
     {
-        var dialog = new AboutDialog(_ => false);
-        dialog.Show();
-        Dispatcher.UIThread.RunJobs();
+        var dialog = Show(new AboutDialog(_ => false));
         var before = dialog.Bounds.Height;
         var externalButton = dialog.GetVisualDescendants()
             .OfType<Button>()

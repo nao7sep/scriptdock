@@ -14,7 +14,7 @@ using Xunit;
 
 namespace ScriptDock.Tests.Views;
 
-public sealed class RecentActionAccessibilityTests
+public sealed class RecentActionAccessibilityTests : WindowTest
 {
     [AvaloniaFact]
     public async Task RetainedFailureIsAssertiveOnlyWhenNew_NotWhenSelectionRestoresIt()
@@ -41,8 +41,7 @@ public sealed class RecentActionAccessibilityTests
         result.Bind(
             Visual.IsVisibleProperty,
             new Binding(nameof(MainWindowViewModel.HasRecentActionError)) { Source = vm });
-        var host = new Window { Content = result, Width = 400, Height = 200 };
-        host.Show();
+        Show(new Window { Content = result, Width = 400, Height = 200 });
 
         await vm.StopEntryCommand.ExecuteAsync(live);
         Dispatcher.UIThread.RunJobs();
