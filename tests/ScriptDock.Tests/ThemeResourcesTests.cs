@@ -74,7 +74,7 @@ public sealed class ThemeResourcesTests
                 failures.Add($"{ink} on {surface}: {ratio:F2}");
         }
 
-        var chips = new[] { "ChipBackgroundBrush", "ChipHoverBrush", "ChipSelectedBrush" };
+        var chips = new[] { "ChipBackgroundBrush", "ChipHoverBrush", "ChipSelectedBrush", "ChipPressedBrush" };
         foreach (var surface in new[] { "AppBackgroundBrush", "SurfaceBrush", "ContentWellBrush", "SelectionBrush", "SelectionHoverBrush", "ErrorSurfaceBrush" }.Concat(chips))
             Check("TextPrimaryBrush", surface, 4.5);
         foreach (var surface in new[] { "AppBackgroundBrush", "SurfaceBrush", "ContentWellBrush", "ChipBackgroundBrush" })
@@ -89,8 +89,12 @@ public sealed class ThemeResourcesTests
         }
         foreach (var surface in new[] { "AppBackgroundBrush", "SurfaceBrush", "ErrorSurfaceBrush" })
             Check("DangerTextBrush", surface, 4.5);
-        Check("AccentForegroundBrush", "AccentBrush", 4.5);
-        Check("AccentForegroundBrush", "AccentHoverBrush", 4.5);
+        // The commit button's label, on every fill it takes — resting, hovered and pressed.
+        foreach (var fill in new[] { "AccentBrush", "AccentHoverBrush", "AccentPressedBrush" })
+            Check("AccentForegroundBrush", fill, 4.5);
+        // The disabled pair recedes by its own colours rather than by a fade, so its own
+        // legibility is the app's to hold and nothing else checks it.
+        Check("AccentForegroundDisabledBrush", "AccentDisabledBrush", 4.5);
         Check("InactiveActionForegroundBrush", "InactiveActionBrush", 4.5);
         // The Recent state pill's label, in the window background colour, on each pill fill.
         foreach (var pill in new[] { "RunningBrush", "DangerTextBrush", "TextSecondaryBrush" })
@@ -112,8 +116,8 @@ public sealed class ThemeResourcesTests
     public void WhiteLabelsKeepHighContrastOnTheDangerFill(string theme)
     {
         var b = ThemeBrushes(theme);
-        Assert.True(Contrast(Colors.White, b["DangerBrush"]) >= 4.5, $"{theme}: white on DangerBrush");
-        Assert.True(Contrast(Colors.White, b["DangerHoverBrush"]) >= 4.5, $"{theme}: white on DangerHoverBrush");
+        foreach (var fill in new[] { "DangerBrush", "DangerHoverBrush", "DangerPressedBrush" })
+            Assert.True(Contrast(Colors.White, b[fill]) >= 4.5, $"{theme}: white on {fill}");
     }
 
     [Fact]

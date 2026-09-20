@@ -22,6 +22,7 @@
                     <!-- Electric console: the cyan action. Dark uses bright cyan under dark ink; light a deeper cyan under white, which also marks focus on a pale surface. -->
                     <SolidColorBrush x:Key="AccentBrush" Color="#0E7490"/>
                     <SolidColorBrush x:Key="AccentHoverBrush" Color="#155E75"/>
+                        <SolidColorBrush x:Key="AccentPressedBrush" Color="#164E63"/>
                     <SolidColorBrush x:Key="AccentForegroundBrush" Color="#FFFFFF"/>
                     <SolidColorBrush x:Key="AccentDisabledBrush" Color="#C9DEE4"/>
                     <SolidColorBrush x:Key="AccentForegroundDisabledBrush" Color="#4C636B"/>
@@ -30,6 +31,7 @@
                     <!-- Danger stays a separate semantic red. -->
                     <SolidColorBrush x:Key="DangerBrush" Color="#BE3455"/>
                     <SolidColorBrush x:Key="DangerHoverBrush" Color="#A62B48"/>
+                        <SolidColorBrush x:Key="DangerPressedBrush" Color="#8E223B"/>
                     <SolidColorBrush x:Key="ErrorSurfaceBrush" Color="#FBEBEE"/>
                     <!-- State colours. DangerText is danger red as text (validation errors, removed scripts); ScriptNew is the orange dot flagging a newly-found script; ScriptHidden dims hidden scripts; Running is the green run indicator. -->
                     <SolidColorBrush x:Key="DangerTextBrush" Color="#B4233F"/>
@@ -42,6 +44,7 @@
                     <SolidColorBrush x:Key="SelectionSecondaryBrush" Color="#3F555C"/>
                     <SolidColorBrush x:Key="ChipBackgroundBrush" Color="#F1F6F8"/>
                     <SolidColorBrush x:Key="ChipHoverBrush" Color="#E3EDF1"/>
+                        <SolidColorBrush x:Key="ChipPressedBrush" Color="#D8E6EB"/>
                     <SolidColorBrush x:Key="ChipSelectedBrush" Color="#D5EEF4"/>
                     <SolidColorBrush x:Key="DisabledInputBrush" Color="#F1F5F7"/>
                     <SolidColorBrush x:Key="DisabledInputBorderBrush" Color="#DCE5E9"/>
@@ -64,6 +67,7 @@
                     <!-- Electric console: the cyan action. Dark uses bright cyan under dark ink; light a deeper cyan under white, which also marks focus on a pale surface. -->
                     <SolidColorBrush x:Key="AccentBrush" Color="#22D3EE"/>
                     <SolidColorBrush x:Key="AccentHoverBrush" Color="#67E8F9"/>
+                        <SolidColorBrush x:Key="AccentPressedBrush" Color="#A5F3FC"/>
                     <SolidColorBrush x:Key="AccentForegroundBrush" Color="#062126"/>
                     <SolidColorBrush x:Key="AccentDisabledBrush" Color="#174650"/>
                     <SolidColorBrush x:Key="AccentForegroundDisabledBrush" Color="#B4C4C8"/>
@@ -72,6 +76,9 @@
                     <!-- Danger stays a separate semantic red. -->
                     <SolidColorBrush x:Key="DangerBrush" Color="#BE3455"/>
                     <SolidColorBrush x:Key="DangerHoverBrush" Color="#C83A58"/>
+                        <!-- Deepens although the hover lifts: white on the hover fill is
+                             already 5.00:1, so one more lift drops the label under the floor. -->
+                        <SolidColorBrush x:Key="DangerPressedBrush" Color="#A82C4A"/>
                     <SolidColorBrush x:Key="ErrorSurfaceBrush" Color="#2B171B"/>
                     <!-- State colours. DangerText is danger red as text (validation errors, removed scripts); ScriptNew is the orange dot flagging a newly-found script; ScriptHidden dims hidden scripts; Running is the green run indicator. -->
                     <SolidColorBrush x:Key="DangerTextBrush" Color="#FB7185"/>
@@ -84,6 +91,9 @@
                     <SolidColorBrush x:Key="SelectionSecondaryBrush" Color="#B4C4C8"/>
                     <SolidColorBrush x:Key="ChipBackgroundBrush" Color="#14242B"/>
                     <SolidColorBrush x:Key="ChipHoverBrush" Color="#1B3139"/>
+                        <!-- Deepens although the hover lifts: the dark neutral ramp has already
+                             spent its headroom, and a further lift takes the quieter inks under 4.5. -->
+                        <SolidColorBrush x:Key="ChipPressedBrush" Color="#0E1B21"/>
                     <SolidColorBrush x:Key="ChipSelectedBrush" Color="#193640"/>
                     <SolidColorBrush x:Key="DisabledInputBrush" Color="#081115"/>
                     <SolidColorBrush x:Key="DisabledInputBorderBrush" Color="#182A31"/>
@@ -203,6 +213,10 @@
             <Setter Property="Background" Value="{DynamicResource InactiveActionBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource InactiveActionForegroundBrush}"/>
         </Style>
+        <Style Selector="Button.accent:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentPressedBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentForegroundBrush}"/>
+        </Style>
         <!-- Disabled commit remains readable while clearly receding from the live cyan action. -->
         <Style Selector="Button.accent:disabled">
             <Setter Property="Opacity" Value="1"/>
@@ -231,6 +245,10 @@
         </Style>
         <Style Selector="Button.destructive:focus /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource DangerHoverBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <Style Selector="Button.destructive:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DangerPressedBrush}"/>
             <Setter Property="Foreground" Value="White"/>
         </Style>
 
@@ -302,6 +320,10 @@
         </Style>
         <Style Selector="Button.resultClose:focus /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource ChipHoverBrush}"/>
+        </Style>
+        <Style Selector="Button.resultClose:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource ChipPressedBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         </Style>
         <Style Selector="TextBox.invalid">
             <Setter Property="BorderBrush" Value="{DynamicResource DangerTextBrush}"/>
