@@ -272,7 +272,9 @@
         <Style Selector="Border.sectionHeader">
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="0,0,0,1"/>
-            <Setter Property="Height" Value="46"/>
+            <!-- A floor, not a fixed height: every pane header is 46 tall, and a language whose labels
+                 need more room grows the header rather than having its buttons clipped. -->
+            <Setter Property="MinHeight" Value="46"/>
             <Setter Property="Padding" Value="10,0"/>
         </Style>
         <Style Selector="TextBlock.cardHeader">

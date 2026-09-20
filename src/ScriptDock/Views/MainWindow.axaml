@@ -3,6 +3,7 @@
         xmlns:vm="using:ScriptDock.ViewModels"
         xmlns:models="using:ScriptDock.Models"
         xmlns:ctl="using:ScriptDock.Controls"
+        xmlns:i18n="using:ScriptDock.I18n"
         x:Class="ScriptDock.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="ScriptDock"
@@ -86,16 +87,16 @@
             <DockPanel>
                 <!-- Hamburger docked right; the wordmark is the last (fill) child so it stays left. -->
                 <Button Classes="tool" DockPanel.Dock="Right" Padding="8,4"
-                        AutomationProperties.Name="Application menu"
-                        ToolTip.Tip="Application menu">
+                        i18n:Localized.AutomationName="menu.application"
+                        i18n:Localized.ToolTip="menu.application">
                     <Path Width="18" Height="18" Stretch="None" Fill="{DynamicResource TextPrimaryBrush}"
                           Data="M1,3 H17 V5 H1 Z M1,8 H17 V10 H1 Z M1,13 H17 V15 H1 Z"/>
                     <Button.Flyout>
                         <MenuFlyout Placement="BottomEdgeAlignedRight">
-                            <MenuItem Header="Reveal Logs" Click="OnRevealLogsClick"/>
-                            <MenuItem Header="Settings" Click="OnSettingsClick"/>
-                            <MenuItem Header="Keyboard Shortcuts" Click="OnShortcutsClick"/>
-                            <MenuItem Header="About" Click="OnAboutClick"/>
+                            <MenuItem i18n:Localized.Header="menu.revealLogs" Click="OnRevealLogsClick"/>
+                            <MenuItem i18n:Localized.Header="menu.settings" Click="OnSettingsClick"/>
+                            <MenuItem i18n:Localized.Header="menu.shortcuts" Click="OnShortcutsClick"/>
+                            <MenuItem i18n:Localized.Header="menu.about" Click="OnAboutClick"/>
                         </MenuFlyout>
                     </Button.Flyout>
                 </Button>
@@ -119,7 +120,7 @@
                            Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                 <Button Grid.Column="2" Classes="resultClose" VerticalAlignment="Top"
                         Command="{Binding DismissOperationalErrorCommand}"
-                        AutomationProperties.Name="Dismiss error" ToolTip.Tip="Dismiss error">
+                        i18n:Localized.AutomationName="error.dismiss" i18n:Localized.ToolTip="error.dismiss">
                     <Path Width="10" Height="10" Stretch="Uniform"
                           Stroke="{DynamicResource DangerTextBrush}" StrokeThickness="1.8"
                           StrokeLineCap="Round"
@@ -134,13 +135,13 @@
         <Border x:Name="StatusBar" Grid.Row="3" Background="{DynamicResource SurfaceBrush}"
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="14,6">
             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
-                <TextBlock Text="{Binding ScriptCount, StringFormat='{}{0} scripts'}" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                <TextBlock Text="{Binding ScriptCountText}" Foreground="{DynamicResource TextSecondaryBrush}"/>
                 <TextBlock Text="·" Foreground="{DynamicResource BorderBrush}" IsVisible="{Binding HasHidden}"/>
-                <TextBlock Text="{Binding HiddenCount, StringFormat='{}{0} hidden'}" Foreground="{DynamicResource TextSecondaryBrush}" IsVisible="{Binding HasHidden}"/>
+                <TextBlock Text="{Binding HiddenCountText}" Foreground="{DynamicResource TextSecondaryBrush}" IsVisible="{Binding HasHidden}"/>
                 <TextBlock Text="·" Foreground="{DynamicResource BorderBrush}"/>
                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                     <Ellipse Width="7" Height="7" Fill="{DynamicResource RunningBrush}" VerticalAlignment="Center" IsVisible="{Binding HasRunning}"/>
-                    <TextBlock Text="{Binding RunningCount, StringFormat='{}{0} running'}" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBlock Text="{Binding RunningCountText}" Foreground="{DynamicResource TextSecondaryBrush}"/>
                 </StackPanel>
             </StackPanel>
         </Border>
@@ -183,18 +184,18 @@
                     <DockPanel>
                         <Border DockPanel.Dock="Top" Classes="sectionHeader" x:Name="ScriptsHeader">
                             <DockPanel>
-                                <TextBlock Text="Scripts" Classes="cardHeader" VerticalAlignment="Center"/>
+                                <TextBlock i18n:Localized.Text="scripts.title" Classes="cardHeader" VerticalAlignment="Center"/>
                                 <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center">
                                     <!-- Selection actions (act on the selected chip). -->
-                                    <Button Content="Run" Classes="tool" Command="{Binding RunScriptCommand}" CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
+                                    <Button i18n:Localized.Content="scripts.run" Classes="tool" Command="{Binding RunScriptCommand}" CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
                                     <!-- Label tracks the selected script: "Hide" for a visible one, "Show" for a hidden one. -->
                                     <Button Content="{Binding ToggleHiddenLabel}" Classes="tool" Command="{Binding ToggleHiddenCommand}" CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
                                     <!-- List-level controls (act on the whole Scripts list). "Show hidden" is the one
                                          checkbox+label pair, so it carries extra horizontal margin to set that pair apart
                                          from the Hide button on its left and the Rescan button on its right — its tight
                                          internal box-to-label gap then reads as the connected unit. -->
-                                    <CheckBox Content="Show hidden" IsChecked="{Binding ShowHidden}" Margin="10,0" VerticalAlignment="Center"/>
-                                    <Button Content="Rescan" Classes="tool" Command="{Binding RescanCommand}"/>
+                                    <CheckBox i18n:Localized.Content="scripts.showHidden" IsChecked="{Binding ShowHidden}" Margin="10,0" VerticalAlignment="Center"/>
+                                    <Button i18n:Localized.Content="scripts.rescan" Classes="tool" Command="{Binding RescanCommand}"/>
                                 </StackPanel>
                             </DockPanel>
                         </Border>
@@ -219,7 +220,7 @@
                                     </ItemsPanelTemplate>
                                 </ListBox.ItemsPanel>
                             </ListBox>
-                            <TextBlock Text="No scripts found. Add a root directory in Settings, then Rescan."
+                            <TextBlock i18n:Localized.Text="scripts.empty"
                                        IsVisible="{Binding NoScripts}" IsHitTestVisible="False"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        TextAlignment="Center" TextWrapping="Wrap" MaxWidth="260"
@@ -243,7 +244,7 @@
                                     <TextBlock Text="{Binding SelectedRecentEntry.DisplayName}" FontSize="12" FontWeight="SemiBold"
                                                Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
                                 </Border>
-                                <TextBlock Text="Output" Classes="cardHeader" VerticalAlignment="Center"/>
+                                <TextBlock i18n:Localized.Text="output.title" Classes="cardHeader" VerticalAlignment="Center"/>
                             </DockPanel>
                         </Border>
                         <!-- Per-process action failures are owned by the selected run's detail/console.
@@ -261,7 +262,7 @@
                                            Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                 <Button Grid.Column="2" Classes="resultClose" VerticalAlignment="Top"
                                         Command="{Binding DismissRecentActionErrorCommand}"
-                                        AutomationProperties.Name="Dismiss process error" ToolTip.Tip="Dismiss process error">
+                                        i18n:Localized.AutomationName="output.dismissError" i18n:Localized.ToolTip="output.dismissError">
                                     <Path Width="10" Height="10" Stretch="Uniform"
                                           Stroke="{DynamicResource DangerTextBrush}" StrokeThickness="1.8"
                                           StrokeLineCap="Round" Data="M1,1 L9,9 M9,1 L1,9"/>
@@ -272,7 +273,7 @@
                              on Enter. Enabled only while that run is running and accepts input. -->
                         <ctl:ComposingTextBox x:Name="ConsoleInput" Classes="stdin" DockPanel.Dock="Bottom" Margin="10,0,10,10" SubmitOnEnter="True"
                                  IsEnabled="{Binding CanSendInput}"
-                                 PlaceholderText="Type input and press Enter to send to the running script…"
+                                 i18n:Localized.PlaceholderText="output.inputPlaceholder"
                                  Submitted="OnConsoleInputSubmitted"/>
                         <!-- Recessed terminal-like field so the log reads as its own surface, not part of the header. -->
                         <Border Margin="10" Background="{DynamicResource ContentWellBrush}"
@@ -293,11 +294,11 @@
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Classes="sectionHeader" x:Name="RecentHeader">
                         <DockPanel>
-                            <TextBlock Text="Recent" Classes="cardHeader" VerticalAlignment="Center"/>
+                            <TextBlock i18n:Localized.Text="recent.title" Classes="cardHeader" VerticalAlignment="Center"/>
                             <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                <Button Content="Run" Classes="tool" Command="{Binding RunOrRestartCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
-                                <Button Content="Stop" Classes="tool" Command="{Binding StopEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
-                                <Button Content="Dismiss" Classes="tool" Command="{Binding DismissEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
+                                <Button i18n:Localized.Content="recent.run" Classes="tool" Command="{Binding RunOrRestartCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
+                                <Button i18n:Localized.Content="recent.stop" Classes="tool" Command="{Binding StopEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
+                                <Button i18n:Localized.Content="recent.dismiss" Classes="tool" Command="{Binding DismissEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
                             </StackPanel>
                         </DockPanel>
                     </Border>
@@ -324,7 +325,7 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-                        <TextBlock Text="No recent runs. Double-click a script to run it."
+                        <TextBlock i18n:Localized.Text="recent.empty"
                                    IsVisible="{Binding NoRecent}" IsHitTestVisible="False"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"
                                    TextAlignment="Center" TextWrapping="Wrap" MaxWidth="240"

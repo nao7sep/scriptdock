@@ -1,5 +1,5 @@
 using System;
-using System.Globalization;
+using ScriptDock.I18n;
 using ScriptDock.Models;
 using ScriptDock.Services;
 
@@ -30,21 +30,23 @@ public sealed class RecentEntry
 
     public bool IsRunning => Kind == PillKind.Running;
 
-    /// <summary>The last-run time in the machine's local time (UTC is converted only when facing the
-    /// user, per the timestamp conventions), in a fixed <c>yyyy-MM-dd HH:mm</c> form.</summary>
-    public string LastRanDisplay =>
-        LastRanAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+    /// <summary>
+    /// The last-run time in the computer's own zone (UTC is converted only when facing the user, per the
+    /// timestamp conventions), written the way the reader's language and region write a date and a time
+    /// to the minute rather than in one fixed English form.
+    /// </summary>
+    public string LastRanDisplay => Localizer.Current.DateAndMinute(LastRanAt, TimeZoneInfo.Local);
 
     /// <summary>Short label for the state pill. No live process (a recent carried over from a
     /// past session) reads <c>Idle</c> rather than a bare dash.</summary>
     public string StatePillText => Kind switch
     {
-        PillKind.Running => "Running",
-        PillKind.ExitedOk => "Exited",
-        PillKind.ExitedError => $"Exited {Process!.ExitCode}",
-        PillKind.Stopped => "Stopped",
-        PillKind.Failed => "Failed",
-        _ => "Idle",
+        PillKind.Running => Localizer.T("recent.stateRunning"),
+        PillKind.ExitedOk => Localizer.T("recent.stateExited"),
+        PillKind.ExitedError => Localizer.T("recent.stateExitedWithCode", ("code", Process!.ExitCode)),
+        PillKind.Stopped => Localizer.T("recent.stateStopped"),
+        PillKind.Failed => Localizer.T("recent.stateFailed"),
+        _ => Localizer.T("recent.stateIdle"),
     };
 
     /// <summary>Whether the state pill reads as a failure. With <see cref="IsRunning"/> it is the

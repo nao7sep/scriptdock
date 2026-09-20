@@ -37,7 +37,7 @@ public partial class SettingsView : UserControl
 
             var folders = await storage.OpenFolderPickerAsync(new FolderPickerOpenOptions
             {
-                Title = "Add root directory",
+                Title = I18n.Localizer.T("settings.pickRootTitle"),
                 AllowMultiple = true,
             });
             Vm.ResolveRootPickerFailure();

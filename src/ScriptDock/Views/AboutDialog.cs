@@ -19,21 +19,25 @@ public sealed class AboutDialog : DialogBase
     private readonly Border _launchError;
     private readonly TextBlock _launchErrorMessage;
 
+    /// <summary>The app's name, which is a brand and so identical in every language.</summary>
+    private const string AppName = "ScriptDock";
+
     public AboutDialog() : this(ExternalLauncher.Open) { }
 
     internal AboutDialog(System.Func<string, bool> openExternal)
     {
         _openExternal = openExternal;
         Width = 420;
-        Title = "About ScriptDock";
+        I18n.Localized.SetTitle(this, "about.title");
 
         var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "unknown";
 
-        var githubButton = new Button { Content = ExternalLinkLabel("GitHub"), Classes = { "tool" } };
-        githubButton.Click += (_, _) => OpenExternal(GitHubUrl, "GitHub");
+        // GitHub is a brand name, so it is the same in every language; the issue tracker is not.
+        var githubButton = new Button { Content = ExternalLinkLabel(I18n.Localizer.T("about.github")), Classes = { "tool" } };
+        githubButton.Click += (_, _) => OpenExternal(GitHubUrl, I18n.Message.Of("about.openGitHubFailed"));
 
-        var issuesButton = new Button { Content = ExternalLinkLabel("Report Issue"), Classes = { "tool" } };
-        issuesButton.Click += (_, _) => OpenExternal($"{GitHubUrl}/issues", "the issue tracker");
+        var issuesButton = new Button { Content = ExternalLinkLabel(I18n.Localizer.T("about.reportIssue")), Classes = { "tool" } };
+        issuesButton.Click += (_, _) => OpenExternal($"{GitHubUrl}/issues", I18n.Message.Of("about.openIssuesFailed"));
 
         _launchErrorMessage = new TextBlock
         {
@@ -55,8 +59,8 @@ public sealed class AboutDialog : DialogBase
             VerticalAlignment = VerticalAlignment.Top,
             Content = dismissMark,
         };
-        AutomationProperties.SetName(dismissLaunchError, "Close result");
-        ToolTip.SetTip(dismissLaunchError, "Close");
+        I18n.Localized.SetAutomationName(dismissLaunchError, "about.closeResult");
+        I18n.Localized.SetToolTip(dismissLaunchError, "common.close");
         dismissMark.Bind(
             Shapes.Shape.StrokeProperty,
             new Binding("Foreground") { RelativeSource = new RelativeSource { AncestorType = typeof(Button) } });
@@ -86,12 +90,12 @@ public sealed class AboutDialog : DialogBase
             Spacing = 0,
             Children =
             {
-                new TextBlock { Text = "ScriptDock", FontSize = 20, FontWeight = FontWeight.Bold, Margin = new Thickness(0, 0, 0, 4) },
-                new TextBlock { Text = $"Version {version}", FontSize = 13, Margin = new Thickness(0, 0, 0, 12) }
+                new TextBlock { Text = AppName, FontSize = 20, FontWeight = FontWeight.Bold, Margin = new Thickness(0, 0, 0, 4) },
+                new TextBlock { Text = I18n.Localizer.T("about.version", ("version", version)), FontSize = 13, Margin = new Thickness(0, 0, 0, 12) }
                     .Themed(TextBlock.ForegroundProperty, "TextSecondaryBrush"),
                 new TextBlock
                 {
-                    Text = "Finds the launcher scripts across your repos and runs and reliably restarts them as processes it owns.",
+                    Text = I18n.Localizer.T("about.description"),
                     TextWrapping = TextWrapping.Wrap,
                     FontSize = 13,
                     Margin = new Thickness(0, 0, 0, 16),
@@ -104,19 +108,21 @@ public sealed class AboutDialog : DialogBase
                     Children = { githubButton, issuesButton },
                 },
                 _launchError,
-                new TextBlock { Text = "© 2026 Yoshinao Inoguchi — GNU GPL v3 or later", FontSize = 12 }
+                new TextBlock { Text = I18n.Localizer.T("about.licence"), FontSize = 12 }
                     .Themed(TextBlock.ForegroundProperty, "TextSecondaryBrush"),
             },
         };
 
         SetContent(panel);
-        var buttons = SetButtons([new DialogButton("Close", "close", DialogButtonKind.Primary) { IsDefault = true }]);
+        var buttons = SetButtons([new DialogButton("common.close", "close", DialogButtonKind.Primary) { IsDefault = true }]);
         SetInitialFocus(buttons["close"]);
     }
 
     public static Task ShowAsync(Window owner) => new AboutDialog().ShowDialog(owner);
 
-    private void OpenExternal(string url, string destination)
+    // Each destination carries its own whole sentence rather than a noun dropped into a shared one:
+    // a language with articles, cases or particles cannot build that sentence from a fragment.
+    private void OpenExternal(string url, I18n.Message failure)
     {
         if (_openExternal(url))
         {
@@ -124,7 +130,7 @@ public sealed class AboutDialog : DialogBase
             return;
         }
 
-        _launchErrorMessage.Text = $"Couldn’t open {destination}. Check the log and try again.";
+        _launchErrorMessage.Text = I18n.Localizer.Of(failure);
         _launchError.IsVisible = true;
     }
 

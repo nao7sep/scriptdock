@@ -33,6 +33,14 @@ public sealed class AppConfig : IJsonNormalizable
     /// default (Inter). Applied app-wide; the read-only output console keeps its own monospace font.</summary>
     public string UiFontFamily { get; set; } = DefaultUiFontFamily;
 
+    /// <summary>
+    /// The interface language: a BCP 47 tag from the set, or <c>system</c> to follow the computer's
+    /// own languages at each launch. Read before the app is built (<c>LanguageBootstrap</c>) so the
+    /// first frame is already in it, and applied again on each Save. A missing or unknown value means
+    /// system, so a hand-edited file can never leave the app without a language.
+    /// </summary>
+    public string Language { get; set; } = I18n.Languages.System;
+
     /// <summary>The app theme. System follows the OS; applied app-wide before the main window exists
     /// and again on each Save.</summary>
     [JsonConverter(typeof(ThemePreferenceJsonConverter))]
@@ -64,6 +72,7 @@ public sealed class AppConfig : IJsonNormalizable
     public void NormalizeAfterLoad()
     {
         UiFontFamily ??= DefaultUiFontFamily;
+        Language = I18n.Languages.NormalizePreference(Language);
         RootDirs = RootDirs?.OfType<string>().ToList() ?? [];
         Extensions = Extensions?.OfType<string>().ToList() ?? [];
         IgnorePatterns = IgnorePatterns?.OfType<string>().ToList() ?? [];

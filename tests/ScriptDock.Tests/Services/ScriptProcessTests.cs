@@ -1,5 +1,6 @@
 using ScriptDock.Models;
 using ScriptDock.Services;
+using ScriptDock.Tests.I18n;
 using Xunit;
 
 namespace ScriptDock.Tests.Services;
@@ -18,10 +19,10 @@ public sealed class ScriptProcessTests
     {
         var process = New();
 
-        process.Fail("Failed to start: boom");
+        process.Fail(ScriptDock.I18n.Message.Of("failure.scriptStart"));
 
         Assert.Equal(RunState.Failed, process.State);
-        Assert.Equal(["Failed to start: boom"], process.ReadOutput());
+        Assert.Equal([English.Of("failure.scriptStart")], process.ReadOutput());
     }
 
     [Fact]
@@ -30,7 +31,7 @@ public sealed class ScriptProcessTests
         var process = New();
 
         process.Complete();           // no live process → Exited
-        process.Fail("late failure"); // must be ignored: already finalised
+        process.Fail(ScriptDock.I18n.Message.Of("failure.scriptStart")); // must be ignored: already finalised
 
         Assert.Equal(RunState.Exited, process.State);
         Assert.Empty(process.ReadOutput()); // no failure message leaked in
@@ -41,11 +42,11 @@ public sealed class ScriptProcessTests
     {
         var process = New();
 
-        process.Fail("boom");
+        process.Fail(ScriptDock.I18n.Message.Of("failure.scriptStartPermission"));
         process.Complete(); // must be ignored
 
         Assert.Equal(RunState.Failed, process.State);
-        Assert.Equal(["boom"], process.ReadOutput());
+        Assert.Equal([English.Of("failure.scriptStartPermission")], process.ReadOutput());
     }
 
     [Fact]
@@ -56,7 +57,7 @@ public sealed class ScriptProcessTests
         process.StateChanged += (_, _) => raised++;
 
         process.Complete();
-        process.Fail("ignored");
+        process.Fail(ScriptDock.I18n.Message.Of("failure.scriptStart"));
 
         Assert.Equal(1, raised);
     }

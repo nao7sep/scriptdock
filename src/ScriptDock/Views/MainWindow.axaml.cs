@@ -12,6 +12,7 @@ using Avalonia.Platform;
 using Avalonia.Threading;
 using ScriptDock.Controls;
 using ScriptDock.Models;
+using ScriptDock.I18n;
 using ScriptDock.Services;
 using ScriptDock.ViewModels;
 
@@ -120,7 +121,7 @@ public partial class MainWindow : Window
             vm.ConsoleInputFocusRequested += OnConsoleInputFocusRequested;
             vm.UiFontChanged += OnUiFontChanged;
             vm.ConfirmHandler = request =>
-                ConfirmDialog.ConfirmDestructiveAsync(this, request.Title, request.Message, request.ConfirmLabel);
+                ConfirmDialog.ConfirmDestructiveAsync(this, request.Title, request.Message, request.ConfirmLabelKey);
 
             await vm.InitializeAsync();
         }
@@ -129,7 +130,7 @@ public partial class MainWindow : Window
             Log.Error("ui: window load failed", ex);
             ViewModel?.ReportShellActionError(
                 "window-load",
-                "ScriptDock could not finish loading this window. Check the log and try Rescan.");
+                Message.Of("shell.windowLoadFailed"));
         }
     }
 
@@ -301,9 +302,9 @@ public partial class MainWindow : Window
                 e.Cancel = true;
                 var proceed = await ConfirmDialog.ConfirmDestructiveAsync(
                     this,
-                    "Quit ScriptDock",
-                    $"{vm.RunningCount} running script(s) will be terminated when ScriptDock quits. Quit anyway?",
-                    "Quit");
+                    Message.Of("quit.title"),
+                    Message.Of("quit.message", ("count", vm.RunningCount)),
+                    "quit.confirm");
                 if (proceed)
                 {
                     _quitConfirmed = true;
@@ -476,7 +477,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             Log.Error("ui: open settings failed", ex);
-            ViewModel?.ReportShellActionError("open-settings", "Settings could not be opened. Check the log and try again.");
+            ViewModel?.ReportShellActionError("open-settings", Message.Of("shell.settingsFailed"));
         }
     }
 
@@ -490,7 +491,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             Log.Error("ui: open shortcuts failed", ex);
-            ViewModel?.ReportShellActionError("open-shortcuts", "Keyboard Shortcuts could not be opened. Check the log and try again.");
+            ViewModel?.ReportShellActionError("open-shortcuts", Message.Of("shell.shortcutsFailed"));
         }
     }
 
@@ -504,7 +505,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             Log.Error("ui: open about failed", ex);
-            ViewModel?.ReportShellActionError("open-about", "About ScriptDock could not be opened. Check the log and try again.");
+            ViewModel?.ReportShellActionError("open-about", Message.Of("shell.aboutFailed"));
         }
     }
 
@@ -513,7 +514,7 @@ public partial class MainWindow : Window
         if (LogReveal.Reveal())
             ViewModel?.ResolveShellActionError("reveal-logs");
         else
-            ViewModel?.ReportShellActionError("reveal-logs", "Logs could not be revealed. Check the console and try again.");
+            ViewModel?.ReportShellActionError("reveal-logs", Message.Of("shell.revealLogsFailed"));
     }
 
     private void OnScriptDoubleTapped(object? sender, TappedEventArgs e)

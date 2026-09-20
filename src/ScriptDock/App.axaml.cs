@@ -14,7 +14,13 @@ namespace ScriptDock;
 
 public partial class App : Application
 {
-    internal static string? StartupFailureMessage { get; set; }
+    internal static I18n.Message? StartupFailureMessage { get; set; }
+
+    /// <summary>
+    /// The computer's own languages, in order, as <c>LanguageBootstrap</c> read them before the app was
+    /// built. Kept so that System means the same language for the whole session.
+    /// </summary>
+    internal static System.Collections.Generic.IReadOnlyList<string> ComputerLanguages { get; set; } = [];
 
     // The main window, which the app menu's About and Settings items open through. Null while a
     // startup failure is shown instead, when those items are disabled.
@@ -47,7 +53,7 @@ public partial class App : Application
 
             if (StartupFailureMessage is { } startupFailure)
             {
-                desktop.MainWindow = NoticeDialog.CreateStartupFailure("ScriptDock could not start", startupFailure);
+                desktop.MainWindow = NoticeDialog.CreateStartupFailure(I18n.Message.Of("startup.failedTitle"), startupFailure);
                 RegisterOwnerActivation(desktop.MainWindow);
                 base.OnFrameworkInitializationCompleted();
                 return;
@@ -63,7 +69,7 @@ public partial class App : Application
             {
                 Log.Error("startup: a settings file could not be read or set aside", ex);
                 desktop.MainWindow = NoticeDialog.CreateStartupFailure(
-                    "ScriptDock could not start",
+                    I18n.Message.Of("startup.failedTitle"),
                     FailurePresentation.StartupData());
                 RegisterOwnerActivation(desktop.MainWindow);
                 base.OnFrameworkInitializationCompleted();
@@ -90,7 +96,7 @@ public partial class App : Application
                 {
                     await Views.NoticeDialog.ShowAsync(
                         mainWindow,
-                        "A settings file was reset",
+                        I18n.Message.Of("startup.settingsResetTitle"),
                         FailurePresentation.RecoveredData());
                 }
             };
@@ -139,6 +145,9 @@ public partial class App : Application
         var scanner = new ScriptScanner();
         var runner = new ProcessRunner();
 
-        return new MainWindowViewModel(configStore, stateStore, config, state, scanner, runner);
+        return new MainWindowViewModel(configStore, stateStore, config, state, scanner, runner)
+        {
+            ComputerLanguages = ComputerLanguages,
+        };
     }
 }

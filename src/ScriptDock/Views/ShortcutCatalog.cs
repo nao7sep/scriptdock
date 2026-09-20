@@ -33,7 +33,7 @@ public enum ShortcutAction
 /// </summary>
 public sealed record ShortcutItem(
     ShortcutGroup Group,
-    string Description,
+    string DescriptionKey,
     string Label,
     KeyGesture? Gesture = null,
     ShortcutAction? Action = null);
@@ -55,12 +55,14 @@ public static class ShortcutCatalog
         ShortcutGroup.Navigation,
     ];
 
-    public static string GroupHeader(ShortcutGroup group) => group switch
+    /// <summary>The key of a section's heading. A group with no heading of its own would show its own
+    /// name, which is a code, so the gate that fails on a key reaching the screen covers it.</summary>
+    public static string GroupHeaderKey(ShortcutGroup group) => group switch
     {
-        ShortcutGroup.Commands => "Commands",
-        ShortcutGroup.Scripts => "Scripts",
-        ShortcutGroup.Recent => "Recent",
-        ShortcutGroup.Navigation => "Navigation",
+        ShortcutGroup.Commands => "shortcuts.groupCommands",
+        ShortcutGroup.Scripts => "shortcuts.groupScripts",
+        ShortcutGroup.Recent => "shortcuts.groupRecent",
+        ShortcutGroup.Navigation => "shortcuts.groupNavigation",
         _ => group.ToString(),
     };
 
@@ -88,19 +90,21 @@ public static class ShortcutCatalog
         return new List<ShortcutItem>
         {
             // Commands — global app accelerators, in rough order of use.
-            Command(ShortcutGroup.Commands, "Rescan", cmd, cmdLabel, Key.R, "R", ShortcutAction.Rescan),
-            Command(ShortcutGroup.Commands, "Toggle hidden scripts", cmd | KeyModifiers.Shift, cmdLabel, Key.H, "Shift+H", ShortcutAction.ToggleShowHidden),
-            Command(ShortcutGroup.Commands, "Settings", cmd, cmdLabel, Key.OemComma, "Comma", ShortcutAction.OpenSettings),
-            Command(ShortcutGroup.Commands, "Keyboard shortcuts", cmd, cmdLabel, Key.OemQuestion, "Slash", ShortcutAction.ShowShortcuts),
+            // The gesture labels stay English: a key's own name is a token, not a sentence
+            // (keyboard-shortcut conventions).
+            Command(ShortcutGroup.Commands, "shortcuts.rescan", cmd, cmdLabel, Key.R, "R", ShortcutAction.Rescan),
+            Command(ShortcutGroup.Commands, "shortcuts.toggleHidden", cmd | KeyModifiers.Shift, cmdLabel, Key.H, "Shift+H", ShortcutAction.ToggleShowHidden),
+            Command(ShortcutGroup.Commands, "shortcuts.settings", cmd, cmdLabel, Key.OemComma, "Comma", ShortcutAction.OpenSettings),
+            Command(ShortcutGroup.Commands, "shortcuts.shortcuts", cmd, cmdLabel, Key.OemQuestion, "Slash", ShortcutAction.ShowShortcuts),
 
             // Scripts — running the selection is owned by the tile (pointer + keys), listed for discoverability.
-            Display(ShortcutGroup.Scripts, "Run or restart the selected script", "Double-click/Enter/Space"),
+            Display(ShortcutGroup.Scripts, "shortcuts.runSelected", "Double-click/Enter/Space"),
 
             // Recent — Delete is owned by the Recent list while it has focus.
-            Display(ShortcutGroup.Recent, "Stop or dismiss the selected run", "Delete/Backspace"),
+            Display(ShortcutGroup.Recent, "shortcuts.stopSelected", "Delete/Backspace"),
 
             // Navigation — native list selection.
-            Display(ShortcutGroup.Navigation, "Move between items in the focused list", "Up/Down"),
+            Display(ShortcutGroup.Navigation, "shortcuts.moveInList", "Up/Down"),
         };
     }
 
@@ -110,9 +114,9 @@ public static class ShortcutCatalog
     /// gesture's modifier is platform-resolved.
     /// </summary>
     private static ShortcutItem Command(
-        ShortcutGroup group, string description, KeyModifiers cmd, string cmdLabel, Key key, string keyName, ShortcutAction action) =>
-        new(group, description, cmdLabel + "+" + keyName, new KeyGesture(key, cmd), action);
+        ShortcutGroup group, string descriptionKey, KeyModifiers cmd, string cmdLabel, Key key, string keyName, ShortcutAction action) =>
+        new(group, descriptionKey, cmdLabel + "+" + keyName, new KeyGesture(key, cmd), action);
 
-    private static ShortcutItem Display(ShortcutGroup group, string description, string label) =>
-        new(group, description, label);
+    private static ShortcutItem Display(ShortcutGroup group, string descriptionKey, string label) =>
+        new(group, descriptionKey, label);
 }

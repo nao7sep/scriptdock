@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Media;
+using ScriptDock.I18n;
 
 namespace ScriptDock.Views;
 
@@ -11,28 +12,29 @@ namespace ScriptDock.Views;
 /// </summary>
 public sealed class NoticeDialog : DialogBase
 {
-    private NoticeDialog(string title, string message)
+    private NoticeDialog(Message title, Message message)
     {
         Width = 440;
-        Title = title;
+        // Rendered once, as the dialog is built: it is modal, so the language cannot change under it.
+        Title = Localizer.Of(title);
 
         SetContent(new TextBlock
         {
-            Text = message,
+            Text = Localizer.Of(message),
             TextWrapping = TextWrapping.Wrap,
             FontSize = 14,
         });
 
-        var buttons = SetButtons([new DialogButton("Close", "close", DialogButtonKind.Primary) { IsDefault = true }]);
+        var buttons = SetButtons([new DialogButton("common.close", "close", DialogButtonKind.Primary) { IsDefault = true }]);
         SetInitialFocus(buttons["close"]);
     }
 
-    public static Task ShowAsync(Window owner, string title, string message) =>
+    public static Task ShowAsync(Window owner, Message title, Message message) =>
         new NoticeDialog(title, message).ShowDialog(owner);
 
     /// <summary>
     /// A startup failure notice used as the main window. Closing it ends the app.
     /// </summary>
-    public static Window CreateStartupFailure(string title, string message) =>
+    public static Window CreateStartupFailure(Message title, Message message) =>
         new NoticeDialog(title, message);
 }

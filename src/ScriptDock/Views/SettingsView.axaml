@@ -2,43 +2,65 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:ScriptDock.ViewModels"
              xmlns:ctl="using:ScriptDock.Controls"
+             xmlns:i18n="using:ScriptDock.I18n"
              x:Class="ScriptDock.Views.SettingsView"
              x:DataType="vm:SettingsDialogViewModel">
+
+    <UserControl.Styles>
+        <!-- A checkbox caption wraps rather than being cut off: the settings dialog has a fixed width,
+             and several of these captions are whole sentences that grow by half again in German. -->
+        <Style Selector="CheckBox TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </UserControl.Styles>
+
     <StackPanel Spacing="14">
 
         <!-- Appearance: the theme and the UI (chrome) font lead, set apart from the scanning/process
              settings. The theme is the platform radio group (one tab stop, arrow keys move and select),
              grouped by its shared parent rather than a GroupName, which Avalonia tracks across every
              dialog not yet in a window. It is part of the draft and applies on Save. -->
+        <!-- The interface language, first because it governs every other label here. The names are
+             written in their own languages so a reader finds theirs whatever is showing; only System
+             is translated. It applies on Save with its neighbours (localization conventions). -->
         <StackPanel Spacing="6">
-            <TextBlock Text="Theme" Classes="cardHeader"/>
+            <TextBlock i18n:Localized.Text="settings.language" Classes="cardHeader"/>
+            <ComboBox x:Name="LanguageChoice" HorizontalAlignment="Left" MinWidth="200"
+                      ItemsSource="{Binding LanguageOptions}"
+                      SelectedItem="{Binding Language}"
+                      DisplayMemberBinding="{Binding Name}"
+                      i18n:Localized.AutomationName="settings.language"/>
+        </StackPanel>
+
+        <StackPanel Spacing="6">
+            <TextBlock i18n:Localized.Text="settings.theme" Classes="cardHeader"/>
             <StackPanel x:Name="ThemeChoices" Orientation="Horizontal" Spacing="20"
-                        AutomationProperties.Name="Theme">
-                <RadioButton Content="System" IsChecked="{Binding IsThemeSystem}"/>
-                <RadioButton Content="Light" IsChecked="{Binding IsThemeLight}"/>
-                <RadioButton Content="Dark" IsChecked="{Binding IsThemeDark}"/>
+                        i18n:Localized.AutomationName="settings.theme">
+                <RadioButton i18n:Localized.Content="settings.themeSystem" IsChecked="{Binding IsThemeSystem}"/>
+                <RadioButton i18n:Localized.Content="settings.themeLight" IsChecked="{Binding IsThemeLight}"/>
+                <RadioButton i18n:Localized.Content="settings.themeDark" IsChecked="{Binding IsThemeDark}"/>
             </StackPanel>
-            <TextBlock Text="System follows the OS appearance."
+            <TextBlock i18n:Localized.Text="settings.themeHint"
                        Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
         </StackPanel>
 
         <!-- The read-only output console keeps its own monospace font and is unaffected by the UI font. -->
         <StackPanel Spacing="6">
-            <TextBlock Text="UI font" Classes="cardHeader"/>
+            <TextBlock i18n:Localized.Text="settings.uiFont" Classes="cardHeader"/>
             <ctl:ComposingTextBox x:Name="UiFontEntry" Text="{Binding UiFontFamily}" PlaceholderText="Inter"/>
-            <TextBlock Text="Comma-separated; the first installed family is used. Blank uses the default (Inter)."
+            <TextBlock i18n:Localized.Text="settings.uiFontHint"
                        Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
         </StackPanel>
 
         <!-- Root directories: chosen with the native folder picker, not typed — they are
              directories that exist on disk, so picking beats hand-entering a path. -->
         <StackPanel Spacing="6">
-            <TextBlock Text="Root directories" Classes="cardHeader"/>
+            <TextBlock i18n:Localized.Text="settings.roots" Classes="cardHeader"/>
             <ListBox x:Name="RootList" ItemsSource="{Binding RootDirs}" Height="96"
                      BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
             <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
-                <Button Content="Add…" Classes="tool" Click="OnAddRootClick"/>
-                <Button Content="Remove" Classes="tool" Click="OnRemoveRootClick"/>
+                <Button i18n:Localized.Content="settings.addRoot" Classes="tool" Click="OnAddRootClick"/>
+                <Button i18n:Localized.Content="common.remove" Classes="tool" Click="OnRemoveRootClick"/>
             </StackPanel>
             <Grid x:Name="RootPickerResult" ColumnDefinitions="*,Auto" ColumnSpacing="7"
                   IsVisible="{Binding HasRootPickerResult}"
@@ -49,8 +71,8 @@
                 <Button x:Name="CloseRootPickerResult" Grid.Column="1"
                         Classes="resultClose" VerticalAlignment="Top"
                         Click="OnCloseRootPickerResult"
-                        AutomationProperties.Name="Close root-directory result"
-                        ToolTip.Tip="Close">
+                        i18n:Localized.AutomationName="settings.closeRootResult"
+                        i18n:Localized.ToolTip="common.close">
                     <Path Width="10" Height="10" Stretch="Uniform"
                           Stroke="{DynamicResource DangerTextBrush}" StrokeThickness="1.8"
                           StrokeLineCap="Round" Data="M1,1 L9,9 M9,1 L1,9"/>
@@ -60,15 +82,15 @@
 
         <!-- Extensions -->
         <StackPanel Spacing="6">
-            <TextBlock Text="Extensions" Classes="cardHeader"/>
+            <TextBlock i18n:Localized.Text="settings.extensions" Classes="cardHeader"/>
             <ListBox x:Name="ExtList" ItemsSource="{Binding Extensions}" Height="80"
                      BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
             <DockPanel>
-                <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemoveExtClick"/>
-                <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddExtClick"/>
+                <Button i18n:Localized.Content="common.remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemoveExtClick"/>
+                <Button i18n:Localized.Content="common.add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddExtClick"/>
                 <ctl:ComposingTextBox x:Name="ExtEntry" PlaceholderText=".command" SubmitOnEnter="True" Submitted="OnExtSubmitted"
                                       Classes.invalid="{Binding HasExtensionError}"
-                                      AutomationProperties.Name="Extension"
+                                      i18n:Localized.AutomationName="settings.extension"
                                       AutomationProperties.HelpText="{Binding ExtensionError}"
                                       AutomationProperties.ItemStatus="{Binding ExtensionItemStatus}"/>
             </DockPanel>
@@ -81,15 +103,15 @@
 
         <!-- Ignore patterns -->
         <StackPanel Spacing="6">
-            <TextBlock Text="Ignore patterns (regex over full path)" Classes="cardHeader"/>
+            <TextBlock i18n:Localized.Text="settings.ignorePatterns" Classes="cardHeader"/>
             <ListBox x:Name="PatternList" ItemsSource="{Binding IgnorePatterns}" Height="96"
                      BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
             <DockPanel>
-                <Button Content="Remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemovePatternClick"/>
-                <Button Content="Add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddPatternClick"/>
+                <Button i18n:Localized.Content="common.remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemovePatternClick"/>
+                <Button i18n:Localized.Content="common.add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddPatternClick"/>
                 <ctl:ComposingTextBox x:Name="PatternEntry" PlaceholderText="/node_modules/" SubmitOnEnter="True" Submitted="OnPatternSubmitted"
                                       Classes.invalid="{Binding HasPatternError}"
-                                      AutomationProperties.Name="Ignore pattern"
+                                      i18n:Localized.AutomationName="settings.ignorePattern"
                                       AutomationProperties.HelpText="{Binding PatternError}"
                                       AutomationProperties.ItemStatus="{Binding PatternItemStatus}"/>
             </DockPanel>
@@ -102,10 +124,10 @@
 
         <!-- Process lifecycle -->
         <StackPanel Spacing="6">
-            <TextBlock Text="Processes" Classes="cardHeader"/>
-            <CheckBox Content="Terminate running scripts when ScriptDock quits"
+            <TextBlock i18n:Localized.Text="settings.processes" Classes="cardHeader"/>
+            <CheckBox i18n:Localized.Content="settings.killOnClose"
                       IsChecked="{Binding KillProcessesOnClose}"/>
-            <CheckBox Content="Reattach to scripts left running, on next launch"
+            <CheckBox i18n:Localized.Content="settings.recaptureOnLaunch"
                       IsChecked="{Binding RecaptureProcessesOnLaunch}"/>
         </StackPanel>
 

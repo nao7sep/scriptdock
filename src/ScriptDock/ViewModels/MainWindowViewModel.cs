@@ -9,6 +9,7 @@ using Avalonia.Automation;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using ScriptDock.I18n;
 using ScriptDock.Models;
 using ScriptDock.Services;
 using ScriptDock.Storage;
@@ -50,12 +51,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty] private bool _showHidden;
     [ObservableProperty] private bool _isScanning;
+    // Every line the window shows is held as a key and its values, and rendered where it is shown,
+    // so a language change re-reads it instead of freezing the words it was built with.
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CatalogResult))]
     [NotifyPropertyChangedFor(nameof(HasCatalogResult))]
-    private string _catalogResult = string.Empty;
+    private Message? _catalogResultMessage;
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OperationalError))]
     [NotifyPropertyChangedFor(nameof(HasOperationalError))]
-    private string _operationalError = string.Empty;
+    private Message? _operationalErrorMessage;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasMultipleOperationalErrors))]
@@ -65,8 +70,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private string _selectedOutput = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RecentActionError))]
     [NotifyPropertyChangedFor(nameof(HasRecentActionError))]
-    private string _recentActionError = string.Empty;
+    private Message? _recentActionErrorMessage;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasMultipleRecentActionErrors))]
@@ -78,13 +84,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasRunning))]
+    [NotifyPropertyChangedFor(nameof(RunningCountText))]
     private int _runningCount;
 
     // Status-bar persistent facts: total scripts found and how many of those are hidden.
-    [ObservableProperty] private int _scriptCount;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ScriptCountText))]
+    private int _scriptCount;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasHidden))]
+    [NotifyPropertyChangedFor(nameof(HiddenCountText))]
     private int _hiddenCount;
 
     private readonly List<OperationalErrorEntry> _operationalErrors = [];
@@ -114,6 +124,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         ApplyUiFont();
         _runner.ProcessesChanged += (_, _) => Dispatcher.UIThread.Post(RebuildFromProcesses);
+
+        // Everything this view model shows is held as a key, so a language change means every projection
+        // has new words: an empty name tells the bindings to re-read them all.
+        Localizer.Changed += OnLanguageChanged;
     }
 
     /// <summary>
@@ -129,13 +143,22 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    public bool HasOperationalError => OperationalError.Length > 0;
+    public string OperationalError => Localizer.Current.Of(OperationalErrorMessage) ?? string.Empty;
+    public string CatalogResult => Localizer.Current.Of(CatalogResultMessage) ?? string.Empty;
+    public string RecentActionError => Localizer.Current.Of(RecentActionErrorMessage) ?? string.Empty;
+
+    public bool HasOperationalError => OperationalErrorMessage is not null;
     public bool HasMultipleOperationalErrors => OperationalErrorCount > 1;
-    public string OperationalErrorCountText => $"{OperationalErrorCount} errors";
-    public bool HasCatalogResult => CatalogResult.Length > 0;
-    public bool HasRecentActionError => RecentActionError.Length > 0;
+    public string OperationalErrorCountText => Localizer.T("error.count", ("count", OperationalErrorCount));
+    public bool HasCatalogResult => CatalogResultMessage is not null;
+    public bool HasRecentActionError => RecentActionErrorMessage is not null;
     public bool HasMultipleRecentActionErrors => RecentActionErrorCount > 1;
-    public string RecentActionErrorCountText => $"{RecentActionErrorCount} errors";
+    public string RecentActionErrorCountText => Localizer.T("error.count", ("count", RecentActionErrorCount));
+
+    /// <summary>The status bar's standing facts, each a count whose words follow its number.</summary>
+    public string ScriptCountText => Localizer.T("status.scriptCount", ("count", ScriptCount));
+    public string HiddenCountText => Localizer.T("status.hiddenCount", ("count", HiddenCount));
+    public string RunningCountText => Localizer.T("status.runningCount", ("count", RunningCount));
 
     public double? SavedRecentWidth => _state.RecentPaneWidth;
     public double? SavedConsoleHeight => _state.ConsoleHeight;
@@ -159,7 +182,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// <summary>The Scripts pane's Hide/Show toggle label, reflecting the selected script's current
     /// state. Single-selection list, so the one button serves both directions (Hide a visible script,
     /// Show a hidden one). Defaults to "Hide" when nothing is selected.</summary>
-    public string ToggleHiddenLabel => SelectedScript?.IsHidden == true ? "Show" : "Hide";
+    public string ToggleHiddenLabel =>
+        Localizer.T(SelectedScript?.IsHidden == true ? "scripts.show" : "scripts.hide");
 
     /// <summary>Status-bar fact toggles: the running dot/segment and the hidden segment show only when non-zero.</summary>
     public bool HasRunning => RunningCount > 0;
@@ -204,7 +228,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 Log.Error("ui: process recapture failed", ex);
                 ReportOperationalError(
                     "recapture",
-                    "Previously running scripts could not be restored. Check the log, then run them again if needed.");
+                    Message.Of("recapture.failed"));
             }
         }
 
@@ -213,7 +237,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         await RescanAsync();
     }
 
-    public void PersistPaneSizes(double recentWidth, double consoleHeight) => Guard("save pane sizes", () =>
+    public void PersistPaneSizes(double recentWidth, double consoleHeight) => Guard("save pane sizes", Message.Of("guard.savePaneSizes"), () =>
     {
         _state.RecentPaneWidth = recentWidth;
         _state.ConsoleHeight = consoleHeight;
@@ -229,7 +253,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _state.WindowMaximized = maximized;
     }
 
-    public void Shutdown() => Guard("shutdown", () =>
+    public void Shutdown() => Guard("shutdown", Message.Of("guard.shutdown"), () =>
     {
         _outputTimer?.Stop();
         _catalogResultTimer?.Stop();
@@ -281,6 +305,20 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public SettingsDialogViewModel CreateSettingsDraft() => new(_config);
 
+    /// <summary>
+    /// The computer's own languages, in order, as they were read at launch. System resolves against
+    /// these, so it cannot mean one language at launch and another after a change in Settings.
+    /// </summary>
+    internal IReadOnlyList<string> ComputerLanguages { get; init; } = [];
+
+    private void OnLanguageChanged()
+    {
+        // An empty name tells every binding on this view model to re-read, and the Recent rows are
+        // rebuilt because each row's state pill and time are words too.
+        OnPropertyChanged(string.Empty);
+        RebuildFromProcesses();
+    }
+
     public bool TryApplySettings(SettingsDialogViewModel draft)
     {
         var candidate = new AppConfig
@@ -293,6 +331,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             RecaptureProcessesOnLaunch = draft.RecaptureProcessesOnLaunch,
             UiFontFamily = draft.UiFontFamily.Trim(),
             Theme = draft.Theme,
+            Language = draft.Language.Value,
         };
 
         try
@@ -315,12 +354,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _config.UiFontFamily = candidate.UiFontFamily;
         var themeChanged = _config.Theme != candidate.Theme;
         _config.Theme = candidate.Theme;
+        _config.Language = candidate.Language;
         if (themeChanged)
             OnPropertyChanged(nameof(Theme));
+
+        // The language applies here, with its neighbours, and needs no restart: every surface holding a
+        // key is re-read, and the view models re-render what they hold.
+        Localizer.Use(candidate.Language, ComputerLanguages);
         ApplyUiFont();
         if (fontChanged)
             UiFontChanged?.Invoke(this, EventArgs.Empty);
-        ShowCatalogResult("Configuration changed — Rescan to apply.");
+        ShowCatalogResult(Message.Of("scan.configChanged"));
         return true;
     }
 
@@ -337,13 +381,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             if (sent)
                 ResolveProcessActionError(entry.Path, "send-input");
             else
-                ReportProcessActionError(entry.Path, "send-input", "Couldn’t send input. Try again while the script is running.");
+                ReportProcessActionError(entry.Path, "send-input", Message.Of("process.sendInputFailed"));
             return sent;
         }
         catch (Exception ex)
         {
             Log.Error("ui: send input failed", ex);
-            ReportProcessActionError(entry.Path, "send-input", "Couldn’t send input. Try again while the script is running.");
+            ReportProcessActionError(entry.Path, "send-input", Message.Of("process.sendInputFailed"));
             return false;
         }
     }
@@ -358,7 +402,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _scanCts = cts;
 
         IsScanning = true;
-        ShowCatalogResult("Scanning…");
+        ShowCatalogResult(Message.Of("scan.running"));
         try
         {
             var roots = _config.RootDirs.ToList();
@@ -390,7 +434,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             Log.Error("ui: rescan failed", ex);
             ClearCatalogResult();
-            ReportOperationalError("scan", "Scan failed — see logs.");
+            ReportOperationalError("scan", Message.Of("scan.failed"));
         }
         finally
         {
@@ -428,18 +472,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         try
         {
             // Stopping kills the live run, so confirm first.
-            if (!await ConfirmAsync("Stop Script", $"“{entry.DisplayName}” is running. Stop it?", "Stop"))
+            if (!await ConfirmAsync(
+                Message.Of("stop.title"),
+                Message.Of("stop.message", ("name", entry.DisplayName)),
+                "stop.confirm"))
                 return;
 
             if (!await _runner.TerminateAsync(entry.Process))
-                ReportProcessActionError(entry.Path, "stop", "The script did not stop; ScriptDock is still tracking it.");
+                ReportProcessActionError(entry.Path, "stop", Message.Of("process.stopFailed"));
             else
                 ResolveStoppedProcessActionErrors(entry.Path);
         }
         catch (Exception ex)
         {
             Log.Error("ui: stop failed", ex, new { script = entry.Path });
-            ReportProcessActionError(entry.Path, "stop", "The script did not stop; ScriptDock is still tracking it.");
+            ReportProcessActionError(entry.Path, "stop", Message.Of("process.stopFailed"));
         }
     }
 
@@ -454,7 +501,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             // Only dismissing a *running* entry destroys work, so confirm just that case; dismissing a
             // finished entry only drops it from the list (it can be re-run), so it stays immediate.
             if (entry.Process is { State: RunState.Running } &&
-                !await ConfirmAsync("Dismiss Script", $"“{entry.DisplayName}” is running. Stop and dismiss it?", "Dismiss"))
+                !await ConfirmAsync(
+                    Message.Of("dismiss.title"),
+                    Message.Of("dismiss.message", ("name", entry.DisplayName)),
+                    "dismiss.confirm"))
                 return;
 
             // Remember the dismissed row's position so focus lands on its neighbour, not nowhere.
@@ -464,7 +514,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             {
                 if (entry.Process.State == RunState.Running && !await _runner.TerminateAsync(entry.Process))
                 {
-                    ReportProcessActionError(entry.Path, "dismiss", "The script did not stop; it was not dismissed.");
+                    ReportProcessActionError(entry.Path, "dismiss", Message.Of("process.dismissStopFailed"));
                     return;
                 }
                 _runner.Dismiss(entry.Process);
@@ -495,12 +545,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             Log.Error("ui: dismiss failed", ex, new { script = entry.Path });
-            ReportProcessActionError(entry.Path, "dismiss", "The script could not be dismissed. Check the log and try again.");
+            ReportProcessActionError(entry.Path, "dismiss", Message.Of("process.dismissFailed"));
         }
     }
 
     [RelayCommand]
-    private void ToggleHidden(ScriptItem? item) => Guard("toggle hidden", () =>
+    private void ToggleHidden(ScriptItem? item) => Guard("toggle hidden", Message.Of("guard.toggleHidden"), () =>
     {
         if (item is null)
             return;
@@ -517,7 +567,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         RebuildScripts(selectNeighbourIfGone: true);
     });
 
-    partial void OnShowHiddenChanged(bool value) => Guard("show hidden", () =>
+    partial void OnShowHiddenChanged(bool value) => Guard("show hidden", Message.Of("guard.showHidden"), () =>
     {
         _state.ShowHidden = value;
         _stateStore.Save(_state);
@@ -543,12 +593,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             if (running is not null)
             {
                 // Running an already-running script restarts it — that kills the live run, so confirm.
-                if (!await ConfirmAsync("Restart Script", $"“{displayName}” is already running. Restart it?", "Restart"))
+                if (!await ConfirmAsync(
+                    Message.Of("restart.title"),
+                    Message.Of("restart.message", ("name", displayName)),
+                    "restart.confirm"))
                     return;
                 started = await _runner.RestartAsync(running);
                 if (started is null)
                 {
-                    ReportProcessActionError(path, "restart", "The existing script did not stop; no replacement was launched.");
+                    ReportProcessActionError(path, "restart", Message.Of("process.restartFailed"));
                     RebuildRecent();
                     SelectRecentPath(path);
                     return;
@@ -566,7 +619,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             EnsureRecentPath(path);
             RebuildRecent();
             SelectRecentPath(path);
-            ReportProcessActionError(path, "run", "The script could not be started. Check the log and try again.");
+            ReportProcessActionError(path, "run", Message.Of("process.runFailed"));
             return;
         }
 
@@ -578,7 +631,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             Log.Error("ui: save recent run failed", ex, new { script = path });
-            ReportProcessActionError(path, "recent-history", "The script ran, but its recent history could not be saved.");
+            ReportProcessActionError(path, "recent-history", Message.Of("process.historyFailed"));
         }
         RebuildRecent();
 
@@ -591,7 +644,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         ResolveReplacedProcessActionErrors(path);
 
         if (started.State == RunState.Failed)
-            ReportProcessActionError(path, "run", "The script could not be started. Check its output and try again.");
+            ReportProcessActionError(path, "run", Message.Of("process.runFailedSeeOutput"));
         else
             ResolveProcessActionError(path, "run");
 
@@ -601,7 +654,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             ConsoleInputFocusRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private void RebuildFromProcesses() => Guard("refresh", () =>
+    private void RebuildFromProcesses() => Guard("refresh", Message.Of("guard.refresh"), () =>
     {
         RebuildRecent();
         RebuildScripts(); // refresh the tiles' running dots
@@ -740,11 +793,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             Log.Warn("ui: refresh output failed", ex);
             if (SelectedRecentEntry is { } selected)
-                ReportProcessActionError(selected.Path, "read-output", "Couldn’t refresh this script’s output.");
+                ReportProcessActionError(selected.Path, "read-output", Message.Of("process.readOutputFailed"));
         }
     }
 
-    private void Guard(string action, Action body)
+    private void Guard(string action, Message failure, Action body)
     {
         try
         {
@@ -754,23 +807,23 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             Log.Error($"ui: {action} failed", ex);
-            ReportOperationalError(action, $"{action} failed — see logs.");
+            ReportOperationalError(action, failure);
         }
     }
 
     // Ask the view to confirm a destructive action. With no handler attached (tests) there is no UI
     // to ask, so the action proceeds.
-    private async Task<bool> ConfirmAsync(string title, string message, string confirmLabel) =>
-        ConfirmHandler is null || await ConfirmHandler(new ConfirmRequest(title, message, confirmLabel));
+    private async Task<bool> ConfirmAsync(Message title, Message message, string confirmLabelKey) =>
+        ConfirmHandler is null || await ConfirmHandler(new ConfirmRequest(title, message, confirmLabelKey));
 
-    private sealed record OperationalErrorEntry(string Key, string Message);
-    private sealed record ProcessActionErrorEntry(string Key, string Message);
+    private sealed record OperationalErrorEntry(string Key, Message Message);
+    private sealed record ProcessActionErrorEntry(string Key, Message Message);
 
-    internal void ReportShellActionError(string key, string message) => ReportOperationalError(key, message);
+    internal void ReportShellActionError(string key, Message message) => ReportOperationalError(key, message);
 
     internal void ResolveShellActionError(string key) => ResolveOperationalError(key);
 
-    private void ReportOperationalError(string key, string message)
+    private void ReportOperationalError(string key, Message message)
     {
         var index = _operationalErrors.FindIndex(error => error.Key == key);
         if (index >= 0)
@@ -800,11 +853,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private void RefreshOperationalErrorProjection()
     {
-        OperationalError = _operationalErrors.FirstOrDefault()?.Message ?? string.Empty;
+        OperationalErrorMessage = _operationalErrors.FirstOrDefault()?.Message;
         OperationalErrorCount = _operationalErrors.Count;
     }
 
-    private void ReportProcessActionError(string path, string key, string message)
+    private void ReportProcessActionError(string path, string key, Message message)
     {
         var pathKey = PathIdentity.Key(path);
         if (!_processActionErrors.TryGetValue(pathKey, out var errors))
@@ -881,7 +934,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         RecentActionLiveSetting = announce && errors?.Count > 0
             ? AutomationLiveSetting.Assertive
             : AutomationLiveSetting.Off;
-        RecentActionError = errors?.FirstOrDefault()?.Message ?? string.Empty;
+        RecentActionErrorMessage = errors?.FirstOrDefault()?.Message;
         RecentActionErrorCount = errors?.Count ?? 0;
     }
 
@@ -895,11 +948,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private void SelectRecentPath(string path) =>
         SelectedRecentEntry = Recent.FirstOrDefault(entry => PathIdentity.Same(entry.Path, path));
 
-    private void ShowCatalogResult(string text, bool transient = false)
+    private void ShowCatalogResult(Message text, bool transient = false)
     {
         _catalogResultTimer?.Stop();
         _catalogResultTimer = null;
-        CatalogResult = text;
+        CatalogResultMessage = text;
         if (!transient)
             return;
 
@@ -910,7 +963,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             if (ReferenceEquals(_catalogResultTimer, timer))
             {
                 _catalogResultTimer = null;
-                CatalogResult = string.Empty;
+                CatalogResultMessage = null;
             }
         };
         _catalogResultTimer = timer;
@@ -921,21 +974,27 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         _catalogResultTimer?.Stop();
         _catalogResultTimer = null;
-        CatalogResult = string.Empty;
+        CatalogResultMessage = null;
     }
 
     // The Scripts-pane result after a scan: the deltas only ("3 new, 1 removed" / "Up to date"),
     // since the standing status bar already shows the total script count.
-    private static string ScanResultMessage(ScanDiff diff)
+    private static Message ScanResultMessage(ScanDiff diff)
     {
         var added = diff.Added.Count;
         var removed = diff.Removed.Count;
         if (added == 0 && removed == 0)
-            return "Up to date.";
+            return Message.Of("scan.upToDate");
         if (removed == 0)
-            return $"{added} new.";
+            return Message.Of("scan.added", ("count", added));
         if (added == 0)
-            return $"{removed} removed.";
-        return $"{added} new, {removed} removed.";
+            return Message.Of("scan.removed", ("count", removed));
+
+        // Two counted sentences, each inflected for its own number, joined by an entry that decides
+        // the order and the separator. CLDR picks a form for one number, not two, so a single sentence
+        // holding both counts would be wrong at "1 new, 1 removed" in English as much as anywhere else.
+        return Message.Of("scan.addedAndRemoved",
+            ("added", Message.Of("scan.added", ("count", added))),
+            ("removed", Message.Of("scan.removed", ("count", removed))));
     }
 }

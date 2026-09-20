@@ -22,7 +22,7 @@ public sealed class SettingsDialog : DialogBase
     {
         _draft = draft;
         _trySave = trySave;
-        Title = "Settings";
+        I18n.Localized.SetTitle(this, "settings.title");
         Width = 520;
 
         var content = new SettingsView { DataContext = draft };
@@ -31,8 +31,8 @@ public sealed class SettingsDialog : DialogBase
 
         var buttons = SetButtons(
         [
-            new DialogButton("Cancel", "cancel"),
-            new DialogButton("Save", "save", DialogButtonKind.Primary) { IsDefault = true },
+            new DialogButton("common.cancel", "cancel"),
+            new DialogButton("common.save", "save", DialogButtonKind.Primary) { IsDefault = true },
         ]);
 
         // Commit gating: Save is enabled only when the draft differs from the saved config.
@@ -50,11 +50,11 @@ public sealed class SettingsDialog : DialogBase
         if (tag != "save")
             return true;
 
-        _draft.SaveError = string.Empty;
+        _draft.SaveErrorMessage = null;
         if (_trySave(_draft))
             return true;
 
-        _draft.SaveError = "Settings could not be saved. Nothing was changed; check the log and try again.";
+        _draft.SaveErrorMessage = I18n.Message.Of("settings.saveFailed");
         return false;
     }
 

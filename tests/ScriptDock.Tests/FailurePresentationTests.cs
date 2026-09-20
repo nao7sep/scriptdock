@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using ScriptDock.Tests.I18n;
 using Xunit;
 
 namespace ScriptDock.Tests;
@@ -22,7 +23,7 @@ public sealed class FailurePresentationTests
             FailurePresentation.ScriptStart(error),
         };
 
-        Assert.All(messages, message => Assert.DoesNotContain(Hostile, message, StringComparison.Ordinal));
+        Assert.All(messages, message => Assert.DoesNotContain(Hostile, English.Of(message), StringComparison.Ordinal));
         Assert.NotNull(error.InnerException);
     }
 
@@ -31,7 +32,7 @@ public sealed class FailurePresentationTests
     {
         var message = FailurePresentation.ScriptStart(new UnauthorizedAccessException(Hostile));
 
-        Assert.Contains("can run it", message, StringComparison.Ordinal);
-        Assert.DoesNotContain(Hostile, message, StringComparison.Ordinal);
+        Assert.Contains("can run it", English.Of(message), StringComparison.Ordinal);
+        Assert.DoesNotContain(Hostile, English.Of(message), StringComparison.Ordinal);
     }
 }

@@ -7,6 +7,7 @@ using ScriptDock.Controls;
 using ScriptDock.Models;
 using ScriptDock.ViewModels;
 using ScriptDock.Views;
+using ScriptDock.Tests.I18n;
 using Xunit;
 
 namespace ScriptDock.Tests.Views;
@@ -42,7 +43,7 @@ public sealed class SettingsAccessibilityTests
         host.Show();
 
         vm.AddExtension("bad extension");
-        vm.PatternError = "A separate pattern problem.";
+        vm.PatternErrorMessage = ScriptDock.I18n.Message.Of("settings.patternMultiline");
         Assert.True(vm.AddExtension(".command"));
         Dispatcher.UIThread.RunJobs();
 

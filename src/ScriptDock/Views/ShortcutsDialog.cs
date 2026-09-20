@@ -22,7 +22,7 @@ public sealed class ShortcutsDialog : DialogBase
         // the height to content; this adds the width dimension.)
         SizeToContent = Avalonia.Controls.SizeToContent.WidthAndHeight;
         MaxWidth = 720;
-        Title = "Keyboard Shortcuts";
+        I18n.Localized.SetTitle(this, "shortcuts.title");
 
         var sections = new StackPanel { Spacing = 16 };
 
@@ -34,7 +34,7 @@ public sealed class ShortcutsDialog : DialogBase
 
             sections.Children.Add(new TextBlock
             {
-                Text = ShortcutCatalog.GroupHeader(group),
+                Text = I18n.Localizer.T(ShortcutCatalog.GroupHeaderKey(group)),
                 FontWeight = FontWeight.SemiBold,
                 FontSize = 13,
                 Margin = new Thickness(2, 0, 0, 6),
@@ -45,7 +45,7 @@ public sealed class ShortcutsDialog : DialogBase
         SetContent(sections);
         var buttons = SetButtons(
         [
-            new DialogButton("Close", "close", DialogButtonKind.Primary) { IsDefault = true },
+            new DialogButton("common.close", "close", DialogButtonKind.Primary) { IsDefault = true },
         ]);
         SetInitialFocus(buttons["close"]);
     }
@@ -85,7 +85,7 @@ public sealed class ShortcutsDialog : DialogBase
 
         var description = new TextBlock
         {
-            Text = item.Description,
+            Text = I18n.Localizer.T(item.DescriptionKey),
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
         }.Themed(TextBlock.ForegroundProperty, "TextPrimaryBrush");

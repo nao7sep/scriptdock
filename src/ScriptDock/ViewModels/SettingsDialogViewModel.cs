@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
+using ScriptDock.I18n;
 using ScriptDock.Models;
 using ScriptDock.Storage;
 using ScriptDock.Services;
@@ -28,28 +29,40 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     private readonly bool _originalRecaptureProcessesOnLaunch;
     private readonly string _originalUiFontFamily;
     private readonly ThemePreference _originalTheme;
+    private readonly string _originalLanguage;
 
     public ObservableCollection<string> RootDirs { get; }
     public ObservableCollection<string> Extensions { get; }
     public ObservableCollection<string> IgnorePatterns { get; }
 
+    // The dialog's own messages are held as keys and rendered where they are shown, so none of them
+    // is assembled in one language (localization conventions).
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ExtensionError))]
     [NotifyPropertyChangedFor(nameof(HasExtensionError))]
     [NotifyPropertyChangedFor(nameof(ExtensionItemStatus))]
-    private string _extensionError = string.Empty;
+    private Message? _extensionErrorMessage;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PatternError))]
     [NotifyPropertyChangedFor(nameof(HasPatternError))]
     [NotifyPropertyChangedFor(nameof(PatternItemStatus))]
-    private string _patternError = string.Empty;
+    private Message? _patternErrorMessage;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SaveError))]
     [NotifyPropertyChangedFor(nameof(HasSaveError))]
-    private string _saveError = string.Empty;
+    private Message? _saveErrorMessage;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RootPickerResult))]
     [NotifyPropertyChangedFor(nameof(HasRootPickerResult))]
-    private string _rootPickerResult = string.Empty;
+    private Message? _rootPickerResultMessage;
+
+    // The interface language, chosen from the list and applied on Save with its neighbours.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDirty))]
+    private LanguageOption _language;
 
     // UI (chrome) font family. Family only; blank = the bundled default.
     [ObservableProperty]
@@ -83,6 +96,9 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         _originalUiFontFamily = config.UiFontFamily;
         _originalTheme = config.Theme;
         _theme = config.Theme;
+        _originalLanguage = Languages.NormalizePreference(config.Language);
+        LanguageOptions = LanguageOption.All();
+        _language = LanguageOption.For(_originalLanguage, LanguageOptions);
         _killProcessesOnClose = config.KillProcessesOnClose;          // field, not property: no dirty flip during construction
         _recaptureProcessesOnLaunch = config.RecaptureProcessesOnLaunch;
         _uiFontFamily = config.UiFontFamily;
@@ -103,7 +119,8 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         KillProcessesOnClose != _originalKillProcessesOnClose ||
         RecaptureProcessesOnLaunch != _originalRecaptureProcessesOnLaunch ||
         UiFontFamily != _originalUiFontFamily ||
-        Theme != _originalTheme;
+        Theme != _originalTheme ||
+        Language.Value != _originalLanguage;
 
     // One flag per radio: checking one selects its theme; the others clear through the group.
     public bool IsThemeSystem
@@ -124,10 +141,20 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         set { if (value) Theme = ThemePreference.Dark; }
     }
 
-    public bool HasExtensionError => ExtensionError.Length > 0;
-    public bool HasPatternError => PatternError.Length > 0;
-    public bool HasSaveError => SaveError.Length > 0;
-    public bool HasRootPickerResult => RootPickerResult.Length > 0;
+    /// <summary>The language list: System first, then each language under its own name.</summary>
+    public IReadOnlyList<LanguageOption> LanguageOptions { get; }
+
+    public string ExtensionError => Localizer.Current.Of(ExtensionErrorMessage) ?? string.Empty;
+    public string PatternError => Localizer.Current.Of(PatternErrorMessage) ?? string.Empty;
+    public string SaveError => Localizer.Current.Of(SaveErrorMessage) ?? string.Empty;
+    public string RootPickerResult => Localizer.Current.Of(RootPickerResultMessage) ?? string.Empty;
+
+    public bool HasExtensionError => ExtensionErrorMessage is not null;
+    public bool HasPatternError => PatternErrorMessage is not null;
+    public bool HasSaveError => SaveErrorMessage is not null;
+    public bool HasRootPickerResult => RootPickerResultMessage is not null;
+
+    // A code a screen reader reads as the field's status, not a sentence: it stays as it is.
     public string ExtensionItemStatus => HasExtensionError ? "Invalid" : string.Empty;
     public string PatternItemStatus => HasPatternError ? "Invalid" : string.Empty;
 
@@ -149,9 +176,9 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     }
 
     public void ReportRootPickerFailure(Exception error) =>
-        RootPickerResult = FailurePresentation.RootPicker(error);
+        RootPickerResultMessage = FailurePresentation.RootPicker(error);
 
-    public void ResolveRootPickerFailure() => RootPickerResult = string.Empty;
+    public void ResolveRootPickerFailure() => RootPickerResultMessage = null;
 
     /// <summary>Adds a path returned by the native picker without trimming legal filename bytes.</summary>
     public bool AddPickedRootDir(string value)
@@ -179,7 +206,7 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         var trimmed = value.Trim();
         if (trimmed.Length == 0)
         {
-            ExtensionError = "Enter an extension.";
+            ExtensionErrorMessage = Message.Of("settings.extensionEmpty");
             return false;
         }
 
@@ -189,7 +216,7 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         // the full-width space (U+3000).
         if (trimmed.Any(char.IsWhiteSpace))
         {
-            ExtensionError = "An extension can’t contain spaces or line breaks.";
+            ExtensionErrorMessage = Message.Of("settings.extensionSpaces");
             return false;
         }
 
@@ -201,12 +228,12 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         // ".command" and ".Command" are one entry rather than two that match the same files.
         if (Extensions.Any(e => string.Equals(e, trimmed, StringComparison.OrdinalIgnoreCase)))
         {
-            ExtensionError = "That extension is already listed.";
+            ExtensionErrorMessage = Message.Of("settings.extensionDuplicate");
             return false;
         }
 
         Extensions.Add(trimmed);
-        ExtensionError = string.Empty;
+        ExtensionErrorMessage = null;
         return true;
     }
 
@@ -215,7 +242,7 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         var trimmed = value.Trim();
         if (trimmed.Length == 0)
         {
-            PatternError = "Enter an ignore pattern.";
+            PatternErrorMessage = Message.Of("settings.patternEmpty");
             return false;
         }
 
@@ -225,13 +252,13 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         // space in a path), so this checks only line breaks, not all whitespace.
         if (trimmed.Contains('\n') || trimmed.Contains('\r'))
         {
-            PatternError = "A pattern must be a single line.";
+            PatternErrorMessage = Message.Of("settings.patternMultiline");
             return false;
         }
 
         if (!IsValidRegex(trimmed))
         {
-            PatternError = $"Not a valid pattern: {trimmed}";
+            PatternErrorMessage = Message.Of("settings.patternInvalid", ("pattern", trimmed));
             return false;
         }
 
@@ -240,12 +267,12 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         // prune the same directories.
         if (IgnorePatterns.Any(p => string.Equals(p, trimmed, StringComparison.OrdinalIgnoreCase)))
         {
-            PatternError = "That pattern is already listed.";
+            PatternErrorMessage = Message.Of("settings.patternDuplicate");
             return false;
         }
 
         IgnorePatterns.Add(trimmed);
-        PatternError = string.Empty;
+        PatternErrorMessage = null;
         return true;
     }
 
