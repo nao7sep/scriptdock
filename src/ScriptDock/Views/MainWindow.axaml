@@ -86,7 +86,9 @@
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="14,10">
             <DockPanel>
                 <!-- Hamburger docked right; the wordmark is the last (fill) child so it stays left. -->
-                <Button Classes="tool" DockPanel.Dock="Right" Padding="8,4"
+                <!-- Padding 8,6 (not the tool button's text-oriented 12,6): the icon needs as much room
+                     over and under the bars as beside them, or the bars read as filling the button. -->
+                <Button Classes="tool" DockPanel.Dock="Right" Padding="8,6"
                         i18n:Localized.AutomationName="menu.application"
                         i18n:Localized.ToolTip="menu.application">
                     <!-- Hamburger as three strokes: bars 16 long and 2 thick with 5 between them, the
