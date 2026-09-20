@@ -99,9 +99,15 @@ public sealed class ThemeResourcesTests
         // The Recent state pill's label, in the window background colour, on each pill fill.
         foreach (var pill in new[] { "RunningBrush", "DangerTextBrush", "TextSecondaryBrush" })
             Check("AppBackgroundBrush", pill, 4.5);
-        // Marks: a field's outline, the accent, the resting scroll-bar thumb, and the tile dots.
+        // Marks: a field's outline, the accent, the scroll-bar thumb, and the tile dots.
         foreach (var surface in new[] { "AppBackgroundBrush", "SurfaceBrush", "ContentWellBrush" })
-            foreach (var mark in new[] { "FieldBorderBrush", "AccentBrush", "ScrollBarThumbFill" })
+            foreach (var mark in new[]
+                     {
+                         "FieldBorderBrush", "AccentBrush",
+                         // Both kinds of bar the app draws: the one that takes layout space, and the
+                         // one the dialog body floats over its content's inset.
+                         "ScrollBarThumbBackgroundColor", "ScrollBarPanningThumbBackground",
+                     })
                 Check(mark, surface, 3);
         foreach (var surface in chips.Append("ContentWellBrush"))
             foreach (var dot in new[] { "ScriptNewBrush", "RunningBrush" })

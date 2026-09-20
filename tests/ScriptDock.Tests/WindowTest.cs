@@ -24,9 +24,20 @@ public abstract class WindowTest : IDisposable
     protected T Show<T>(T window)
         where T : Window
     {
-        _shown.Add(window);
+        Track(window);
         window.Show();
         Dispatcher.UIThread.RunJobs();
+        return window;
+    }
+
+    /// <summary>
+    /// Closes <paramref name="window"/> when the test ends without showing it here — for a window the
+    /// app itself opens, such as a dialog shown modally over its owner.
+    /// </summary>
+    protected T Track<T>(T window)
+        where T : Window
+    {
+        _shown.Add(window);
         return window;
     }
 

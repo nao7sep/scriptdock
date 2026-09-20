@@ -118,7 +118,7 @@ public sealed class AboutDialog : DialogBase
         SetInitialFocus(buttons["close"]);
     }
 
-    public static Task ShowAsync(Window owner) => new AboutDialog().ShowDialog(owner);
+    public static Task ShowAsync(Window owner) => new AboutDialog().ShowBoundedAsync(owner);
 
     // Each destination carries its own whole sentence rather than a noun dropped into a shared one:
     // a language with articles, cases or particles cannot build that sentence from a fragment.

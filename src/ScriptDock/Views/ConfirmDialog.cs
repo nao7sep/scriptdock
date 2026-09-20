@@ -46,7 +46,7 @@ public sealed class ConfirmDialog : DialogBase
     public static async Task<bool> ConfirmDestructiveAsync(Window owner, Message title, Message message, string confirmLabelKey)
     {
         var dialog = new ConfirmDialog(title, message, confirmLabelKey);
-        await dialog.ShowDialog(owner);
+        await dialog.ShowBoundedAsync(owner);
         return dialog.Confirmed;
     }
 }

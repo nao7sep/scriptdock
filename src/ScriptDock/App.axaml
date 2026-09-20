@@ -49,12 +49,10 @@
                     <SolidColorBrush x:Key="DisabledInputBrush" Color="#F1F5F7"/>
                     <SolidColorBrush x:Key="DisabledInputBorderBrush" Color="#DCE5E9"/>
                     <SolidColorBrush x:Key="DisabledTextBrush" Color="#7B9199"/>
-                    <!-- Fluent's scroll-bar thumb, remapped to the palette: a resting thumb holds 3:1 against the
-                         surfaces it scrolls over, and strengthens to secondary text on hover and press. -->
+                    <!-- The scroll-bar thumb in the app's palette. Fluent reads a different key for a bar
+                         that takes layout space and one that floats, so both are set (app-chrome conventions). -->
+                    <SolidColorBrush x:Key="ScrollBarThumbBackgroundColor" Color="#748A92"/>
                     <SolidColorBrush x:Key="ScrollBarPanningThumbBackground" Color="#748A92"/>
-                    <SolidColorBrush x:Key="ScrollBarThumbFill" Color="#748A92"/>
-                    <SolidColorBrush x:Key="ScrollBarThumbFillPointerOver" Color="#4C636B"/>
-                    <SolidColorBrush x:Key="ScrollBarThumbFillPressed" Color="#4C636B"/>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0F181D"/>
@@ -98,12 +96,10 @@
                     <SolidColorBrush x:Key="DisabledInputBrush" Color="#081115"/>
                     <SolidColorBrush x:Key="DisabledInputBorderBrush" Color="#182A31"/>
                     <SolidColorBrush x:Key="DisabledTextBrush" Color="#5F747B"/>
-                    <!-- Fluent's scroll-bar thumb, remapped to the palette: a resting thumb holds 3:1 against the
-                         surfaces it scrolls over, and strengthens to secondary text on hover and press. -->
+                    <!-- The scroll-bar thumb in the app's palette. Fluent reads a different key for a bar
+                         that takes layout space and one that floats, so both are set (app-chrome conventions). -->
+                    <SolidColorBrush x:Key="ScrollBarThumbBackgroundColor" Color="#5B7680"/>
                     <SolidColorBrush x:Key="ScrollBarPanningThumbBackground" Color="#5B7680"/>
-                    <SolidColorBrush x:Key="ScrollBarThumbFill" Color="#5B7680"/>
-                    <SolidColorBrush x:Key="ScrollBarThumbFillPointerOver" Color="#93A9B0"/>
-                    <SolidColorBrush x:Key="ScrollBarThumbFillPressed" Color="#93A9B0"/>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
@@ -147,11 +143,14 @@
             <Setter Property="FontSize" Value="13"/>
         </Style>
 
-        <!-- Keep Fluent's native scrollbar geometry and hit targets. Expand immediately on hover,
-             remain expanded during interaction, then use the framework's two-second leave delay. -->
+        <!-- The window viewport, the scripts and recent lists and the console all hold content out to
+             their own edges, so their bars take layout space rather than floating over it (app-chrome
+             conventions). The dialog body insets its content and opts back in; see DialogBase.axaml. -->
         <Style Selector="ScrollViewer">
-            <Setter Property="AllowAutoHide" Value="True"/>
+            <Setter Property="AllowAutoHide" Value="False"/>
         </Style>
+
+        <!-- For the one region that floats: no delay arriving, the framework's two seconds leaving. -->
         <Style Selector="ScrollBar">
             <Setter Property="ShowDelay" Value="00:00:00"/>
             <Setter Property="HideDelay" Value="00:00:02"/>

@@ -23,7 +23,11 @@ public sealed class SettingsDialog : DialogBase
         _draft = draft;
         _trySave = trySave;
         I18n.Localized.SetTitle(this, "settings.title");
-        Width = 520;
+        Width = 560;
+
+        // A working surface: its root, extension and pattern lists grow with the user's own data, so
+        // the bound is where it opens rather than a ceiling (modal-dialog conventions).
+        CanResize = true;
 
         var content = new SettingsView { DataContext = draft };
         SetContent(content);
@@ -64,7 +68,7 @@ public sealed class SettingsDialog : DialogBase
         Func<SettingsDialogViewModel, bool> trySave)
     {
         var dialog = new SettingsDialog(draft, trySave);
-        await dialog.ShowDialog(owner);
+        await dialog.ShowBoundedAsync(owner);
         return dialog.Saved;
     }
 }

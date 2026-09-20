@@ -124,10 +124,56 @@ public partial class DialogBase : Window
 
     protected void SetInitialFocus(Control control) => _initialFocusControl = control;
 
+    /// <summary>
+    /// Shows the dialog modally over <paramref name="owner"/>, bounded to a share of the owner's
+    /// content height before the window is placed (modal-dialog conventions). Every owned dialog
+    /// opens through here.
+    /// </summary>
+    public Task ShowBoundedAsync(Window owner)
+    {
+        BoundHeight(owner);
+        return ShowDialog(owner);
+    }
+
+    /// <summary>
+    /// Bounds a dialog that will be shown without an owner — the startup-failure shell, which is the
+    /// application's only window — to the screen alone. Call it before the window is shown.
+    /// </summary>
+    protected void BoundHeightToScreen() => BoundHeight(null);
+
+    private void BoundHeight(Window? owner)
+    {
+        // Before Show this window has no screen of its own, so the owner's is the one it will open on.
+        var screen = owner is null
+            ? Screens.Primary
+            : owner.Screens.ScreenFromWindow(owner) ?? owner.Screens.Primary;
+
+        MaxHeight = WindowMetrics.DialogMaxHeight(
+            owner?.ClientSize.Height ?? 0,
+            screen?.WorkingArea.Height ?? 0,
+            screen?.Scaling ?? 0);
+    }
+
+    /// <summary>
+    /// Hands a resizable dialog's height to the user, once it has opened at the bound size
+    /// (modal-dialog conventions). Runs after the window is sized and placed, so lifting the bound
+    /// moves nothing and the minimums take over keeping the footer reachable.
+    /// </summary>
+    private void ReleaseHeightToUser()
+    {
+        var chrome = Bounds.Height - DialogScroll.Bounds.Height;
+
+        SizeToContent = SizeToContent.Manual;
+        MaxHeight = double.PositiveInfinity;
+        MinHeight = WindowMetrics.DialogMinHeight(chrome);
+        MinWidth = Bounds.Width;
+    }
+
     private void OnOpened(object? sender, EventArgs e)
     {
-        if (Screens.ScreenFromWindow(this) is { } screen)
-            MaxHeight = screen.WorkingArea.Height / RenderScaling * 0.85;
+        // A dialog declares itself resizable by setting CanResize; the shell makes that mean something.
+        if (CanResize)
+            ReleaseHeightToUser();
 
         var target = _initialFocusControl;
         if (target is null)

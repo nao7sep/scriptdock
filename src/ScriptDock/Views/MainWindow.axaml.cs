@@ -485,7 +485,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            await new ShortcutsDialog(_shortcuts).ShowDialog(this);
+            await new ShortcutsDialog(_shortcuts).ShowBoundedAsync(this);
             ViewModel?.ResolveShellActionError("open-shortcuts");
         }
         catch (Exception ex)
