@@ -89,8 +89,13 @@
                 <Button Classes="tool" DockPanel.Dock="Right" Padding="8,4"
                         i18n:Localized.AutomationName="menu.application"
                         i18n:Localized.ToolTip="menu.application">
-                    <Path Width="18" Height="18" Stretch="None" Fill="{DynamicResource TextPrimaryBrush}"
-                          Data="M1,3 H17 V5 H1 Z M1,8 H17 V10 H1 Z M1,13 H17 V15 H1 Z"/>
+                    <!-- Hamburger as three strokes: bars 16 long and 2 thick with 5 between them, the
+                         fleet's Avalonia hamburger. Filled square bars sat closer and read heavier. -->
+                    <Path Width="18" Height="16" Stretch="None"
+                          VerticalAlignment="Center" HorizontalAlignment="Center"
+                          Stroke="{DynamicResource TextPrimaryBrush}"
+                          StrokeThickness="2" StrokeLineCap="Round" UseLayoutRounding="True"
+                          Data="M1,1 H17 M1,8 H17 M1,15 H17"/>
                     <Button.Flyout>
                         <MenuFlyout Placement="BottomEdgeAlignedRight">
                             <MenuItem i18n:Localized.Header="menu.revealLogs" Click="OnRevealLogsClick"/>
