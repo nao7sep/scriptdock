@@ -40,6 +40,7 @@ public sealed class NoticeDialog : DialogBase
     {
         var dialog = new NoticeDialog(title, message);
         dialog.BoundHeightToScreen();
+        ShowAsOnlyWindow(dialog);
         return dialog;
     }
 }

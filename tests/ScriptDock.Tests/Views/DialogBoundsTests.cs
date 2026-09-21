@@ -319,6 +319,35 @@ public sealed class DialogBoundsTests : WindowTest
         }
     }
 
+    // The same notice, as the application itself. Every other dialog here is shown over an owner, so the
+    // shell keeps them out of the taskbar and centres them on that owner — both wrong for the one window
+    // the user has: unlisted, it cannot be brought back once something covers it, and there is no owner
+    // to centre on. The shell's own defaults are asserted alongside, because they are what makes the
+    // factory's two lines mean anything.
+    [AvaloniaFact]
+    public void The_startup_failure_notice_takes_the_chrome_of_a_lone_window()
+    {
+        var notice = NoticeDialog.CreateStartupFailure(
+            ScriptDock.I18n.Message.Of("startup.failedTitle"),
+            ScriptDock.I18n.Message.Of("startup.failedTitle"));
+        var owned = new DialogBase();
+
+        try
+        {
+            Assert.False(owned.ShowInTaskbar, "an owned dialog should stay out of the taskbar");
+            Assert.Equal(WindowStartupLocation.CenterOwner, owned.WindowStartupLocation);
+
+            Assert.True(notice.ShowInTaskbar, "the app's only window has to be listed");
+            Assert.Equal(WindowStartupLocation.CenterScreen, notice.WindowStartupLocation);
+        }
+        finally
+        {
+            owned.Close();
+            notice.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     // Avalonia's own ShowDialog stays callable, and a new dialog that reached for it would be unbounded
     // again with nothing else to say so.
     [Fact]
