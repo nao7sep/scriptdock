@@ -16,12 +16,10 @@ public sealed class ShortcutsDialog : DialogBase
 {
     public ShortcutsDialog(IReadOnlyList<ShortcutItem> shortcuts)
     {
-        // Size to content rather than a guessed fixed width: the dialog ends up exactly as wide as
-        // its widest row needs (description + keycap on one line). MaxWidth caps it so an unusually
-        // long future label wraps instead of producing an over-wide window. (DialogBase already sizes
-        // the height to content; this adds the width dimension.)
-        SizeToContent = Avalonia.Controls.SizeToContent.WidthAndHeight;
-        MaxWidth = 720;
+        // One width for every language rather than one per language: sizing to content gives the same
+        // surface a different shape in each, and the widest of them (Russian) is what has to fit
+        // anyway (modal-dialog conventions). The label-fit tests measure all ten against it.
+        Width = 600;
         I18n.Localized.SetTitle(this, "shortcuts.title");
 
         var sections = new StackPanel { Spacing = 16 };

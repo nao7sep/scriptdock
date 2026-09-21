@@ -104,9 +104,8 @@ public sealed class ThemeResourcesTests
             foreach (var mark in new[]
                      {
                          "FieldBorderBrush", "AccentBrush",
-                         // Both kinds of bar the app draws: the one that takes layout space, and the
-                         // one the dialog body floats over its content's inset.
-                         "ScrollBarThumbBackgroundColor", "ScrollBarPanningThumbBackground",
+                         // Every scroll region here floats its bar, which is the brush that one reads.
+                         "ScrollBarPanningThumbBackground",
                      })
                 Check(mark, surface, 3);
         foreach (var surface in chips.Append("ContentWellBrush"))

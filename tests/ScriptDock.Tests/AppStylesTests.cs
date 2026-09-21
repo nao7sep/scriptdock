@@ -78,48 +78,14 @@ public sealed class AppStylesTests : WindowTest
         return (IBrush)app.FindResource(app.ActualThemeVariant, key)!;
     }
 
-    // Measures the consequence rather than the setter: with auto-hide off the bar takes its own width
-    // out of the layout instead of drawing in the band the content's right edge occupies.
+    // The thumb's colour is the app's, and the key it reads is the one a floating bar uses — which is
+    // every region here. The key never appears in the code that draws it, so nothing else would say
+    // if it were wrong; the toolkit's own 20% black would simply show through.
     [AvaloniaFact]
-    public void A_scroll_bar_takes_its_own_width_instead_of_drawing_over_the_content()
-    {
-        // No width of its own: it takes the room the viewer leaves, which is the measurement.
-        var content = new Border { Height = 400 };
-        var viewer = new ScrollViewer
-        {
-            Content = content,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-        };
-        var window = Show(new Window { Content = viewer, Width = 200, Height = 120 });
-        window.UpdateLayout();
-        Dispatcher.UIThread.RunJobs();
-
-        var bar = viewer.GetVisualDescendants().OfType<ScrollBar>()
-            .Single(candidate => candidate.Orientation == Avalonia.Layout.Orientation.Vertical
-                && candidate.Bounds.Width > 0);
-
-        Assert.False(viewer.AllowAutoHide);
-        Assert.True(viewer.Extent.Height > viewer.Viewport.Height, "the viewer must actually overflow");
-
-        var contentRight = content.TranslatePoint(new Point(content.Bounds.Width, 0), viewer)!.Value.X;
-        var barLeft = bar.TranslatePoint(new Point(0, 0), viewer)!.Value.X;
-        Assert.True(
-            contentRight <= barLeft + 0.5,
-            $"the content reaches {contentRight:F0} and the bar starts at {barLeft:F0}, so the bar covers it");
-    }
-
-    // The app draws both kinds of bar and Fluent reads a different brush for each. Naming only one key
-    // leaves the toolkit's own 20% black on the other, and the keys never appear in the drawing code.
-    [AvaloniaTheory]
-    [InlineData(false, "ScrollBarThumbBackgroundColor")]
-    [InlineData(true, "ScrollBarPanningThumbBackground")]
-    public void A_scroll_bar_thumb_paints_the_app_palette_and_not_the_toolkit_default(
-        bool floating, string expectedBrush)
+    public void The_scroll_bar_thumb_paints_the_app_palette_and_not_the_toolkit_default()
     {
         var viewer = new ScrollViewer
         {
-            AllowAutoHide = floating,
             Content = new Border { Height = 400 },
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -133,6 +99,7 @@ public sealed class AppStylesTests : WindowTest
                 && candidate.Bounds.Width > 0)
             .GetVisualDescendants().OfType<Thumb>().First();
 
-        Assert.Equal(Color(Brush(expectedBrush)), Color(thumb.Background));
+        Assert.True(viewer.AllowAutoHide, "the bar should float; nothing here sets it otherwise");
+        Assert.Equal(Color(Brush("ScrollBarPanningThumbBackground")), Color(thumb.Background));
     }
 }

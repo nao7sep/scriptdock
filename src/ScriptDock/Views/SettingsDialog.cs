@@ -25,10 +25,6 @@ public sealed class SettingsDialog : DialogBase
         I18n.Localized.SetTitle(this, "settings.title");
         Width = 560;
 
-        // A working surface: its root, extension and pattern lists grow with the user's own data, so
-        // the bound is where it opens rather than a ceiling (modal-dialog conventions).
-        CanResize = true;
-
         var content = new SettingsView { DataContext = draft };
         SetContent(content);
         SetInitialFocus(content.InitialFocusControl);

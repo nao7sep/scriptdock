@@ -313,34 +313,26 @@ public sealed class WindowMetricsTests
             .ToList();
     }
 
-    // A dialog is its own OS window, so nothing but this keeps it inside the window it belongs to.
+    // A dialog is its own OS window, so nothing but this keeps it inside the screen it opens on.
     [Theory]
-    // The owner is shorter than the screen, so the owner's share bounds the dialog.
-    [InlineData(600d, 1200d, 1d, 510d)]
-    // The owner is nearly the whole screen, so the screen's share is the smaller of the two.
-    [InlineData(1180d, 1200d, 1d, 1003d)]
+    [InlineData(1200d, 1d, 1020d)]
     // A high-DPI screen reports physical pixels; the bound is in the logical units MaxHeight takes.
-    [InlineData(2000d, 2400d, 2d, 1020d)]
-    // No owner — the startup-failure shell — leaves the screen alone to bound it.
-    [InlineData(0d, 1200d, 1d, 1020d)]
-    public void A_dialog_is_bounded_by_its_owner_and_never_by_more_than_the_screen(
-        double ownerContentHeight, double workingAreaHeight, double scale, double expected)
+    [InlineData(2400d, 2d, 1020d)]
+    public void A_dialog_is_bounded_by_the_screen_it_opens_on(
+        double workingAreaHeight, double scale, double expected)
     {
-        Assert.Equal(expected, WindowMetrics.DialogMaxHeight(ownerContentHeight, workingAreaHeight, scale));
+        Assert.Equal(expected, WindowMetrics.DialogMaxHeight(workingAreaHeight, scale));
     }
 
     // A screen the toolkit cannot report leaves the dialog its natural height rather than a guess.
     [Theory]
-    [InlineData(0d, 0d, 0d)]
-    [InlineData(0d, 1200d, 0d)]
-    [InlineData(0d, 0d, 1d)]
-    [InlineData(0d, 1200d, double.NaN)]
-    public void An_unreadable_screen_leaves_an_unowned_dialog_unbounded(
-        double ownerContentHeight, double workingAreaHeight, double scale)
+    [InlineData(0d, 0d)]
+    [InlineData(1200d, 0d)]
+    [InlineData(0d, 1d)]
+    [InlineData(1200d, double.NaN)]
+    public void An_unreadable_screen_leaves_a_dialog_unbounded(double workingAreaHeight, double scale)
     {
-        Assert.Equal(
-            double.PositiveInfinity,
-            WindowMetrics.DialogMaxHeight(ownerContentHeight, workingAreaHeight, scale));
+        Assert.Equal(double.PositiveInfinity, WindowMetrics.DialogMaxHeight(workingAreaHeight, scale));
     }
 
     private static string Section(string text, string startMarker, string endMarker)

@@ -58,9 +58,9 @@ public partial class MainWindow : Window
         }
 
         Loaded += OnLoaded;
-        WindowViewport.PropertyChanged += (_, e) =>
+        LayoutRoot.PropertyChanged += (_, e) =>
         {
-            if (e.Property == ScrollViewer.ViewportProperty)
+            if (e.Property == BoundsProperty)
                 ClampPanesToWindow();
         };
         PositionChanged += (_, _) =>
@@ -180,24 +180,12 @@ public partial class MainWindow : Window
 
     private void ApplyNativeMinimum(Screen? target = null)
     {
-        try
-        {
-            var floor = new Size(LayoutRoot.MinWidth, LayoutRoot.MinHeight);
-            var screen = target ?? Screens.ScreenFromWindow(this) ?? Screens.Primary;
-            var client = ClientSize;
-            var frame = FrameSize ?? client;
-            var minimum = screen is null ? floor : WindowMetrics.CapMinimumToWorkArea(
-                floor, screen.WorkingArea, screen.Scaling,
-                new Size(Math.Max(0, frame.Width - client.Width), Math.Max(0, frame.Height - client.Height)));
-            MinWidth = minimum.Width;
-            MinHeight = minimum.Height;
-        }
-        catch (Exception ex)
-        {
-            // Leave the current native minimum intact when the display backend
-            // is unavailable; content still owns its full minimum and scrolling.
-            Log.Warn("window minimum work-area update failed", ex);
-        }
+        // The window's minimum is the layout's own floor. Every pane here bounds itself and scrolls
+        // its own content, and the floor sits well inside any work area this app runs on, so there is
+        // nothing to cap it against and no window-level scroll region to fall back on
+        // (app-chrome conventions).
+        MinWidth = LayoutRoot.MinWidth;
+        MinHeight = LayoutRoot.MinHeight;
     }
 
     // Measure every font-dependent piece of fixed chrome against the CURRENT app font. The pane
@@ -256,7 +244,7 @@ public partial class MainWindow : Window
         {
             var recentColumn = BodyGrid.ColumnDefinitions[2];
             var maxRecent = WindowMetrics.MaxRecentWidth(
-                Math.Max(WindowViewport.Viewport.Width, LayoutRoot.MinWidth), BodyGrid.ColumnDefinitions[0].MinWidth, recentColumn.MinWidth);
+                Math.Max(LayoutRoot.Bounds.Width, LayoutRoot.MinWidth), BodyGrid.ColumnDefinitions[0].MinWidth, recentColumn.MinWidth);
             recentColumn.Width = new GridLength(
                 WindowMetrics.DisplayFromIntent(recentIntent, recentColumn.MinWidth, maxRecent), GridUnitType.Pixel);
         }
@@ -265,7 +253,7 @@ public partial class MainWindow : Window
         {
             var consoleRow = LeftPanesGrid.RowDefinitions[2];
             var maxConsole = WindowMetrics.MaxConsoleHeight(
-                Math.Max(WindowViewport.Viewport.Height, LayoutRoot.MinHeight),
+                Math.Max(LayoutRoot.Bounds.Height, LayoutRoot.MinHeight),
                 LeftPanesGrid.RowDefinitions[0].MinHeight,
                 consoleRow.MinHeight,
                 _headerChromeHeight,

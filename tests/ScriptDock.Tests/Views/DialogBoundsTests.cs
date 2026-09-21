@@ -37,127 +37,74 @@ public sealed class DialogBoundsTests : WindowTest
         Position = new PixelPoint(120, 120),
     };
 
-    // A share of the owner rather than all of it, so the dialog sits inside its window instead of
-    // filling it edge to edge.
+    // A ceiling, not a target: the dialog opens at its content height unless the screen is shorter
+    // than that. Its owner's size is not in it — an owner that happens to be small says nothing about
+    // how much room the dialog has.
     [AvaloniaFact]
-    public void A_dialog_opens_at_a_share_of_the_window_that_owns_it()
+    public void A_dialog_opens_no_taller_than_its_share_of_the_screen()
     {
         var owner = Show(ShortOwner());
         var dialog = Settings();
 
         Open(dialog, owner);
 
+        var screen = owner.Screens.ScreenFromWindow(owner) ?? owner.Screens.Primary!;
+        var ceiling = WindowMetrics.DialogMaxHeight(screen.WorkingArea.Height, screen.Scaling);
         Assert.True(dialog.Bounds.Height > 0, "the dialog never laid out");
-        Assert.Equal(
-            owner.ClientSize.Height * WindowMetrics.DialogHeightFraction,
-            dialog.Bounds.Height,
-            0);
+        Assert.True(dialog.Bounds.Height <= ceiling + 0.5,
+            $"the dialog is {dialog.Bounds.Height:F0} tall against a ceiling of {ceiling:F0}");
+        Assert.Equal(ceiling, dialog.MaxHeight, 0);
     }
 
-    // A one-shot dialog keeps the shell's fixed height: the bound stays a cap rather than an opening
-    // size, and nothing else would notice if the two kinds quietly merged.
+    // No dialog in this app is one the user settles into, so every one of them is fixed and the bound
+    // stays a cap rather than an opening size (modal-dialog conventions).
     [AvaloniaFact]
-    public void A_one_shot_dialog_stays_fixed_at_the_height_the_bound_gives_it()
+    public void Every_dialog_is_fixed_because_none_of_them_is_worked_in()
     {
         var owner = Show(ShortOwner());
-        var dialog = Track(new AboutDialog(_ => true));
+
+        foreach (var dialog in new DialogBase[]
+        {
+            Settings(),
+            new AboutDialog(_ => true),
+            new ShortcutsDialog(ShortcutCatalog.Build(owner)),
+        })
+        {
+            Track(dialog);
+            _ = dialog.ShowBoundedAsync(owner);
+            Dispatcher.UIThread.RunJobs();
+            dialog.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.False(dialog.CanResize, $"{dialog.GetType().Name} is resizable");
+            // Shortcuts sizes to its width as well, so the flag is what matters, not the exact value.
+            Assert.True(dialog.SizeToContent.HasFlag(SizeToContent.Height),
+                $"{dialog.GetType().Name} stopped sizing to its content");
+            Assert.True(double.IsFinite(dialog.MaxHeight), $"{dialog.GetType().Name} lost its bound");
+        }
+    }
+
+
+
+
+    // The bound has to be on the window before it is placed. A toolkit places an owner-centred window
+    // while showing it and never places it again, so a bound applied once the window is open centres
+    // the unbounded height and then shrinks under it. Opened is the first moment we can look, and by
+    // then the bound must already be there.
+    [AvaloniaFact]
+    public void The_bound_is_on_the_dialog_before_it_is_placed()
+    {
+        var owner = Show(ShortOwner());
+        var dialog = Track(Settings());
+        var boundAtOpen = double.NaN;
+        dialog.Opened += (_, _) => boundAtOpen = dialog.MaxHeight;
 
         _ = dialog.ShowBoundedAsync(owner);
         Dispatcher.UIThread.RunJobs();
-        dialog.UpdateLayout();
-        Dispatcher.UIThread.RunJobs();
 
-        Assert.False(dialog.CanResize);
-        Assert.Equal(SizeToContent.Height, dialog.SizeToContent);
-        Assert.True(double.IsFinite(dialog.MaxHeight), "the cap was lifted from a dialog that cannot be resized");
-    }
-
-    // SizeToContent would snap the window back to its content height, so the shell releases it once the
-    // window is up. Nothing else in the suite would notice if that stopped happening.
-    [AvaloniaFact]
-    public void A_resizable_dialog_can_be_made_taller_than_the_window_that_owns_it()
-    {
-        var owner = Show(ShortOwner());
-        var dialog = Settings();
-
-        Open(dialog, owner);
-        var opened = dialog.Bounds.Height;
-
-        dialog.Height = opened + 300;
-        dialog.UpdateLayout();
-        Dispatcher.UIThread.RunJobs();
-
-        Assert.Equal(SizeToContent.Manual, dialog.SizeToContent);
-        Assert.True(
-            dialog.Bounds.Height >= opened + 299,
-            $"the dialog opened at {opened:F0} and would not grow past {dialog.Bounds.Height:F0}");
-    }
-
-    // The minimum is the whole safety net once the cap is gone: a dialog dragged to nothing would take
-    // its own Save and Cancel with it, on a modal window that owns the keyboard.
-    [AvaloniaFact]
-    public void A_resizable_dialog_cannot_be_dragged_shorter_than_its_own_footer()
-    {
-        var owner = Show(ShortOwner());
-        var dialog = Settings();
-
-        Open(dialog, owner);
-
-        dialog.Height = 1;
-        dialog.UpdateLayout();
-        Dispatcher.UIThread.RunJobs();
-
-        var footer = dialog.FindControl<StackPanel>("ButtonPanel")!;
-        var footerBottom = footer.TranslatePoint(new Point(0, footer.Bounds.Height), dialog)!.Value.Y;
-        Assert.True(footer.Bounds.Height > 0, "the footer collapsed");
-        Assert.True(
-            footerBottom <= dialog.Bounds.Height + 0.5,
-            $"at its shortest the footer ends at {footerBottom:F0} in a {dialog.Bounds.Height:F0} dialog");
-        Assert.True(
-            Body(dialog).Bounds.Height >= WindowMetrics.DialogBodyMinHeight - 0.5,
-            "the body was squeezed below the room a field and its label need");
-    }
-
-    // Width is not the user's to reduce: every label was measured against it in ten languages.
-    [AvaloniaFact]
-    public void A_resizable_dialog_widens_but_never_narrows()
-    {
-        var owner = Show(ShortOwner());
-        var dialog = Settings();
-
-        Open(dialog, owner);
-        var opened = dialog.Bounds.Width;
-
-        dialog.Width = opened - 120;
-        dialog.UpdateLayout();
-        Dispatcher.UIThread.RunJobs();
-        Assert.True(
-            dialog.Bounds.Width >= opened - 0.5,
-            $"the dialog narrowed from {opened:F0} to {dialog.Bounds.Width:F0}");
-
-        dialog.Width = opened + 120;
-        dialog.UpdateLayout();
-        Dispatcher.UIThread.RunJobs();
-        Assert.True(
-            dialog.Bounds.Width >= opened + 119,
-            $"the dialog would not widen past {dialog.Bounds.Width:F0}");
-    }
-
-    // Settings is over 400px taller than this owner, so a bound applied after the window opens rather
-    // than before it would leave the dialog 200px above the owner's centre.
-    [AvaloniaFact]
-    public void A_bounded_dialog_is_still_centred_on_the_window_that_owns_it()
-    {
-        var owner = Show(ShortOwner());
-        var dialog = Settings();
-
-        Open(dialog, owner);
-
-        var dialogCentre = dialog.Position.Y + (dialog.Bounds.Height / 2);
-        var ownerCentre = owner.Position.Y + (owner.Bounds.Height / 2);
-        Assert.True(
-            Math.Abs(dialogCentre - ownerCentre) <= 1,
-            $"the dialog's centre is {dialogCentre:F0} and its owner's is {ownerCentre:F0}");
+        Assert.True(double.IsFinite(boundAtOpen),
+            "the dialog was already open before it was bounded, so it was placed at the wrong height");
+        Assert.Equal(dialog.MaxHeight, boundAtOpen, 0);
     }
 
     // The point of bounding the height is that the footer survives it.
@@ -165,9 +112,7 @@ public sealed class DialogBoundsTests : WindowTest
     public void The_body_takes_the_overflow_and_the_footer_stays_on_screen()
     {
         var owner = Show(ShortOwner());
-        var dialog = Settings();
-
-        Open(dialog, owner);
+        var dialog = OpenScrolling(owner);
 
         var body = Body(dialog);
         Assert.True(
@@ -188,9 +133,7 @@ public sealed class DialogBoundsTests : WindowTest
     public void The_scroll_region_fills_its_band_on_every_side()
     {
         var owner = Show(ShortOwner());
-        var dialog = Settings();
-
-        Open(dialog, owner);
+        var dialog = OpenScrolling(owner);
 
         var body = Body(dialog);
         var topLeft = body.TranslatePoint(new Point(0, 0), dialog)!.Value;
@@ -211,9 +154,7 @@ public sealed class DialogBoundsTests : WindowTest
     public void The_footer_band_opens_with_a_line_and_centres_its_buttons()
     {
         var owner = Show(ShortOwner());
-        var dialog = Settings();
-
-        Open(dialog, owner);
+        var dialog = OpenScrolling(owner);
 
         var separator = dialog.FindControl<Border>("FooterSeparator")!;
         var footer = dialog.FindControl<StackPanel>("ButtonPanel")!;
@@ -242,9 +183,7 @@ public sealed class DialogBoundsTests : WindowTest
     public void The_content_is_inset_by_the_same_padding_on_every_side()
     {
         var owner = Show(ShortOwner());
-        var dialog = Settings();
-
-        Open(dialog, owner);
+        var dialog = OpenScrolling(owner);
 
         var body = Body(dialog);
         var presenter = dialog.GetVisualDescendants().OfType<ContentPresenter>()
@@ -266,9 +205,7 @@ public sealed class DialogBoundsTests : WindowTest
     public void The_scroll_bar_takes_the_content_inset_and_never_the_content()
     {
         var owner = Show(ShortOwner());
-        var dialog = Settings();
-
-        Open(dialog, owner);
+        var dialog = OpenScrolling(owner);
 
         var body = Body(dialog);
         Assert.True(
@@ -315,9 +252,7 @@ public sealed class DialogBoundsTests : WindowTest
     public void The_content_inset_is_wider_than_the_bar_it_has_to_make_room_for()
     {
         var owner = Show(ShortOwner());
-        var dialog = Settings();
-
-        Open(dialog, owner);
+        var dialog = OpenScrolling(owner);
 
         var declared = (double)dialog.FindResource("ScrollBarSize")!;
         var bar = Body(dialog).GetVisualDescendants().OfType<ScrollBar>()
@@ -340,9 +275,7 @@ public sealed class DialogBoundsTests : WindowTest
     public void The_content_is_the_same_width_whether_the_body_scrolls_or_not()
     {
         var owner = Show(ShortOwner());
-        var dialog = Settings();
-
-        Open(dialog, owner);
+        var dialog = OpenScrolling(owner);
 
         var body = Body(dialog);
         var presenter = dialog.GetVisualDescendants().OfType<ContentPresenter>()
@@ -351,7 +284,10 @@ public sealed class DialogBoundsTests : WindowTest
         Assert.True(body.Extent.Height > body.Viewport.Height, "the body must start out scrolling");
         var scrolling = presenter.Bounds.Width;
 
-        dialog.Height = body.Extent.Height + (dialog.Bounds.Height - body.Bounds.Height) + 100;
+        // The dialog is fixed, so the bound is the only thing holding it short: lift that and
+        // SizeToContent grows it to its content, which is what stops the body scrolling.
+        dialog.MaxHeight = double.PositiveInfinity;
+        dialog.InvalidateMeasure();
         dialog.UpdateLayout();
         Dispatcher.UIThread.RunJobs();
 
@@ -372,7 +308,7 @@ public sealed class DialogBoundsTests : WindowTest
         {
             var screen = notice.Screens.Primary!;
             Assert.Equal(
-                WindowMetrics.DialogMaxHeight(0, screen.WorkingArea.Height, screen.Scaling),
+                WindowMetrics.DialogMaxHeight(screen.WorkingArea.Height, screen.Scaling),
                 notice.MaxHeight);
             Assert.True(double.IsFinite(notice.MaxHeight), "the notice is bounded by nothing");
         }
@@ -430,5 +366,21 @@ public sealed class DialogBoundsTests : WindowTest
         Dispatcher.UIThread.RunJobs();
         dialog.UpdateLayout();
         Dispatcher.UIThread.RunJobs();
+    }
+
+    /// <summary>
+    /// Opens the dialog and then squeezes it until its body overflows. The headless screen is taller
+    /// than any dialog in this app, so the real bound never bites here; the geometry these tests
+    /// measure — the bands, the inset, the bar — is what a short screen would produce.
+    /// </summary>
+    private SettingsDialog OpenScrolling(Window owner)
+    {
+        var dialog = Settings();
+        Open(dialog, owner);
+        dialog.MaxHeight = dialog.Bounds.Height - 300;
+        dialog.InvalidateMeasure();
+        dialog.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+        return dialog;
     }
 }

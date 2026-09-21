@@ -49,9 +49,8 @@
                     <SolidColorBrush x:Key="DisabledInputBrush" Color="#F1F5F7"/>
                     <SolidColorBrush x:Key="DisabledInputBorderBrush" Color="#DCE5E9"/>
                     <SolidColorBrush x:Key="DisabledTextBrush" Color="#7B9199"/>
-                    <!-- The scroll-bar thumb in the app's palette. Fluent reads a different key for a bar
-                         that takes layout space and one that floats, so both are set (app-chrome conventions). -->
-                    <SolidColorBrush x:Key="ScrollBarThumbBackgroundColor" Color="#748A92"/>
+                    <!-- The scroll-bar thumb in the app's palette: every region here floats its bar,
+                         which is the brush that one reads (app-chrome conventions). -->
                     <SolidColorBrush x:Key="ScrollBarPanningThumbBackground" Color="#748A92"/>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
@@ -96,9 +95,8 @@
                     <SolidColorBrush x:Key="DisabledInputBrush" Color="#081115"/>
                     <SolidColorBrush x:Key="DisabledInputBorderBrush" Color="#182A31"/>
                     <SolidColorBrush x:Key="DisabledTextBrush" Color="#5F747B"/>
-                    <!-- The scroll-bar thumb in the app's palette. Fluent reads a different key for a bar
-                         that takes layout space and one that floats, so both are set (app-chrome conventions). -->
-                    <SolidColorBrush x:Key="ScrollBarThumbBackgroundColor" Color="#5B7680"/>
+                    <!-- The scroll-bar thumb in the app's palette: every region here floats its bar,
+                         which is the brush that one reads (app-chrome conventions). -->
                     <SolidColorBrush x:Key="ScrollBarPanningThumbBackground" Color="#5B7680"/>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
@@ -134,7 +132,6 @@
                                        ErrorText="#FB7185"/>
             </FluentTheme.Palettes>
         </FluentTheme>
-        <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml"/>
 
         <!-- Every window (main + dialogs) takes the configured UI font; FontFamily inherits to child
              controls. The read-only output console sets its own monospace font, so it is unaffected. -->
@@ -143,29 +140,7 @@
             <Setter Property="FontSize" Value="13"/>
         </Style>
 
-        <!-- The window viewport, the scripts and recent lists and the console all hold content out to
-             their own edges, so their bars take layout space rather than floating over it (app-chrome
-             conventions). The dialog body insets its content and opts back in; see DialogBase.axaml. -->
-        <Style Selector="ScrollViewer">
-            <Setter Property="AllowAutoHide" Value="False"/>
-        </Style>
 
-        <!-- For the one region that floats: no delay arriving, the framework's two seconds leaving. -->
-        <Style Selector="ScrollBar">
-            <Setter Property="ShowDelay" Value="00:00:00"/>
-            <Setter Property="HideDelay" Value="00:00:02"/>
-        </Style>
-
-        <!-- Keep DataGrid cell navigation active without drawing a harsh current-cell box. -->
-        <Style Selector="DataGridCell">
-            <Setter Property="FocusAdorner" Value="{x:Null}"/>
-        </Style>
-        <Style Selector="DataGridCell:current /template/ Rectangle#CurrencyVisual">
-            <Setter Property="IsVisible" Value="False"/>
-        </Style>
-        <Style Selector="DataGridCell:focus /template/ Grid#FocusVisual">
-            <Setter Property="IsVisible" Value="False"/>
-        </Style>
 
         <!-- Dialog accent (commit) button -->
         <!-- A button states everything it requires of its label: that the content is
