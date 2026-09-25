@@ -283,7 +283,7 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public void CaptureWindowPlacement_IsPersistedWithPaneSizes()
+    public async Task CaptureWindowPlacement_IsPersistedWithPaneSizes()
     {
         var configStore = new FakeJsonStore<AppConfig>();
         var stateStore = new FakeJsonStore<AppState>();
@@ -292,7 +292,7 @@ public sealed class MainWindowViewModelTests
             new ScriptScanner(), new FakeProcessRunner());
 
         vm.CaptureWindowPlacement(-1400, 80, 1100.5, 720.25, maximized: true);
-        vm.PersistPaneSizes(420, 240);
+        await vm.PersistPaneSizesAsync(420, 240);
 
         Assert.Equal(1, stateStore.SaveCount);
         Assert.Equal(-1400, vm.WindowPositionX);
@@ -303,7 +303,7 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public void TryApplySettings_SaveFailureDoesNotPublishCandidate()
+    public async Task TryApplySettings_SaveFailureDoesNotPublishCandidate()
     {
         var config = new AppConfig { RootDirs = ["/old"], UiFontFamily = "Inter" };
         var configStore = new FakeJsonStore<AppConfig> { Value = config, ThrowOnSave = true };
@@ -315,7 +315,7 @@ public sealed class MainWindowViewModelTests
         draft.RootDirs.Add("/new");
         draft.UiFontFamily = "Iosevka";
 
-        Assert.False(vm.TryApplySettings(draft));
+        Assert.False(await vm.TryApplySettingsAsync(draft));
         Assert.Equal(["/old"], config.RootDirs);
         Assert.Equal("Inter", config.UiFontFamily);
         Assert.False(vm.HasOperationalError);
@@ -333,8 +333,8 @@ public sealed class MainWindowViewModelTests
         var draft = vm.CreateSettingsDraft();
         draft.UiFontFamily = "Helvetica";
 
-        Assert.False(vm.TryApplySettings(draft));
-        Assert.False(vm.TryApplySettings(draft));
+        Assert.False(await vm.TryApplySettingsAsync(draft));
+        Assert.False(await vm.TryApplySettingsAsync(draft));
         Assert.Equal(0, vm.OperationalErrorCount);
 
         await vm.RescanCommand.ExecuteAsync(null); // ordinary successful activity stays with the Scripts pane
@@ -344,20 +344,20 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public void TryApplySettings_SurfacesTheRescanConsequenceAtTheCatalogOwner()
+    public async Task TryApplySettings_SurfacesTheRescanConsequenceAtTheCatalogOwner()
     {
         var (vm, _) = BuildVm();
         var draft = vm.CreateSettingsDraft();
         draft.UiFontFamily = "Helvetica";
 
-        Assert.True(vm.TryApplySettings(draft));
+        Assert.True(await vm.TryApplySettingsAsync(draft));
 
         Assert.Contains("Rescan", vm.CatalogResult, StringComparison.Ordinal);
         Assert.False(vm.HasOperationalError);
     }
 
     [Fact]
-    public void TryApplySettings_SavedFontChangeRaisesLiveRemeasureSignal()
+    public async Task TryApplySettings_SavedFontChangeRaisesLiveRemeasureSignal()
     {
         var config = new AppConfig { UiFontFamily = "" };
         var vm = new MainWindowViewModel(
@@ -372,12 +372,12 @@ public sealed class MainWindowViewModelTests
         var draft = vm.CreateSettingsDraft();
         draft.UiFontFamily = "Helvetica";
 
-        Assert.True(vm.TryApplySettings(draft));
+        Assert.True(await vm.TryApplySettingsAsync(draft));
         Assert.Equal(1, fontChanges);
     }
 
     [Fact]
-    public void PersistRunningSnapshot_RetriesAfterFailureAndKeysFullIdentity()
+    public async Task PersistRunningSnapshot_RetriesAfterFailureAndKeysFullIdentity()
     {
         var configStore = new FakeJsonStore<AppConfig>();
         var stateStore = new FakeJsonStore<AppState> { ThrowOnSave = true };
@@ -388,13 +388,13 @@ public sealed class MainWindowViewModelTests
         var vm = new MainWindowViewModel(
             configStore, stateStore, configStore.Value, stateStore.Value, new ScriptScanner(), runner);
 
-        Assert.ThrowsAny<Exception>(vm.PersistRunningSnapshot);
+        await Assert.ThrowsAnyAsync<Exception>(() => vm.PersistRunningSnapshotAsync());
         stateStore.ThrowOnSave = false;
-        vm.PersistRunningSnapshot();
+        await vm.PersistRunningSnapshotAsync();
         Assert.Equal(1, stateStore.SaveCount);
 
         process.LogFilePath = "/logs/second.log";
-        vm.PersistRunningSnapshot();
+        await vm.PersistRunningSnapshotAsync();
         Assert.Equal(2, stateStore.SaveCount);
     }
 

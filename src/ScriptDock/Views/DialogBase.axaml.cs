@@ -70,8 +70,10 @@ public partial class DialogBase : Window
     /// </summary>
     protected virtual bool HasUnsavedChanges => false;
 
-    /// <summary>Lets a dialog durably validate or commit before its primary button closes it.</summary>
-    protected virtual bool TryCommit(string tag) => true;
+    /// <summary>Lets a dialog durably validate or commit before its primary button closes it. Awaited
+    /// before the window closes, so a commit that persists to disk does not have to block the UI
+    /// thread while it does.</summary>
+    protected virtual Task<bool> TryCommit(string tag) => Task.FromResult(true);
 
     /// <summary>Discard-confirmation copy used when a dirty dialog is dismissed.</summary>
     protected virtual (I18n.Message Title, I18n.Message Message) DiscardPrompt =>
@@ -178,13 +180,13 @@ public partial class DialogBase : Window
             Close();
     }
 
-    private void OnButtonClick(object? sender, RoutedEventArgs e)
+    private async void OnButtonClick(object? sender, RoutedEventArgs e)
     {
         if (sender is not Button button)
             return;
 
         var tag = button.Tag as string;
-        if (_commitButtons.Contains(button) && (tag is null || !TryCommit(tag)))
+        if (_commitButtons.Contains(button) && (tag is null || !await TryCommit(tag)))
             return;
 
         ResultTag = tag;

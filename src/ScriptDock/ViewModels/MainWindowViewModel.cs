@@ -237,12 +237,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         await RescanAsync();
     }
 
-    public void PersistPaneSizes(double recentWidth, double consoleHeight) => Guard("save pane sizes", Message.Of("guard.savePaneSizes"), () =>
-    {
-        _state.RecentPaneWidth = recentWidth;
-        _state.ConsoleHeight = consoleHeight;
-        _stateStore.Save(_state);
-    });
+    public Task PersistPaneSizesAsync(double recentWidth, double consoleHeight) =>
+        GuardAsync("save pane sizes", Message.Of("guard.savePaneSizes"), () =>
+        {
+            _state.RecentPaneWidth = recentWidth;
+            _state.ConsoleHeight = consoleHeight;
+            return _stateStore.SaveAsync(_state);
+        });
 
     public void CaptureWindowPlacement(int x, int y, double width, double height, bool maximized)
     {
@@ -253,13 +254,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _state.WindowMaximized = maximized;
     }
 
-    public void Shutdown() => Guard("shutdown", Message.Of("guard.shutdown"), () =>
+    /// <summary>
+    /// Stops timers and scanning, ends or detaches owned processes per the close policy, and waits
+    /// for the running-set snapshot to actually land on disk before returning — the window only
+    /// finishes closing, and the app only exits, once this completes.
+    /// </summary>
+    public Task ShutdownAsync() => GuardAsync("shutdown", Message.Of("guard.shutdown"), async () =>
     {
         _outputTimer?.Stop();
         _catalogResultTimer?.Stop();
         _scanCts?.Cancel(); // don't let a slow scan keep the closing window's work alive
         _runner.ShutdownAll(_config.KillProcessesOnClose);
-        PersistRunningSnapshot(); // record what is still running (or none, if killed) for next launch
+        await PersistRunningSnapshotAsync(); // record what is still running (or none, if killed) for next launch
     });
 
     // The running snapshot last written to disk, as a cheap signature (pid:path per run), so a
@@ -269,8 +275,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     // Record the live running set so a relaunch can recapture it (see ProcessRunner.Recapture).
     // Called whenever the running set may have changed and on shutdown — but only writes when it
-    // actually did, since this is driven by every process event (RebuildFromProcesses).
-    internal void PersistRunningSnapshot()
+    // actually did, since this is driven by every process event (RebuildFromProcesses). The signature
+    // is recorded only after the save actually lands, so a failed save is retried (with the same or a
+    // newer signature) rather than being mistaken for one already persisted.
+    internal async Task PersistRunningSnapshotAsync()
     {
         var running = _runner.Active
             .Where(p => p.State == RunState.Running)
@@ -284,7 +292,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
 
         _state.RunningProcesses = running;
-        _stateStore.Save(_state);
+        await _stateStore.SaveAsync(_state);
         _persistedRunningSignature = signature;
     }
 
@@ -319,7 +327,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         RebuildFromProcesses();
     }
 
-    public bool TryApplySettings(SettingsDialogViewModel draft)
+    public async Task<bool> TryApplySettingsAsync(SettingsDialogViewModel draft)
     {
         var candidate = new AppConfig
         {
@@ -336,7 +344,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            _configStore.Save(candidate);
+            await _configStore.SaveAsync(candidate);
         }
         catch (Exception ex)
         {
@@ -421,7 +429,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             RebuildScripts();
 
             _state.KnownPaths = report.Found.ToList();
-            _stateStore.Save(_state);
+            await _stateStore.SaveAsync(_state);
 
             ResolveOperationalError("scan");
             ShowCatalogResult(ScanResultMessage(diff), transient: true);
@@ -526,7 +534,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 .ToList();
             try
             {
-                _stateStore.Save(_state);
+                await _stateStore.SaveAsync(_state);
             }
             catch
             {
@@ -550,7 +558,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void ToggleHidden(ScriptItem? item) => Guard("toggle hidden", Message.Of("guard.toggleHidden"), () =>
+    private async Task ToggleHidden(ScriptItem? item)
     {
         if (item is null)
             return;
@@ -560,19 +568,32 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         if (nowHidden)
             _config.Hidden.Add(item.Path);
 
-        _configStore.Save(_config);
+        try
+        {
+            await _configStore.SaveAsync(_config);
+            ResolveOperationalError("toggle hidden");
+        }
+        catch (Exception ex)
+        {
+            Log.Error("ui: toggle hidden failed", ex);
+            ReportOperationalError("toggle hidden", Message.Of("guard.toggleHidden"));
+            return;
+        }
+
         Log.Info("ui: toggle hidden", new { script = item.Path, hidden = nowHidden });
         // Keep the toggled script selected; if hiding made it vanish (Show hidden off), fall to its
         // neighbour so the Scripts selection — and the Hide/Show label — never just resets.
         RebuildScripts(selectNeighbourIfGone: true);
-    });
+    }
 
-    partial void OnShowHiddenChanged(bool value) => Guard("show hidden", Message.Of("guard.showHidden"), () =>
+    partial void OnShowHiddenChanged(bool value)
     {
         _state.ShowHidden = value;
-        _stateStore.Save(_state);
+        // The visible list is a pure UI concern and does not wait on the disk: a slow or failing save
+        // is reported as its own operational error without leaving the toggle's own effect stuck.
+        ObserveSave(_stateStore.SaveAsync(_state), "show hidden", Message.Of("guard.showHidden"));
         RebuildScripts();
-    });
+    }
 
     partial void OnSelectedRecentEntryChanged(RecentEntry? value)
     {
@@ -626,7 +647,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _state.RecentlyRun = RecentRuns.Add(_state.RecentlyRun, path, DateTimeOffset.UtcNow);
         try
         {
-            _stateStore.Save(_state);
+            await _stateStore.SaveAsync(_state);
         }
         catch (Exception ex)
         {
@@ -654,12 +675,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             ConsoleInputFocusRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private void RebuildFromProcesses() => Guard("refresh", Message.Of("guard.refresh"), () =>
+    private void RebuildFromProcesses()
     {
-        RebuildRecent();
-        RebuildScripts(); // refresh the tiles' running dots
-        PersistRunningSnapshot();
-    });
+        Guard("refresh", Message.Of("guard.refresh"), () =>
+        {
+            RebuildRecent();
+            RebuildScripts(); // refresh the tiles' running dots
+        });
+        // Off the UI thread and not awaited here: a process event is last-writer-wins snapshot data,
+        // not something any command call is blocked on, and JsonStore<T> itself keeps every write to
+        // one store serialized and in order regardless of who queues it or how many overlap.
+        ObserveSave(PersistRunningSnapshotAsync(), "persist running snapshot", Message.Of("guard.refresh"));
+    }
 
     private void OnProcessStateChanged(object? sender, EventArgs e) =>
         Dispatcher.UIThread.Post(RebuildFromProcesses);
@@ -810,6 +837,28 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             ReportOperationalError(action, failure);
         }
     }
+
+    // The async counterpart of Guard: awaits body() (rather than calling it inline) so an exception
+    // raised at any point, before or after body's first await, is still caught and reported here
+    // instead of becoming an unobserved task exception.
+    private async Task GuardAsync(string action, Message failure, Func<Task> body)
+    {
+        try
+        {
+            await body();
+            ResolveOperationalError(action);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"ui: {action} failed", ex);
+            ReportOperationalError(action, failure);
+        }
+    }
+
+    // Fire-and-forget a task already in flight (typically a queued store save), reporting failure the
+    // same way GuardAsync does without making the caller await it. For saves that are last-writer-wins
+    // snapshots rather than data a command result depends on.
+    private void ObserveSave(Task task, string action, Message failure) => _ = GuardAsync(action, failure, () => task);
 
     // Ask the view to confirm a destructive action. With no handler attached (tests) there is no UI
     // to ask, so the action proceeds.

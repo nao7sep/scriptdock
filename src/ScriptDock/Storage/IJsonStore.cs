@@ -1,3 +1,5 @@
+using System.Threading.Tasks;
+
 namespace ScriptDock.Storage;
 
 /// <summary>
@@ -15,5 +17,18 @@ public interface IJsonStore<T> where T : class, new()
     bool Exists { get; }
 
     T Load();
+
+    /// <summary>Blocking save, for the startup path (before the window exists) and tests.</summary>
     void Save(T value);
+
+    /// <summary>
+    /// Queues the write and returns a task that completes when it lands. A caller mutates its own
+    /// shared document object in place and calls this on the UI thread, so the JSON snapshot is
+    /// taken synchronously (fast, in-memory) at call time; only the actual file and backup I/O runs
+    /// off the calling thread. Every store serializes its own writes and runs them in the order they
+    /// were queued, so two overlapping calls can never interleave on disk and a write queued earlier
+    /// can never land after — and so overwrite — one queued later. Awaiting the task returned by the
+    /// most recently queued call also waits for every write queued before it on the same store.
+    /// </summary>
+    Task SaveAsync(T value);
 }

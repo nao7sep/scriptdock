@@ -1,4 +1,5 @@
 using System.IO;
+using System.Threading.Tasks;
 using ScriptDock.Storage;
 
 namespace ScriptDock.Tests.Fakes;
@@ -33,4 +34,9 @@ public sealed class FakeJsonStore<T> : IJsonStore<T> where T : class, new()
         Value = value;
         Exists = true;
     }
+
+    // Runs the same (possibly throwing) Save on a background thread, so a caller that awaits this —
+    // the same way it awaits the real JsonStore<T> — observes a faulted task on failure rather than a
+    // synchronous throw, matching production semantics for orchestration tests.
+    public Task SaveAsync(T value) => Task.Run(() => Save(value));
 }

@@ -16,9 +16,9 @@ namespace ScriptDock.Views;
 public sealed class SettingsDialog : DialogBase
 {
     private readonly SettingsDialogViewModel _draft;
-    private readonly Func<SettingsDialogViewModel, bool> _trySave;
+    private readonly Func<SettingsDialogViewModel, Task<bool>> _trySave;
 
-    public SettingsDialog(SettingsDialogViewModel draft, Func<SettingsDialogViewModel, bool> trySave)
+    public SettingsDialog(SettingsDialogViewModel draft, Func<SettingsDialogViewModel, Task<bool>> trySave)
     {
         _draft = draft;
         _trySave = trySave;
@@ -45,13 +45,13 @@ public sealed class SettingsDialog : DialogBase
 
     protected override bool HasUnsavedChanges => _draft.IsDirty;
 
-    protected override bool TryCommit(string tag)
+    protected override async Task<bool> TryCommit(string tag)
     {
         if (tag != "save")
             return true;
 
         _draft.SaveErrorMessage = null;
-        if (_trySave(_draft))
+        if (await _trySave(_draft))
             return true;
 
         _draft.SaveErrorMessage = I18n.Message.Of("settings.saveFailed");
@@ -61,7 +61,7 @@ public sealed class SettingsDialog : DialogBase
     public static async Task<bool> EditAsync(
         Window owner,
         SettingsDialogViewModel draft,
-        Func<SettingsDialogViewModel, bool> trySave)
+        Func<SettingsDialogViewModel, Task<bool>> trySave)
     {
         var dialog = new SettingsDialog(draft, trySave);
         await dialog.ShowBoundedAsync(owner);

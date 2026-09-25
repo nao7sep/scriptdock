@@ -275,6 +275,10 @@ public partial class MainWindow : Window
     private void OnConsoleSplitterDragCompleted(object? sender, VectorEventArgs e) =>
         _consoleHeightIntent = LeftPanesGrid.RowDefinitions[2].ActualHeight;
 
+    // Set once the pane-size and shutdown saves have actually landed, so the re-triggered Close()
+    // below is let through instead of holding the window open (and re-running the saves) forever.
+    private bool _shutdownSaved;
+
     private async void OnClosing(object? sender, WindowClosingEventArgs e)
     {
         try
@@ -301,6 +305,17 @@ public partial class MainWindow : Window
                 return;
             }
 
+            // The saves already landed on a prior pass through this handler (see below) — let this
+            // second, re-triggered Close() proceed for real instead of cancelling and saving again.
+            if (_shutdownSaved)
+                return;
+
+            // Closing does not itself wait for an async handler, so without this the window (and, as
+            // the last window, the app) would finish closing while the saves below are still in
+            // flight. Cancel this attempt, save, then close again once the saves have landed —
+            // mirroring the confirm branch above and DialogBase's own close guard.
+            e.Cancel = true;
+
             RememberNormalGeometry();
             if (WindowState is WindowState.Normal or WindowState.Maximized
                 && _normalGeometry is { } normal)
@@ -313,15 +328,21 @@ public partial class MainWindow : Window
             // Persist the stored INTENT, not the live ActualWidth/ActualHeight — those may have been
             // clamped down by a small window, and saving a clamped size would lose the user's intent.
             // Falls back to the live size only if no intent was ever established (defensive; OnLoaded
-            // always seeds it).
-            vm.PersistPaneSizes(
+            // always seeds it). Awaited, in order, so the window does not close until both saves have
+            // actually landed on disk.
+            await vm.PersistPaneSizesAsync(
                 _recentWidthIntent ?? BodyGrid.ColumnDefinitions[2].ActualWidth,
                 _consoleHeightIntent ?? LeftPanesGrid.RowDefinitions[2].ActualHeight);
-            vm.Shutdown();
+            await vm.ShutdownAsync();
+            _shutdownSaved = true;
+            Close();
         }
         catch (Exception ex)
         {
             Log.Error("ui: window close failed", ex);
+            // A persistence bug must not wedge the window open forever; let the close proceed.
+            _shutdownSaved = true;
+            Close();
         }
     }
 
@@ -459,7 +480,7 @@ public partial class MainWindow : Window
                 return;
 
             var draft = vm.CreateSettingsDraft();
-            await SettingsDialog.EditAsync(this, draft, vm.TryApplySettings);
+            await SettingsDialog.EditAsync(this, draft, vm.TryApplySettingsAsync);
             vm.ResolveShellActionError("open-settings");
         }
         catch (Exception ex)

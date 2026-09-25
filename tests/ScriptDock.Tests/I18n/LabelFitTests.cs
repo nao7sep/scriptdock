@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
@@ -44,7 +45,7 @@ public class LabelFitTests : WindowTest
     {
         using var speaking = Localizer.Speaking(tag);
 
-        var dialog = Show(new SettingsDialog(new SettingsDialogViewModel(new AppConfig()), _ => true));
+        var dialog = Show(new SettingsDialog(new SettingsDialogViewModel(new AppConfig()), _ => Task.FromResult(true)));
 
         AssertNothingClipped(dialog, tag, atLeast: 8);
     }

@@ -152,7 +152,7 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
 
         vm.SelectedScript = vm.Scripts.Single(s => Name(s) == "b.command"); // the middle item
 
-        vm.ToggleHiddenCommand.Execute(vm.SelectedScript); // hide it; "Show hidden" is off → it leaves the list
+        await vm.ToggleHiddenCommand.ExecuteAsync(vm.SelectedScript); // hide it; "Show hidden" is off → it leaves the list
 
         Assert.DoesNotContain(vm.Scripts, s => Name(s) == "b.command");
         Assert.Equal(["a.command", "c.command"], vm.Scripts.Select(Name));
@@ -169,7 +169,7 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
 
         vm.SelectedScript = vm.Scripts.Single(s => Name(s) == "b.command"); // the last item
 
-        vm.ToggleHiddenCommand.Execute(vm.SelectedScript);
+        await vm.ToggleHiddenCommand.ExecuteAsync(vm.SelectedScript);
 
         // Hiding the last item clamps the neighbour index back to the new last — 'a'.
         Assert.Equal("a.command", Name(vm.SelectedScript!));
@@ -188,7 +188,7 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         vm.SelectedScript = b;
         Assert.Equal("Hide", vm.ToggleHiddenLabel);
 
-        vm.ToggleHiddenCommand.Execute(b); // hide b, but "Show hidden" is on → it stays visible
+        await vm.ToggleHiddenCommand.ExecuteAsync(b); // hide b, but "Show hidden" is on → it stays visible
 
         var selected = vm.SelectedScript!;
         Assert.Equal("b.command", Name(selected)); // selection preserved on the same path

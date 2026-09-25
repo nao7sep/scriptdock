@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
@@ -377,7 +378,7 @@ public sealed class DialogBoundsTests : WindowTest
     }
 
     private static SettingsDialog Settings() =>
-        new(new SettingsDialogViewModel(new AppConfig()), _ => true);
+        new(new SettingsDialogViewModel(new AppConfig()), _ => Task.FromResult(true));
 
     private static ScrollViewer Body(Window dialog) =>
         dialog.GetVisualDescendants().OfType<ScrollViewer>()

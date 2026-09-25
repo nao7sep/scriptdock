@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using ScriptDock;
 using ScriptDock.Storage;
 using Xunit;
@@ -230,6 +231,27 @@ public sealed class JsonStoreTests : IDisposable
         var temps = Directory.EnumerateFiles(_root, "*.tmp").ToList();
 
         Assert.Empty(temps);
+    }
+
+    [Fact]
+    public async Task SaveAsync_QueuesWritesOffTheCallingThread_AndLandsThemInCallOrder()
+    {
+        // SD-2: a write queued earlier must never land after — and so overwrite — one queued later,
+        // even though the shared document is mutated in place between calls and every write is queued
+        // off the calling thread rather than run inline. This drives many overlapping SaveAsync calls
+        // against the SAME store, back to back, with no artificial ordering help from the caller.
+        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+
+        // Queue every write back to back before any of them can possibly have landed, exactly as the
+        // UI thread does when several actions fire close together (e.g. a burst of process events).
+        var tasks = Enumerable.Range(0, 20)
+            .Select(i => store.SaveAsync(new SampleDoc { Name = $"v{i}" }))
+            .ToList();
+
+        await Task.WhenAll(tasks);
+
+        var liveJson = File.ReadAllText(PathOf("doc.json"));
+        Assert.Contains("v19", liveJson); // the last call queued is the last (and only) one that lands
     }
 
     [Fact]
