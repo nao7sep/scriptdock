@@ -163,6 +163,36 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task RunOrRestart_SecondCallWhileFirstInFlight_IsGatedByCanExecute_NeverStartsASecondProcess()
+    {
+        // SD-1: MainWindow's double-tap/keydown handlers must check CanExecute before Execute, exactly
+        // like this test does, so a restart-in-progress (still "Running" during the termination grace)
+        // can't be re-triggered into a second, concurrent RestartAsync that would start a second
+        // invisible child process. Direct ICommand.Execute ignores CanExecute entirely, which is the
+        // bug: this test's second call would land as a real second restart without the guard.
+        var (vm, runner) = BuildVm();
+        runner.AddRunning("/x/dev.command");
+        var item = new RecentEntry("/x/dev.command", "dev.command", DateTimeOffset.UtcNow, runner.Active[0]);
+        vm.ConfirmHandler = new ConfirmSpy(result: true).Handle;
+        runner.RestartGate = new TaskCompletionSource();
+
+        var command = vm.RunOrRestartCommand;
+        Assert.True(command.CanExecute(item));
+        var first = command.ExecuteAsync(item);
+
+        // The restart is now in flight (blocked on RestartGate): CanExecute must already report false,
+        // the same signal the fixed code-behind checks before ever calling Execute again.
+        Assert.False(command.CanExecute(item));
+        if (command.CanExecute(item))
+            command.Execute(item); // what the fixed handlers do; must not fire while gated
+
+        runner.RestartGate.SetResult();
+        await first;
+
+        Assert.Single(runner.RestartCalls); // never a second, concurrent restart of the same handle
+    }
+
+    [Fact]
     public async Task RunScript_WhenOldTreeDoesNotExit_DoesNotRecordOrLaunchReplacement()
     {
         var state = new AppState();

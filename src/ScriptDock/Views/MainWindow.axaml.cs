@@ -507,8 +507,9 @@ public partial class MainWindow : Window
 
     private void OnScriptDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (sender is ListBox { SelectedItem: ScriptItem item })
-            ViewModel?.RunScriptCommand.Execute(item);
+        if (sender is ListBox { SelectedItem: ScriptItem item } &&
+            ViewModel?.RunScriptCommand is { } command && command.CanExecute(item))
+            command.Execute(item);
     }
 
     private void OnScriptKeyDown(object? sender, KeyEventArgs e)
@@ -517,14 +518,16 @@ public partial class MainWindow : Window
             e.Key is Key.Enter or Key.Space && sender is ListBox { SelectedItem: ScriptItem item })
         {
             e.Handled = true;
-            ViewModel?.RunScriptCommand.Execute(item);
+            if (ViewModel?.RunScriptCommand is { } command && command.CanExecute(item))
+                command.Execute(item);
         }
     }
 
     private void OnRecentDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (sender is ListBox { SelectedItem: RecentEntry item })
-            ViewModel?.RunOrRestartCommand.Execute(item);
+        if (sender is ListBox { SelectedItem: RecentEntry item } &&
+            ViewModel?.RunOrRestartCommand is { } command && command.CanExecute(item))
+            command.Execute(item);
     }
 
     private void OnRecentKeyDown(object? sender, KeyEventArgs e)
@@ -535,9 +538,14 @@ public partial class MainWindow : Window
         {
             e.Handled = true;
             if (item.IsRunning)
-                ViewModel?.StopEntryCommand.Execute(item);
-            else
-                ViewModel?.DismissEntryCommand.Execute(item);
+            {
+                if (ViewModel?.StopEntryCommand is { } stop && stop.CanExecute(item))
+                    stop.Execute(item);
+            }
+            else if (ViewModel?.DismissEntryCommand is { } dismiss && dismiss.CanExecute(item))
+            {
+                dismiss.Execute(item);
+            }
         }
     }
 

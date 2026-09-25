@@ -26,6 +26,11 @@ public sealed class FakeProcessRunner : IProcessRunner
     public bool RestartResult { get; set; } = true;
     public Exception? RecaptureException { get; set; }
 
+    /// <summary>When set, <see cref="RestartAsync"/> awaits it before completing — lets a test hold a
+    /// restart "in flight" long enough to exercise a re-entrancy guard, the way the real 10-second
+    /// termination grace does.</summary>
+    public TaskCompletionSource? RestartGate { get; set; }
+
     public event EventHandler? ProcessesChanged { add { } remove { } }
 
     public IReadOnlyList<ScriptProcess> Active => _active;
@@ -52,13 +57,15 @@ public sealed class FakeProcessRunner : IProcessRunner
         return Task.FromResult(TerminateResult);
     }
 
-    public Task<ScriptProcess?> RestartAsync(ScriptProcess handle)
+    public async Task<ScriptProcess?> RestartAsync(ScriptProcess handle)
     {
         RestartCalls.Add(handle);
+        if (RestartGate is not null)
+            await RestartGate.Task;
         if (!RestartResult)
-            return Task.FromResult<ScriptProcess?>(null);
+            return null;
         _active.Remove(handle);
-        return Task.FromResult<ScriptProcess?>(AddRunning(handle.ScriptPath, acceptsInput: true));
+        return AddRunning(handle.ScriptPath, acceptsInput: true);
     }
 
     public void Dismiss(ScriptProcess handle)
