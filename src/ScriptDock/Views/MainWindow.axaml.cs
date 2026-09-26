@@ -279,6 +279,9 @@ public partial class MainWindow : Window
     // below is let through instead of holding the window open (and re-running the saves) forever.
     private bool _shutdownSaved;
 
+    // Set while the pane-size/shutdown save pass below is in flight; see MainWindowCloseGuard.
+    private bool _shutdownSaveInProgress;
+
     private async void OnClosing(object? sender, WindowClosingEventArgs e)
     {
         try
@@ -287,28 +290,43 @@ public partial class MainWindow : Window
             if (vm is null)
                 return;
 
-            // Quitting with Kill-on-close on terminates running work, so confirm it first: cancel this
-            // close, ask, and only close for real on a yes (mirrors the dialog discard guard).
-            if (!_quitConfirmed && MainWindowCloseGuard.ShouldConfirmQuit(e.CloseReason, vm.ShouldConfirmQuit()))
+            var action = MainWindowCloseGuard.DecideAction(
+                e.CloseReason,
+                _quitConfirmed,
+                vm.ShouldConfirmQuit(),
+                _shutdownSaved,
+                _shutdownSaveInProgress);
+
+            switch (action)
             {
-                e.Cancel = true;
-                var proceed = await ConfirmDialog.ConfirmDestructiveAsync(
-                    this,
-                    Message.Of("quit.title"),
-                    Message.Of("quit.message", ("count", vm.RunningCount)),
-                    "quit.confirm");
-                if (proceed)
+                case MainWindowCloseAction.ProceedToRealClose:
+                    return;
+
+                case MainWindowCloseAction.Drop:
+                    e.Cancel = true;
+                    return;
+
+                case MainWindowCloseAction.PromptToConfirmQuit:
                 {
-                    _quitConfirmed = true;
-                    Close();
+                    // Quitting with Kill-on-close on terminates running work, so confirm it first:
+                    // cancel this close, ask, and only close for real on a yes (mirrors the dialog
+                    // discard guard).
+                    e.Cancel = true;
+                    var proceed = await ConfirmDialog.ConfirmDestructiveAsync(
+                        this,
+                        Message.Of("quit.title"),
+                        Message.Of("quit.message", ("count", vm.RunningCount)),
+                        "quit.confirm");
+                    if (proceed)
+                    {
+                        _quitConfirmed = true;
+                        Close();
+                    }
+                    return;
                 }
-                return;
             }
 
-            // The saves already landed on a prior pass through this handler (see below) — let this
-            // second, re-triggered Close() proceed for real instead of cancelling and saving again.
-            if (_shutdownSaved)
-                return;
+            _shutdownSaveInProgress = true;
 
             // Closing does not itself wait for an async handler, so without this the window (and, as
             // the last window, the app) would finish closing while the saves below are still in
