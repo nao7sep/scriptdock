@@ -38,7 +38,7 @@ public sealed class ModelNormalizationTests : IDisposable
         var config = new JsonStore<AppConfig>("config.json", "config").Load();
         var state = new JsonStore<AppState>("state.json", "state").Load();
 
-        Assert.Equal(AppConfig.DefaultUiFontFamily, config.UiFontFamily);
+        Assert.Equal("", config.UiFontFamily);
         Assert.Equal(["/ok"], config.RootDirs);
         Assert.NotNull(config.Extensions);
         Assert.NotNull(config.IgnorePatterns);
@@ -46,5 +46,25 @@ public sealed class ModelNormalizationTests : IDisposable
         Assert.NotNull(state.KnownPaths);
         Assert.Empty(state.RecentlyRun);
         Assert.Empty(state.RunningProcesses);
+    }
+
+    [Fact]
+    public void Load_MigratesAStoredValueEqualToTheFormerDefaultToEmpty()
+    {
+        File.WriteAllText(Path.Combine(_root, "config.json"), """{"uiFontFamily":"Inter"}""");
+
+        var config = new JsonStore<AppConfig>("config.json", "config").Load();
+
+        Assert.Equal("", config.UiFontFamily);
+    }
+
+    [Fact]
+    public void Load_KeepsAStoredValueDifferentFromTheDefault()
+    {
+        File.WriteAllText(Path.Combine(_root, "config.json"), """{"uiFontFamily":"Helvetica Neue"}""");
+
+        var config = new JsonStore<AppConfig>("config.json", "config").Load();
+
+        Assert.Equal("Helvetica Neue", config.UiFontFamily);
     }
 }

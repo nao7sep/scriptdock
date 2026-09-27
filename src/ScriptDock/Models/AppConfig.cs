@@ -29,9 +29,10 @@ public sealed class AppConfig : IJsonNormalizable
     /// </summary>
     public const string BundledUiFontUri = "fonts:Inter#Inter";
 
-    /// <summary>The UI (chrome) font family. Family only; an empty value falls back to the bundled
-    /// default (Inter). Applied app-wide; the read-only output console keeps its own monospace font.</summary>
-    public string UiFontFamily { get; set; } = DefaultUiFontFamily;
+    /// <summary>The UI (chrome) font family. Family only; nothing is stored until the user types one.
+    /// Empty shows the bundled default (Inter) as the field's placeholder and resolves to it. Applied
+    /// app-wide; the read-only output console keeps its own monospace font.</summary>
+    public string UiFontFamily { get; set; } = "";
 
     /// <summary>
     /// The interface language: a BCP 47 tag from the set, or <c>system</c> to follow the computer's
@@ -71,7 +72,9 @@ public sealed class AppConfig : IJsonNormalizable
 
     public void NormalizeAfterLoad()
     {
-        UiFontFamily ??= DefaultUiFontFamily;
+        UiFontFamily = string.Equals(UiFontFamily, DefaultUiFontFamily, System.StringComparison.Ordinal)
+            ? ""
+            : UiFontFamily ?? "";
         Language = I18n.Languages.NormalizePreference(Language);
         RootDirs = RootDirs?.OfType<string>().ToList() ?? [];
         Extensions = Extensions?.OfType<string>().ToList() ?? [];
