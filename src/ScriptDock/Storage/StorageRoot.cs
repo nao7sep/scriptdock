@@ -62,12 +62,20 @@ public static class StorageRoot
     public static void EnsureExists()
     {
         var root = Directory;
-        System.IO.Directory.CreateDirectory(root);
 
         if (OperatingSystem.IsWindows())
+        {
+            System.IO.Directory.CreateDirectory(root);
             return;
+        }
 
         const UnixFileMode OwnerOnly = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+
+        // The UnixFileMode overload only applies the mode to a directory it actually creates — an
+        // existing root is left untouched here, so it still needs the tightening below. This just
+        // ensures a *fresh* root is never briefly created under the default umask before being
+        // chmod'd.
+        System.IO.Directory.CreateDirectory(root, OwnerOnly);
 
         try
         {
