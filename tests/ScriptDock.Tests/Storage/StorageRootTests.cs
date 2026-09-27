@@ -137,4 +137,90 @@ public sealed class StorageRootTests : IDisposable
 
         Assert.Throws<InvalidOperationException>(() => _ = StorageRoot.Directory);
     }
+
+    private const UnixFileMode OwnerOnly =
+        UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+
+    [Fact]
+    public void EnsureExists_Creates_Fresh_Root_With_OwnerOnly_Mode_On_Posix()
+    {
+        // Windows has its own permission model and skips this step entirely (per the
+        // storage-path conventions); there is nothing POSIX-specific to assert there.
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var target = Path.Combine(Path.GetTempPath(), "scriptdock-perm-fresh-" + NanoId.New());
+        Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, target);
+        try
+        {
+            StorageRoot.EnsureExists();
+
+            Assert.True(Directory.Exists(StorageRoot.Directory));
+            Assert.Equal(OwnerOnly, File.GetUnixFileMode(StorageRoot.Directory));
+        }
+        finally
+        {
+            try { Directory.Delete(target, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    [Fact]
+    public void EnsureExists_Tightens_Broader_Existing_Root_To_OwnerOnly_On_Posix()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var target = Path.Combine(Path.GetTempPath(), "scriptdock-perm-tighten-" + NanoId.New());
+        Directory.CreateDirectory(target);
+        // Simulate a root that predates this rule, or was widened some other way: group- and
+        // world-readable/executable, broader than the owner-only (0700) the resolver enforces.
+        File.SetUnixFileMode(
+            target,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+            UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+        Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, target);
+        try
+        {
+            // The next resolve/launch call (EnsureExists) must tighten the existing, broader root.
+            StorageRoot.EnsureExists();
+
+            Assert.Equal(OwnerOnly, File.GetUnixFileMode(StorageRoot.Directory));
+        }
+        finally
+        {
+            try { Directory.Delete(target, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    [Fact]
+    public void EnsureExists_Never_Chmods_Contents_Or_Subdirectories()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var target = Path.Combine(Path.GetTempPath(), "scriptdock-perm-contents-" + NanoId.New());
+        Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, target);
+        try
+        {
+            StorageRoot.EnsureExists();
+
+            var subDir = Path.Combine(StorageRoot.Directory, "logs");
+            Directory.CreateDirectory(subDir);
+            var broader =
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                UnixFileMode.GroupRead | UnixFileMode.GroupExecute;
+            File.SetUnixFileMode(subDir, broader);
+
+            // A second EnsureExists (as at a later launch) must only ever touch the root itself.
+            StorageRoot.EnsureExists();
+
+            Assert.Equal(OwnerOnly, File.GetUnixFileMode(StorageRoot.Directory));
+            Assert.Equal(broader, File.GetUnixFileMode(subDir));
+        }
+        finally
+        {
+            try { Directory.Delete(target, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
 }

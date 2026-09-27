@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.RegularExpressions;
+using ScriptDock.Services;
 
 namespace ScriptDock.Storage;
 
@@ -52,9 +53,41 @@ public static class StorageRoot
 
     public static string LogsDirectory => Path.Combine(Directory, "logs");
 
+    /// <summary>
+    /// Creates the root if absent and, on POSIX, makes sure it is owner-only (<c>0700</c>) — tightening
+    /// it when an existing root is broader. Only the root directory itself is touched; its contents and
+    /// subdirectories are never chmod'd. Windows uses its own permission model and skips this step. A
+    /// failure to tighten permissions is logged, never thrown — it must not stop the app from starting.
+    /// </summary>
     public static void EnsureExists()
     {
-        System.IO.Directory.CreateDirectory(Directory);
+        var root = Directory;
+        System.IO.Directory.CreateDirectory(root);
+
+        if (OperatingSystem.IsWindows())
+            return;
+
+        const UnixFileMode OwnerOnly = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+
+        try
+        {
+            var current = File.GetUnixFileMode(root);
+            if ((current & ~OwnerOnly) != 0)
+            {
+                try
+                {
+                    File.SetUnixFileMode(root, OwnerOnly);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn("storage root: could not tighten permissions to 0700", ex, new { root });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("storage root: could not read permissions to check tightening", ex, new { root });
+        }
     }
 
     private static string Resolve(string? rawOverride, bool hasOverride)
