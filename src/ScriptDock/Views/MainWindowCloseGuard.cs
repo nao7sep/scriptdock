@@ -41,12 +41,17 @@ public static class MainWindowCloseGuard
         bool shutdownSaved,
         bool shutdownSaveInProgress)
     {
-        if (!quitConfirmed && ShouldConfirmQuit(reason, hasRunningWorkToKill))
-            return MainWindowCloseAction.PromptToConfirmQuit;
+        // Once a save pass has started or landed, that already-running pass owns the close: check it
+        // before the confirm-quit prompt, or a second close request that arrives after new work
+        // starts mid-save (the window stays open and interactive during the await) would re-prompt
+        // instead of being dropped — and any work that starts after ShutdownAsync's kill pass already
+        // ran would never be captured, leaking a running child process past app exit.
         if (shutdownSaved)
             return MainWindowCloseAction.ProceedToRealClose;
         if (shutdownSaveInProgress)
             return MainWindowCloseAction.Drop;
+        if (!quitConfirmed && ShouldConfirmQuit(reason, hasRunningWorkToKill))
+            return MainWindowCloseAction.PromptToConfirmQuit;
         return MainWindowCloseAction.RunShutdownSavePass;
     }
 }

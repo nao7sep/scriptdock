@@ -72,6 +72,23 @@ public sealed class MainWindowCloseGuardTests
     }
 
     [Fact]
+    public void SecondCloseWithNewRunningWorkWhileSavePassIsInFlightIsDroppedNotPrompted()
+    {
+        // The window stays open and interactive during the awaited save pass, so the user can start
+        // a new script before trying to close again. That second close must still be dropped — not
+        // re-prompted — otherwise a confirmed quit would re-enter past the already-run ShutdownAsync
+        // kill pass, leaving the newly started process uncaptured and running after the app exits.
+        var action = MainWindowCloseGuard.DecideAction(
+            WindowCloseReason.WindowClosing,
+            quitConfirmed: false,
+            hasRunningWorkToKill: true,
+            shutdownSaved: false,
+            shutdownSaveInProgress: true);
+
+        Assert.Equal(MainWindowCloseAction.Drop, action);
+    }
+
+    [Fact]
     public void OwnerAndAppShutdownNeverPromptEvenWithRunningWork()
     {
         Assert.Equal(
