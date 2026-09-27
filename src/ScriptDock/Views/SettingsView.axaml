@@ -3,6 +3,7 @@
              xmlns:vm="using:ScriptDock.ViewModels"
              xmlns:ctl="using:ScriptDock.Controls"
              xmlns:i18n="using:ScriptDock.I18n"
+             xmlns:views="using:ScriptDock.Views"
              x:Class="ScriptDock.Views.SettingsView"
              x:DataType="vm:SettingsDialogViewModel">
 
@@ -67,10 +68,11 @@
                   IsVisible="{Binding HasRootPickerResult}"
                   AutomationProperties.Name="{Binding RootPickerResult}"
                   AutomationProperties.LiveSetting="Assertive">
-                <TextBlock Text="{Binding RootPickerResult}" VerticalAlignment="Top"
+                <TextBlock x:Name="RootPickerResultText" Text="{Binding RootPickerResult}" VerticalAlignment="Top"
                            Foreground="{DynamicResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"/>
                 <Button x:Name="CloseRootPickerResult" Grid.Column="1"
                         Classes="resultClose" VerticalAlignment="Top"
+                        views:FirstLineAlignment.To="{Binding #RootPickerResultText}"
                         Click="OnCloseRootPickerResult"
                         i18n:Localized.AutomationName="settings.closeRootResult"
                         i18n:Localized.ToolTip="common.close">

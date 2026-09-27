@@ -59,6 +59,7 @@ public sealed class AboutDialog : DialogBase
             VerticalAlignment = VerticalAlignment.Top,
             Content = dismissMark,
         };
+        FirstLineAlignment.SetTo(dismissLaunchError, _launchErrorMessage);
         I18n.Localized.SetAutomationName(dismissLaunchError, "about.closeResult");
         I18n.Localized.SetToolTip(dismissLaunchError, "common.close");
         dismissMark.Bind(

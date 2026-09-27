@@ -4,6 +4,7 @@
         xmlns:models="using:ScriptDock.Models"
         xmlns:ctl="using:ScriptDock.Controls"
         xmlns:i18n="using:ScriptDock.I18n"
+        xmlns:views="using:ScriptDock.Views"
         x:Class="ScriptDock.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="ScriptDock"
@@ -119,12 +120,13 @@
                 BorderThickness="0,0,0,1" Padding="14,10"
                 AutomationProperties.LiveSetting="Assertive">
             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                <TextBlock Text="{Binding OperationalError}" VerticalAlignment="Top"
+                <TextBlock x:Name="OperationalErrorText" Text="{Binding OperationalError}" VerticalAlignment="Top"
                            Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"/>
                 <TextBlock Grid.Column="1" Text="{Binding OperationalErrorCountText}"
                            IsVisible="{Binding HasMultipleOperationalErrors}"
                            Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                 <Button Grid.Column="2" Classes="resultClose" VerticalAlignment="Top"
+                        views:FirstLineAlignment.To="{Binding #OperationalErrorText}"
                         Command="{Binding DismissOperationalErrorCommand}"
                         i18n:Localized.AutomationName="error.dismiss" i18n:Localized.ToolTip="error.dismiss">
                     <Path Width="10" Height="10" Stretch="Uniform"
@@ -258,13 +260,14 @@
                                 BorderThickness="0,0,0,1" Padding="10,10"
                                 AutomationProperties.LiveSetting="{Binding RecentActionLiveSetting}">
                             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="7">
-                                <TextBlock Text="{Binding RecentActionError}" VerticalAlignment="Top"
+                                <TextBlock x:Name="RecentActionErrorText" Text="{Binding RecentActionError}" VerticalAlignment="Top"
                                            Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"
                                            />
                                 <TextBlock Grid.Column="1" Text="{Binding RecentActionErrorCountText}"
                                            IsVisible="{Binding HasMultipleRecentActionErrors}"
                                            Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                 <Button Grid.Column="2" Classes="resultClose" VerticalAlignment="Top"
+                                        views:FirstLineAlignment.To="{Binding #RecentActionErrorText}"
                                         Command="{Binding DismissRecentActionErrorCommand}"
                                         i18n:Localized.AutomationName="output.dismissError" i18n:Localized.ToolTip="output.dismissError">
                                     <Path Width="10" Height="10" Stretch="Uniform"
