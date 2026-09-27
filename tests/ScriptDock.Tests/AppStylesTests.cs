@@ -23,6 +23,8 @@ public sealed class AppStylesTests : WindowTest
     [InlineData("accent", "AccentPressedBrush")]
     [InlineData("destructive", "DangerPressedBrush")]
     [InlineData("resultClose", "ChipPressedBrush")]
+    [InlineData("", "ButtonPressedBrush")]
+    [InlineData("tool", "ButtonPressedBrush")]
     public void A_pressed_button_is_a_step_of_its_own_surface(string variant, string pressedBrush)
     {
         var resting = Classed(variant);
@@ -55,10 +57,49 @@ public sealed class AppStylesTests : WindowTest
         Assert.Equal(1d, off.Opacity);
     }
 
+    // The neutral button recedes the same way, by its own quieter fill and outline under the disabled
+    // ink, rather than falling back to the toolkit's grey slab.
+    [AvaloniaTheory]
+    [InlineData("")]
+    [InlineData("tool")]
+    public void A_disabled_neutral_button_takes_the_app_s_own_disabled_pair(string variant)
+    {
+        var off = Classed(variant);
+        off.IsEnabled = false;
+        Show(new Window { Content = off });
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(Color(Brush("ButtonDisabledBrush")), Fill(off));
+        Assert.Equal(Color(Brush("ButtonDisabledBorderBrush")), Color(Presenter(off).BorderBrush));
+        Assert.Equal(Color(Brush("DisabledTextBrush")), Ink(off));
+        Assert.Equal(1d, off.Opacity);
+    }
+
+    // Every one-line field and the standard button share one height, so a row of them lines up; the
+    // compact role sits a step below it.
+    [AvaloniaFact]
+    public void Fields_and_buttons_take_the_app_s_control_heights()
+    {
+        var text = new TextBox { Text = ".command" };
+        var combo = new ComboBox { ItemsSource = new[] { "System" }, SelectedIndex = 0 };
+        var standard = Classed("");
+        var compact = Classed("tool");
+        Show(new Window { Content = new StackPanel { Children = { text, combo, standard, compact } } });
+        Dispatcher.UIThread.RunJobs();
+
+        var height = (double)Application.Current!.FindResource("ControlHeight")!;
+        var compactHeight = (double)Application.Current!.FindResource("CompactControlHeight")!;
+        Assert.Equal(height, text.Bounds.Height);
+        Assert.Equal(height, combo.Bounds.Height);
+        Assert.Equal(height, standard.Bounds.Height);
+        Assert.Equal(compactHeight, compact.Bounds.Height);
+    }
+
     private static Button Classed(string variant)
     {
         var button = new Button { Content = "Save" };
-        button.Classes.Add(variant);
+        if (variant.Length > 0)
+            button.Classes.Add(variant);
         return button;
     }
 

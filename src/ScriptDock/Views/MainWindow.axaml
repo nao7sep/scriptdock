@@ -24,7 +24,7 @@
             <Border Classes="chip"
                     Background="{DynamicResource ChipBackgroundBrush}"
                     BorderThickness="1"
-                    CornerRadius="6" Padding="12,7" Margin="3">
+                    CornerRadius="{StaticResource CompactRadius}" Padding="12,7" Margin="3">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <Ellipse Width="7" Height="7" Fill="{DynamicResource ScriptNewBrush}" VerticalAlignment="Center" IsVisible="{Binding IsNew}"/>
                     <Ellipse Width="7" Height="7" Fill="{DynamicResource RunningBrush}" VerticalAlignment="Center" IsVisible="{Binding IsRunning}"/>
@@ -50,7 +50,9 @@
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Margin" Value="0"/>
             <Setter Property="MinHeight" Value="0"/>
-            <Setter Property="CornerRadius" Value="6"/>
+            <!-- The chip's radius plus its 3px margin, so the row's keyboard ring, drawn just inside
+                 the item, runs concentric with the chip 1px clear of it. -->
+            <Setter Property="CornerRadius" Value="9"/>
         </Style>
         <!-- The chip owns hover/selection emphasis through its reserved 1px border. Do not let the
              ListBoxItem background show through the chip's 3px margin as a thicker outer ring. -->
@@ -83,9 +85,9 @@
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="14,10">
             <DockPanel>
                 <!-- Hamburger docked right; the wordmark is the last (fill) child so it stays left. -->
-                <!-- Padding 8,6 (not the tool button's text-oriented 12,6): the icon needs as much room
-                     over and under the bars as beside them, or the bars read as filling the button. -->
-                <Button Classes="tool" DockPanel.Dock="Right" Padding="8,6"
+                <!-- The compact icon role: square-ish around the mark, so the bars have as much room
+                     over and under them as beside them rather than reading as filling the button. -->
+                <Button Classes="tool icon" DockPanel.Dock="Right"
                         i18n:Localized.AutomationName="menu.application"
                         i18n:Localized.ToolTip="menu.application">
                     <!-- Hamburger as three strokes: bars 16 long and 2 thick with 5 between them, the
@@ -189,16 +191,14 @@
                         <Border DockPanel.Dock="Top" Classes="sectionHeader" x:Name="ScriptsHeader">
                             <DockPanel>
                                 <TextBlock i18n:Localized.Text="scripts.title" Classes="cardHeader" VerticalAlignment="Center"/>
-                                <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
                                     <!-- Selection actions (act on the selected chip). -->
                                     <Button i18n:Localized.Content="scripts.run" Classes="tool" Command="{Binding RunScriptCommand}" CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
                                     <!-- Label tracks the selected script: "Hide" for a visible one, "Show" for a hidden one. -->
                                     <Button Content="{Binding ToggleHiddenLabel}" Classes="tool" Command="{Binding ToggleHiddenCommand}" CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
-                                    <!-- List-level controls (act on the whole Scripts list). "Show hidden" is the one
-                                         checkbox+label pair, so it carries extra horizontal margin to set that pair apart
-                                         from the Hide button on its left and the Rescan button on its right — its tight
-                                         internal box-to-label gap then reads as the connected unit. -->
-                                    <CheckBox i18n:Localized.Content="scripts.showHidden" IsChecked="{Binding ShowHidden}" Margin="10,0" VerticalAlignment="Center"/>
+                                    <!-- List-level controls (act on the whole Scripts list). "Show hidden" takes the
+                                         row's one gap like its neighbours; having no button edge, it already reads apart. -->
+                                    <CheckBox i18n:Localized.Content="scripts.showHidden" IsChecked="{Binding ShowHidden}" VerticalAlignment="Center"/>
                                     <Button i18n:Localized.Content="scripts.rescan" Classes="tool" Command="{Binding RescanCommand}"/>
                                 </StackPanel>
                             </DockPanel>
@@ -280,8 +280,7 @@
                                  i18n:Localized.PlaceholderText="output.inputPlaceholder"
                                  Submitted="OnConsoleInputSubmitted"/>
                         <!-- Recessed terminal-like field so the log reads as its own surface, not part of the header. -->
-                        <Border Margin="10" Background="{DynamicResource ContentWellBrush}"
-                                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="8">
+                        <Border Classes="well" Margin="10" Padding="10,8">
                             <ScrollViewer x:Name="ConsoleScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
                                 <SelectableTextBlock Text="{Binding SelectedOutput}" TextWrapping="NoWrap"
                                                      FontFamily="Menlo,Consolas,monospace" FontSize="12"/>
@@ -299,7 +298,7 @@
                     <Border DockPanel.Dock="Top" Classes="sectionHeader" x:Name="RecentHeader">
                         <DockPanel>
                             <TextBlock i18n:Localized.Text="recent.title" Classes="cardHeader" VerticalAlignment="Center"/>
-                            <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
                                 <Button i18n:Localized.Content="recent.run" Classes="tool" Command="{Binding RunOrRestartCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
                                 <Button i18n:Localized.Content="recent.stop" Classes="tool" Command="{Binding StopEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
                                 <Button i18n:Localized.Content="recent.dismiss" Classes="tool" Command="{Binding DismissEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>

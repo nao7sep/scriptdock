@@ -103,7 +103,7 @@ public sealed class AboutDialog : DialogBase
                 new StackPanel
                 {
                     Orientation = Orientation.Horizontal,
-                    Spacing = 12,
+                    Spacing = 8,
                     Margin = new Thickness(0, 0, 0, 16),
                     Children = { githubButton, issuesButton },
                 },

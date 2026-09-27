@@ -14,7 +14,7 @@
         </Style>
     </UserControl.Styles>
 
-    <StackPanel Spacing="14">
+    <StackPanel Spacing="20">
 
         <!-- Appearance: the theme and the UI (chrome) font lead, set apart from the scanning/process
              settings. The theme is the platform radio group (one tab stop, arrow keys move and select),
@@ -23,7 +23,7 @@
         <!-- The interface language, first because it governs every other label here. The names are
              written in their own languages so a reader finds theirs whatever is showing; only System
              is translated. It applies on Save with its neighbours (localization conventions). -->
-        <StackPanel Spacing="6">
+        <StackPanel Spacing="8">
             <TextBlock i18n:Localized.Text="settings.language" Classes="cardHeader"/>
             <ComboBox x:Name="LanguageChoice" HorizontalAlignment="Left" MinWidth="200"
                       ItemsSource="{Binding LanguageOptions}"
@@ -32,7 +32,7 @@
                       i18n:Localized.AutomationName="settings.language"/>
         </StackPanel>
 
-        <StackPanel Spacing="6">
+        <StackPanel Spacing="8">
             <TextBlock i18n:Localized.Text="settings.theme" Classes="cardHeader"/>
             <StackPanel x:Name="ThemeChoices" Orientation="Horizontal" Spacing="20"
                         i18n:Localized.AutomationName="settings.theme">
@@ -45,7 +45,7 @@
         </StackPanel>
 
         <!-- The read-only output console keeps its own monospace font and is unaffected by the UI font. -->
-        <StackPanel Spacing="6">
+        <StackPanel Spacing="8">
             <TextBlock i18n:Localized.Text="settings.uiFont" Classes="cardHeader"/>
             <ctl:ComposingTextBox x:Name="UiFontEntry" Text="{Binding UiFontFamily}" PlaceholderText="Inter"/>
             <TextBlock i18n:Localized.Text="settings.uiFontHint"
@@ -54,13 +54,14 @@
 
         <!-- Root directories: chosen with the native folder picker, not typed — they are
              directories that exist on disk, so picking beats hand-entering a path. -->
-        <StackPanel Spacing="6">
+        <StackPanel Spacing="8">
             <TextBlock i18n:Localized.Text="settings.roots" Classes="cardHeader"/>
             <ListBox x:Name="RootList" ItemsSource="{Binding RootDirs}" Height="96"
-                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
-            <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
-                <Button i18n:Localized.Content="settings.addRoot" Classes="tool" Click="OnAddRootClick"/>
-                <Button i18n:Localized.Content="common.remove" Classes="tool" Click="OnRemoveRootClick"/>
+                     Classes="boxed"/>
+            <!-- Standard buttons, the height of the fields their neighbours sit beside. -->
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <Button i18n:Localized.Content="settings.addRoot" Click="OnAddRootClick"/>
+                <Button i18n:Localized.Content="common.remove" Click="OnRemoveRootClick"/>
             </StackPanel>
             <Grid x:Name="RootPickerResult" ColumnDefinitions="*,Auto" ColumnSpacing="7"
                   IsVisible="{Binding HasRootPickerResult}"
@@ -81,13 +82,13 @@
         </StackPanel>
 
         <!-- Extensions -->
-        <StackPanel Spacing="6">
+        <StackPanel Spacing="8">
             <TextBlock i18n:Localized.Text="settings.extensions" Classes="cardHeader"/>
             <ListBox x:Name="ExtList" ItemsSource="{Binding Extensions}" Height="80"
-                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
+                     Classes="boxed"/>
             <DockPanel>
-                <Button i18n:Localized.Content="common.remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemoveExtClick"/>
-                <Button i18n:Localized.Content="common.add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddExtClick"/>
+                <Button i18n:Localized.Content="common.remove" DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnRemoveExtClick"/>
+                <Button i18n:Localized.Content="common.add" DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnAddExtClick"/>
                 <ctl:ComposingTextBox x:Name="ExtEntry" PlaceholderText=".command" SubmitOnEnter="True" Submitted="OnExtSubmitted"
                                       Classes.invalid="{Binding HasExtensionError}"
                                       i18n:Localized.AutomationName="settings.extension"
@@ -102,13 +103,13 @@
         </StackPanel>
 
         <!-- Ignore patterns -->
-        <StackPanel Spacing="6">
+        <StackPanel Spacing="8">
             <TextBlock i18n:Localized.Text="settings.ignorePatterns" Classes="cardHeader"/>
             <ListBox x:Name="PatternList" ItemsSource="{Binding IgnorePatterns}" Height="96"
-                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4"/>
+                     Classes="boxed"/>
             <DockPanel>
-                <Button i18n:Localized.Content="common.remove" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnRemovePatternClick"/>
-                <Button i18n:Localized.Content="common.add" Classes="tool" DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnAddPatternClick"/>
+                <Button i18n:Localized.Content="common.remove" DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnRemovePatternClick"/>
+                <Button i18n:Localized.Content="common.add" DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnAddPatternClick"/>
                 <ctl:ComposingTextBox x:Name="PatternEntry" PlaceholderText="/node_modules/" SubmitOnEnter="True" Submitted="OnPatternSubmitted"
                                       Classes.invalid="{Binding HasPatternError}"
                                       i18n:Localized.AutomationName="settings.ignorePattern"
@@ -123,7 +124,7 @@
         </StackPanel>
 
         <!-- Process lifecycle -->
-        <StackPanel Spacing="6">
+        <StackPanel Spacing="8">
             <TextBlock i18n:Localized.Text="settings.processes" Classes="cardHeader"/>
             <CheckBox i18n:Localized.Content="settings.killOnClose"
                       IsChecked="{Binding KillProcessesOnClose}"/>

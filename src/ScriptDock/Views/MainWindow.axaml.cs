@@ -57,6 +57,9 @@ public partial class MainWindow : Window
             Icon = new WindowIcon(iconStream);
         }
 
+        // The app's inactive-window treatments (the quieter focus ring) key on this class, as in DialogBase.
+        Activated += (_, _) => Classes.Set("windowInactive", false);
+        Deactivated += (_, _) => Classes.Set("windowInactive", true);
         Loaded += OnLoaded;
         LayoutRoot.PropertyChanged += (_, e) =>
         {
