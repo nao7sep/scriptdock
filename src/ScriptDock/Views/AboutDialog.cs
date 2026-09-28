@@ -27,7 +27,7 @@ public sealed class AboutDialog : DialogBase
     internal AboutDialog(System.Func<string, bool> openExternal)
     {
         _openExternal = openExternal;
-        Width = 420;
+        Width = 370;
         I18n.Localized.SetTitle(this, "about.title");
 
         var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "unknown";
