@@ -207,6 +207,28 @@ public class CatalogueTests
         Assert.Equal(Tags.OrderBy(tag => tag, StringComparer.Ordinal).ToArray(), listed);
     }
 
+    // Every control that opens About — the in-window menu item — reads exactly like the macOS
+    // app-menu item, in every language, so a new label can't drift from it (app-chrome conventions,
+    // "The app's language tests pin this").
+    [Fact]
+    public void every_about_opening_key_matches_the_macos_about_item()
+    {
+        var failures = new List<string>();
+        foreach (var tag in Tags)
+        {
+            var catalogue = Read(tag);
+            var native = catalogue["nativeMenu.about"].GetString()!.Replace("{app}", "ScriptDock");
+            var menu = catalogue["menu.about"].GetString();
+            var title = catalogue["about.title"].GetString();
+            if (menu != native)
+                failures.Add($"{tag}: menu.about {menu!} != nativeMenu.about {native}");
+            if (title != native)
+                failures.Add($"{tag}: about.title {title!} != nativeMenu.about {native}");
+        }
+
+        Assert.True(failures.Count == 0, string.Join("; ", failures));
+    }
+
     private static IReadOnlyDictionary<string, JsonElement> Read(string tag)
     {
         using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(LocalesDirectory(), tag + ".json")));

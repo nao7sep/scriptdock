@@ -36,7 +36,7 @@
   "guard.showHidden": "Não foi possível mostrar os scripts ocultos — consulte o log.",
   "guard.shutdown": "O encerramento não foi concluído corretamente — consulte o log.",
   "guard.toggleHidden": "Não foi possível ocultar nem mostrar o script — consulte o log.",
-  "menu.about": "Sobre",
+  "menu.about": "Sobre o ScriptDock",
   "menu.application": "Menu do aplicativo",
   "menu.revealLogs": "Mostrar Logs",
   "menu.settings": "Configurações",

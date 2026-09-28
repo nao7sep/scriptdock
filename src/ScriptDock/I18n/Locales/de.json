@@ -35,7 +35,7 @@
   "guard.showHidden": "Ausgeblendete Skripte konnten nicht angezeigt werden — siehe Protokoll.",
   "guard.shutdown": "Das Beenden wurde nicht sauber abgeschlossen — siehe Protokoll.",
   "guard.toggleHidden": "Das Skript konnte nicht aus- oder eingeblendet werden — siehe Protokoll.",
-  "menu.about": "Über",
+  "menu.about": "Über ScriptDock",
   "menu.application": "Anwendungsmenü",
   "menu.revealLogs": "Protokolle anzeigen",
   "menu.settings": "Einstellungen",

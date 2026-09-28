@@ -34,7 +34,7 @@
   "guard.showHidden": "无法显示隐藏的脚本，请查看日志。",
   "guard.shutdown": "退出过程未能正常结束，请查看日志。",
   "guard.toggleHidden": "无法隐藏或显示该脚本，请查看日志。",
-  "menu.about": "关于",
+  "menu.about": "关于 ScriptDock",
   "menu.application": "应用程序菜单",
   "menu.revealLogs": "显示日志文件",
   "menu.settings": "设置",

@@ -37,7 +37,7 @@
   "guard.showHidden": "Не удалось показать скрытые скрипты — см. журнал.",
   "guard.shutdown": "Завершение работы прошло некорректно — см. журнал.",
   "guard.toggleHidden": "Не удалось скрыть или показать скрипт — см. журнал.",
-  "menu.about": "О программе",
+  "menu.about": "О программе ScriptDock",
   "menu.application": "Меню приложения",
   "menu.revealLogs": "Показать журналы",
   "menu.settings": "Настройки",

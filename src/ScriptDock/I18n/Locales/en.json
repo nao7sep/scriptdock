@@ -35,7 +35,7 @@
   "guard.showHidden": "Hidden scripts could not be shown — see the log.",
   "guard.shutdown": "Shutting down did not finish cleanly — see the log.",
   "guard.toggleHidden": "The script could not be hidden or shown — see the log.",
-  "menu.about": "About",
+  "menu.about": "About ScriptDock",
   "menu.application": "Application menu",
   "menu.revealLogs": "Reveal Logs",
   "menu.settings": "Settings",

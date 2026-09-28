@@ -36,7 +36,7 @@
   "guard.showHidden": "Les scripts masqués n’ont pas pu être affichés — voir le journal.",
   "guard.shutdown": "La fermeture de ScriptDock ne s’est pas terminée correctement — voir le journal.",
   "guard.toggleHidden": "Le script n’a pas pu être masqué ni affiché — voir le journal.",
-  "menu.about": "À propos",
+  "menu.about": "À propos de ScriptDock",
   "menu.application": "Menu de l’application",
   "menu.revealLogs": "Afficher les journaux",
   "menu.settings": "Paramètres",
