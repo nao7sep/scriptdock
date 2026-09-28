@@ -1,6 +1,6 @@
 {
   "about.closeResult": "Chiudi risultato",
-  "about.description": "Trova gli script che avviano i tuoi progetti, li esegue come processi propri e li riavvia in modo affidabile.",
+  "about.description": "Trova gli script di avvio dei tuoi progetti, eseguili da un'unica dashboard e riavviali in modo pulito liberando le loro porte.",
   "about.github": "GitHub",
   "about.licence": "© 2026 Yoshinao Inoguchi — GNU GPL v3 o successiva",
   "about.openGitHubFailed": "Impossibile aprire GitHub. Controlla il log e riprova.",

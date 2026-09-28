@@ -1,6 +1,6 @@
 # ScriptDock
 
-ScriptDock is a local desktop launcher for the `.command` and `.ps1` scripts scattered across your project repos on macOS and Windows: instead of digging through Finder or Explorer for the right one, or losing a dev server in a wall of look-alike terminal tabs, every run lives in one window you can clear when you're done.
+Find the start scripts across your projects, run them from one dashboard, and restart them cleanly with their ports freed. ScriptDock is a local desktop launcher for the `.command` and `.ps1` scripts scattered across your project repos on macOS and Windows: instead of digging through Finder or Explorer for the right one, or losing a dev server in a wall of look-alike terminal tabs, every run lives in one window you can clear when you're done.
 
 It scans the root directories you configure and shows each matching script as a tile in a Scripts pane, beside a Recent pane that merges what's currently running with what you ran recently. Each script runs as a child process ScriptDock owns — double-click to run, double-click again to restart (it confirms, then tree-kills so dev servers free their ports, and relaunches) — with the run's output in an in-app console you can read, type into for scripts that prompt, and dismiss when done. Any action that ends a running script asks first. Scripts launch through a login shell, so their `PATH` matches your terminal.
 

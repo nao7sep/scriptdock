@@ -8,7 +8,7 @@
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <AssemblyTitle>ScriptDock</AssemblyTitle>
-    <Description>A desktop launcher that finds the scripts across your projects and runs and restarts them as processes it owns.</Description>
+    <Description>Find the start scripts across your projects, run them from one dashboard, and restart them cleanly with their ports freed.</Description>
     <RuntimeIdentifiers>osx-arm64;osx-x64;win-x64</RuntimeIdentifiers>
   </PropertyGroup>
 

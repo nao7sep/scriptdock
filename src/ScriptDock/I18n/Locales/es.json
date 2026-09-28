@@ -1,6 +1,6 @@
 {
   "about.closeResult": "Cerrar resultado",
-  "about.description": "Encuentra los scripts que inician tus proyectos, los ejecuta como procesos bajo su control y los reinicia de forma fiable.",
+  "about.description": "Encuentra los scripts de inicio de tus proyectos, ejecútalos desde un panel único y reinícialos limpiamente liberando sus puertos.",
   "about.github": "GitHub",
   "about.licence": "© 2026 Yoshinao Inoguchi — GNU GPL v3 o posterior",
   "about.openGitHubFailed": "No se pudo abrir GitHub. Revisa el registro e inténtalo de nuevo.",

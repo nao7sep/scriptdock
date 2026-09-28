@@ -1,6 +1,6 @@
 {
   "about.closeResult": "결과 닫기",
-  "about.description": "프로젝트를 실행하는 스크립트를 찾아, 직접 소유한 프로세스로 실행하고 안정적으로 다시 시작합니다.",
+  "about.description": "여러 프로젝트의 시작 스크립트를 찾아 하나의 대시보드에서 실행하고, 포트를 해제하며 깔끔하게 다시 시작하세요.",
   "about.github": "GitHub",
   "about.licence": "© 2026 Yoshinao Inoguchi — GNU GPL v3 이상",
   "about.openGitHubFailed": "GitHub을 열지 못했습니다. 로그를 확인한 뒤 다시 시도하십시오.",

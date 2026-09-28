@@ -1,6 +1,6 @@
 {
   "about.closeResult": "关闭结果提示",
-  "about.description": "找出用来启动你各个项目的脚本，把它们作为自己管理的进程来运行，并可靠地重启它们。",
+  "about.description": "在项目中查找启动脚本，通过一个仪表盘运行它们，并干净地重启它们，同时释放端口。",
   "about.github": "GitHub",
   "about.licence": "© 2026 Yoshinao Inoguchi — GNU GPL v3 或更高版本",
   "about.openGitHubFailed": "无法打开 GitHub。请查看日志后重试。",

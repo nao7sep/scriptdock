@@ -1,6 +1,6 @@
 {
   "about.closeResult": "Ergebnis schließen",
-  "about.description": "Findet die Skripte, die Ihre Projekte starten, führt sie als eigene Prozesse aus und startet sie zuverlässig neu.",
+  "about.description": "Finden Sie die Start-Skripte in Ihren Projekten, führen Sie sie über ein einziges Dashboard aus, und starten Sie sie sauber neu, wobei ihre Ports freigegeben werden.",
   "about.github": "GitHub",
   "about.licence": "© 2026 Yoshinao Inoguchi — GNU GPL v3 oder höher",
   "about.openGitHubFailed": "GitHub konnte nicht geöffnet werden. Prüfen Sie das Protokoll und versuchen Sie es erneut.",

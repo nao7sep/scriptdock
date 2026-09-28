@@ -1,6 +1,6 @@
 {
   "about.closeResult": "結果を閉じる",
-  "about.description": "プロジェクトを起動するスクリプトを見つけ、ScriptDock 自身が管理するプロセスとして実行し、確実に再起動します。",
+  "about.description": "プロジェクト間の起動スクリプトを見つけ、ひとつのダッシュボードから実行し、ポートを解放してきれいに再起動しましょう。",
   "about.github": "GitHub",
   "about.licence": "© 2026 Yoshinao Inoguchi — GNU GPL v3 以降",
   "about.openGitHubFailed": "GitHub を開けませんでした。ログを確認して、もう一度お試しください。",
