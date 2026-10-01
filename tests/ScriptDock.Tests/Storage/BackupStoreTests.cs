@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using ScriptDock;
+using ScriptDock.Models;
 using ScriptDock.Storage;
 using Xunit;
 
@@ -196,6 +198,29 @@ public sealed class BackupStoreTests : IDisposable
         Assert.Single(rows);
         Assert.Equal(onDisk, rows[0].Content); // recorded bytes are byte-identical to what landed on disk
         Assert.Equal(docPath, rows[0].Path);   // full absolute path
+    }
+
+    [Fact]
+    public async Task JsonStoreSave_OptedOutStatePersistsWithoutCreatingOrAddingToHistory()
+    {
+        var statePath = Path.Combine(_root, AppPaths.StateFileName);
+        var stateStore = new JsonStore<AppState>(AppPaths.StateFileName, "state", recordBackups: false);
+        var state = new AppState { WindowWidth = 1100, WindowHeight = 760 };
+        await stateStore.SaveAsync(state);
+        Assert.False(File.Exists(StoreFile));
+        Assert.Equal(1100, stateStore.Load().WindowWidth);
+
+        var configStore = new ConfigStore();
+        var config = configStore.Load();
+        config.Hidden = ["/hidden.command"];
+        await configStore.SaveSetsAsync(config, [ConfigSets.Hidden]);
+
+        state.WindowWidth = 1200;
+        await stateStore.SaveAsync(state);
+        Assert.Equal(1200, stateStore.Load().WindowWidth);
+        Assert.Empty(RowsFor(statePath));
+        var configPath = Path.Combine(_root, AppPaths.ConfigFileName);
+        Assert.Equal(File.ReadAllBytes(configPath), Assert.Single(RowsFor(configPath)).Content);
     }
 
     [Fact]

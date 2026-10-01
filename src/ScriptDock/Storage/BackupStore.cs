@@ -10,7 +10,7 @@ namespace ScriptDock.Storage;
 /// The write-through data-backup store (data-backup conventions). It owns one add-only SQLite file,
 /// <c>backups.sqlite3</c>, directly under ScriptDock's storage root (<c>SCRIPTDOCK_DATA_DIR</c> or
 /// <c>~/.scriptdock</c>, resolved in one place by <see cref="StorageRoot"/> — never a hardcoded path).
-/// Every managed <em>text</em> save records the exact bytes it just wrote here, strictly AFTER its atomic
+/// Every recorded managed <em>text</em> save records the exact bytes it just wrote here, strictly AFTER its atomic
 /// rename lands (see <see cref="JsonStore{T}"/>), so the history is always as current as the last save.
 /// There is no startup scan, no periodic pass, no restore path.
 /// </summary>

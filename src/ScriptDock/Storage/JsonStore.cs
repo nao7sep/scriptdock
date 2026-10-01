@@ -17,7 +17,7 @@ namespace ScriptDock.Storage;
 /// </summary>
 /// <remarks>
 /// The app's single managed-text atomic-write choke point, and so the one place the
-/// data-backup hook lives: each save feeds <see cref="BackupStore"/>
+/// data-backup hook lives: each recorded store feeds <see cref="BackupStore"/>
 /// (<c>~/.scriptdock/backups.sqlite3</c>) strictly after its rename lands.
 /// </remarks>
 /// <remarks>
@@ -38,6 +38,7 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
 {
     private readonly string _filePath;
     private readonly string _label;
+    private readonly bool _recordBackups;
 
     // The queue's tail: the next write chains onto this so writes run one at a time, strictly in
     // the order they were queued. Guarded by _queueGate since callers may queue from any thread.
@@ -49,10 +50,12 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
     /// </summary>
     /// <param name="fileName">File name (no directory component), e.g. <c>"config.json"</c>.</param>
     /// <param name="label">Human-readable noun used in log messages, e.g. <c>"config"</c>.</param>
-    public JsonStore(string fileName, string label)
+    /// <param name="recordBackups">False for volatile state; durable text is recorded by default.</param>
+    public JsonStore(string fileName, string label, bool recordBackups = true)
     {
         _filePath = Path.Combine(StorageRoot.Directory, fileName);
         _label = label;
+        _recordBackups = recordBackups;
     }
 
     /// <summary>
@@ -215,6 +218,7 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         // After the rename: the file is exactly where it belongs, so record the bytes we just wrote.
         // Best-effort — Record catches, logs once, and swallows every failure, so a backup problem can
         // never break the save that already succeeded above.
-        BackupStore.Record(_filePath, bytes);
+        if (_recordBackups)
+            BackupStore.Record(_filePath, bytes);
     }
 }

@@ -129,7 +129,8 @@ public partial class App : Application
     private static MainWindowViewModel CreateMainViewModel()
     {
         var configStore = new ConfigStore();
-        var stateStore = new JsonStore<AppState>(AppPaths.StateFileName, "state");
+        // not recorded: volatile presentation and process residue, harmless to lose.
+        var stateStore = new JsonStore<AppState>(AppPaths.StateFileName, "state", recordBackups: false);
 
         var config = configStore.Load();
         var state = stateStore.Load();
