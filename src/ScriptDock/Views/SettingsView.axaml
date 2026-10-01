@@ -86,6 +86,7 @@
         <!-- Extensions -->
         <StackPanel Spacing="8">
             <TextBlock i18n:Localized.Text="settings.extensions" Classes="cardHeader"/>
+            <Button x:Name="ResetExtensions" HorizontalAlignment="Right" i18n:Localized.Content="settings.resetExtensions" Click="OnResetExtensionsClick"/>
             <ListBox x:Name="ExtList" ItemsSource="{Binding Extensions}" Height="80"
                      Classes="boxed"/>
             <DockPanel>
@@ -107,6 +108,7 @@
         <!-- Ignore patterns -->
         <StackPanel Spacing="8">
             <TextBlock i18n:Localized.Text="settings.ignorePatterns" Classes="cardHeader"/>
+            <Button x:Name="ResetIgnorePatterns" HorizontalAlignment="Right" i18n:Localized.Content="settings.resetIgnorePatterns" Click="OnResetIgnorePatternsClick"/>
             <ListBox x:Name="PatternList" ItemsSource="{Binding IgnorePatterns}" Height="96"
                      Classes="boxed"/>
             <DockPanel>

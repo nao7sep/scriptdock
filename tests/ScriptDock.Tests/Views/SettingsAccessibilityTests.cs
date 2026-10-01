@@ -2,6 +2,7 @@ using System.IO;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using ScriptDock.Controls;
 using ScriptDock.Models;
@@ -14,6 +15,24 @@ namespace ScriptDock.Tests.Views;
 
 public sealed class SettingsAccessibilityTests : WindowTest
 {
+    [AvaloniaFact]
+    public void ResetButtons_RestoreTheDraftAndMarkTheirSetsForDeletion()
+    {
+        var config = new AppConfig { Extensions = [".custom"], IgnorePatterns = ["/custom/"] };
+        var vm = new SettingsDialogViewModel(config);
+        var view = new SettingsView { DataContext = vm };
+        Show(new Window { Content = view, Width = 600, Height = 800 });
+
+        view.FindControl<Button>("ResetExtensions")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        view.FindControl<Button>("ResetIgnorePatterns")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+        Assert.Equal([ConfigDefaults.DefaultExtension], vm.Extensions);
+        Assert.Equal(ConfigDefaults.BuiltInIgnorePatterns, vm.IgnorePatterns);
+        Assert.Contains(ConfigSets.Extensions, vm.ResetSetKeys);
+        Assert.Contains(ConfigSets.IgnorePatterns, vm.ResetSetKeys);
+        Assert.True(vm.IsDirty);
+    }
+
     [AvaloniaFact]
     public void Validation_marks_the_field_and_announces_the_associated_explanation()
     {
@@ -42,7 +61,7 @@ public sealed class SettingsAccessibilityTests : WindowTest
 
         vm.AddExtension("bad extension");
         vm.PatternErrorMessage = ScriptDock.I18n.Message.Of("settings.patternMultiline");
-        Assert.True(vm.AddExtension(".command"));
+        Assert.True(vm.AddExtension(".sh"));
         Dispatcher.UIThread.RunJobs();
 
         var extension = view.FindControl<ComposingTextBox>("ExtEntry")!;

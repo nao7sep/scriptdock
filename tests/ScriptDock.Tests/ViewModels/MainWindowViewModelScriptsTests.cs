@@ -56,7 +56,7 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
         state ??= new AppState();
         var vm = new MainWindowViewModel(
-            new FakeJsonStore<AppConfig> { Value = config },
+            new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
             config, state, new ScriptScanner(), new FakeProcessRunner());
         await vm.RescanCommand.ExecuteAsync(null);
@@ -85,7 +85,7 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         };
         var config = new AppConfig { RootDirs = [_root], Extensions = [".command"], RecaptureProcessesOnLaunch = true };
         var vm = new MainWindowViewModel(
-            new FakeJsonStore<AppConfig> { Value = config },
+            new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
             config, state, new ScriptScanner(), new FakeProcessRunner());
 
@@ -111,7 +111,7 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         Touch("still-scanned.command");
         var state = new AppState();
         var vm = new MainWindowViewModel(
-            new FakeJsonStore<AppConfig> { Value = config },
+            new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
             config, state, new ScriptScanner(), runner);
 

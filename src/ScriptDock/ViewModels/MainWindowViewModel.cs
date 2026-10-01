@@ -26,7 +26,7 @@ namespace ScriptDock.ViewModels;
 /// </summary>
 public sealed partial class MainWindowViewModel : ViewModelBase
 {
-    private readonly IJsonStore<AppConfig> _configStore;
+    private readonly IConfigStore _configStore;
     private readonly IJsonStore<AppState> _stateStore;
     private readonly AppConfig _config;
     private readonly AppState _state;
@@ -107,7 +107,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private ScriptItem? _selectedScript;
 
     public MainWindowViewModel(
-        IJsonStore<AppConfig> configStore,
+        IConfigStore configStore,
         IJsonStore<AppState> stateStore,
         AppConfig config,
         AppState state,
@@ -342,9 +342,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             Language = draft.Language.Value,
         };
 
+        var changedKeys = ConfigSets.ChangedKeys(_config, candidate).Where(key => key != ConfigSets.Hidden).ToArray();
+        var resetKeys = draft.ResetSetKeys.ToArray();
         try
         {
-            await _configStore.SaveAsync(candidate);
+            await _configStore.SaveSetsAsync(candidate, changedKeys, resetKeys);
         }
         catch (Exception ex)
         {
@@ -356,7 +358,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _config.RootDirs = candidate.RootDirs;
         _config.Extensions = candidate.Extensions;
         _config.IgnorePatterns = candidate.IgnorePatterns;
-        _config.Hidden = candidate.Hidden;
+        foreach (var key in changedKeys)
+            _config.StoredSetKeys.Add(key);
+        foreach (var key in resetKeys)
+            _config.StoredSetKeys.Remove(key);
         _config.KillProcessesOnClose = candidate.KillProcessesOnClose;
         _config.RecaptureProcessesOnLaunch = candidate.RecaptureProcessesOnLaunch;
         _config.UiFontFamily = candidate.UiFontFamily;
@@ -570,7 +575,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            await _configStore.SaveAsync(_config);
+            await _configStore.SaveSetsAsync(_config, [ConfigSets.Hidden]);
+            _config.StoredSetKeys.Add(ConfigSets.Hidden);
             ResolveOperationalError("toggle hidden");
         }
         catch (Exception ex)

@@ -121,6 +121,8 @@
   "settings.extensionDuplicate": "Questa estensione è già nell’elenco.",
   "settings.extensionEmpty": "Inserisci un’estensione.",
   "settings.extensionSpaces": "Un’estensione non può contenere spazi o interruzioni di riga.",
+  "settings.resetExtensions": "Reimposta estensioni",
+  "settings.resetIgnorePatterns": "Reimposta pattern da ignorare",
   "settings.extensions": "Estensioni",
   "settings.ignorePattern": "Pattern da ignorare",
   "settings.ignorePatterns": "Pattern da ignorare (regex sul percorso completo)",

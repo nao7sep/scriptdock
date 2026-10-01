@@ -121,6 +121,8 @@
   "settings.extensionDuplicate": "Esa extensión ya está en la lista.",
   "settings.extensionEmpty": "Escribe una extensión.",
   "settings.extensionSpaces": "Una extensión no puede contener espacios ni saltos de línea.",
+  "settings.resetExtensions": "Restablecer extensiones",
+  "settings.resetIgnorePatterns": "Restablecer patrones de exclusión",
   "settings.extensions": "Extensiones",
   "settings.ignorePattern": "Patrón de exclusión",
   "settings.ignorePatterns": "Patrones de exclusión (regex sobre la ruta completa)",

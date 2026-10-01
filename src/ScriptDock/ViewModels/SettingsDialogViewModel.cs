@@ -31,6 +31,15 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     private readonly ThemePreference _originalTheme;
     private readonly string _originalLanguage;
 
+    private readonly HashSet<string> _originalStoredKeys;
+    private bool _resetting;
+    private bool _resetExtensions;
+    private bool _resetIgnorePatterns;
+
+    public IReadOnlyCollection<string> ResetSetKeys =>
+        new[] { _resetExtensions ? ConfigSets.Extensions : null, _resetIgnorePatterns ? ConfigSets.IgnorePatterns : null }
+            .OfType<string>().ToArray();
+
     public ObservableCollection<string> RootDirs { get; }
     public ObservableCollection<string> Extensions { get; }
     public ObservableCollection<string> IgnorePatterns { get; }
@@ -88,6 +97,7 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
 
     public SettingsDialogViewModel(AppConfig config)
     {
+        _originalStoredKeys = new(config.StoredSetKeys);
         _originalRoots = config.RootDirs.ToList();
         _originalExtensions = config.Extensions.ToList();
         _originalPatterns = config.IgnorePatterns.ToList();
@@ -108,11 +118,20 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         IgnorePatterns = new ObservableCollection<string>(_originalPatterns);
 
         RootDirs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsDirty));
-        Extensions.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsDirty));
-        IgnorePatterns.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsDirty));
+        Extensions.CollectionChanged += (_, _) =>
+        {
+            if (!_resetting) _resetExtensions = false;
+            OnPropertyChanged(nameof(IsDirty));
+        };
+        IgnorePatterns.CollectionChanged += (_, _) =>
+        {
+            if (!_resetting) _resetIgnorePatterns = false;
+            OnPropertyChanged(nameof(IsDirty));
+        };
     }
 
     public bool IsDirty =>
+        ResetSetKeys.Any(_originalStoredKeys.Contains) ||
         !RootDirs.SequenceEqual(_originalRoots) ||
         !Extensions.SequenceEqual(_originalExtensions) ||
         !IgnorePatterns.SequenceEqual(_originalPatterns) ||
@@ -274,6 +293,29 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         IgnorePatterns.Add(trimmed);
         PatternErrorMessage = null;
         return true;
+    }
+
+    public void ResetExtensions()
+    {
+        _resetting = true;
+        Extensions.Clear();
+        Extensions.Add(ConfigDefaults.DefaultExtension);
+        _resetting = false;
+        _resetExtensions = true;
+        ExtensionErrorMessage = null;
+        OnPropertyChanged(nameof(IsDirty));
+    }
+
+    public void ResetIgnorePatterns()
+    {
+        _resetting = true;
+        IgnorePatterns.Clear();
+        foreach (var pattern in ConfigDefaults.BuiltInIgnorePatterns)
+            IgnorePatterns.Add(pattern);
+        _resetting = false;
+        _resetIgnorePatterns = true;
+        PatternErrorMessage = null;
+        OnPropertyChanged(nameof(IsDirty));
     }
 
     public void RemoveRootDir(string value) => RootDirs.Remove(value);

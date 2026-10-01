@@ -113,6 +113,8 @@
   "settings.extensionDuplicate": "その拡張子はすでに追加されています。",
   "settings.extensionEmpty": "拡張子を入力してください。",
   "settings.extensionSpaces": "拡張子にスペースや改行は使えません。",
+  "settings.resetExtensions": "拡張子をリセット",
+  "settings.resetIgnorePatterns": "除外パターンをリセット",
   "settings.extensions": "拡張子",
   "settings.ignorePattern": "除外パターン",
   "settings.ignorePatterns": "除外パターン（フルパスに対する正規表現）",

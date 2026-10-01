@@ -3,12 +3,7 @@ using System.Collections.Generic;
 
 namespace ScriptDock.Models;
 
-/// <summary>
-/// First-run defaults for <see cref="AppConfig"/>, applied only when no config file
-/// exists yet (see <c>ConfigBootstrap</c>). Never applied to a merely-empty config — a
-/// user who clears every extension or pattern has made a deliberate choice that must
-/// survive a restart.
-/// </summary>
+/// <summary>Live built-in values used whenever a config set has no stored copy.</summary>
 public static class ConfigDefaults
 {
     /// <summary>The launcher extension for the current platform: <c>.command</c> on macOS
@@ -16,7 +11,7 @@ public static class ConfigDefaults
     public static string DefaultExtension => OperatingSystem.IsWindows() ? ".ps1" : ".command";
 
     /// <summary>
-    /// Built-in ignore patterns — regex matched against the full path — seeded on first run. Their
+    /// Built-in ignore patterns — regex matched against the full path — read when the set is absent. Their
     /// sole purpose is scan speed: skip the big auto-generated / downloaded trees of the languages
     /// this is used with (TypeScript/JavaScript, Python, C#, Rust), plus the universal <c>.git</c>,
     /// so a scan of a projects directory doesn't walk package and build output. They are deliberately
@@ -35,12 +30,4 @@ public static class ConfigDefaults
         "/\\.git/",         // any repo — VCS internals (large, never holds your scripts)
     ];
 
-    /// <summary>A config seeded for first run: the platform-default extension and the built-in ignore
-    /// patterns. No root directory is seeded — the scan target is personal, so the user adds their own
-    /// project root(s) in Settings rather than the app guessing a path.</summary>
-    public static AppConfig CreateSeededConfig() => new()
-    {
-        Extensions = [DefaultExtension],
-        IgnorePatterns = [.. BuiltInIgnorePatterns],
-    };
 }

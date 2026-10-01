@@ -35,11 +35,11 @@ public sealed class ModelNormalizationTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "state.json"),
             """{"knownPaths":null,"recentlyRun":[null,{"path":null}],"runningProcesses":[null,{"pid":0,"scriptPath":null}] }""");
 
-        var config = new JsonStore<AppConfig>("config.json", "config").Load();
+        var config = new ConfigStore().Load();
         var state = new JsonStore<AppState>("state.json", "state").Load();
 
         Assert.Equal("", config.UiFontFamily);
-        Assert.Equal(["/ok"], config.RootDirs);
+        Assert.Empty(config.RootDirs);
         Assert.NotNull(config.Extensions);
         Assert.NotNull(config.IgnorePatterns);
         Assert.NotNull(config.Hidden);
@@ -49,13 +49,13 @@ public sealed class ModelNormalizationTests : IDisposable
     }
 
     [Fact]
-    public void Load_MigratesAStoredValueEqualToTheFormerDefaultToEmpty()
+    public void Load_PreservesAnExplicitBundledFontName()
     {
         File.WriteAllText(Path.Combine(_root, "config.json"), """{"uiFontFamily":"Inter"}""");
 
-        var config = new JsonStore<AppConfig>("config.json", "config").Load();
+        var config = new ConfigStore().Load();
 
-        Assert.Equal("", config.UiFontFamily);
+        Assert.Equal("Inter", config.UiFontFamily);
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public sealed class ModelNormalizationTests : IDisposable
     {
         File.WriteAllText(Path.Combine(_root, "config.json"), """{"uiFontFamily":"Helvetica Neue"}""");
 
-        var config = new JsonStore<AppConfig>("config.json", "config").Load();
+        var config = new ConfigStore().Load();
 
         Assert.Equal("Helvetica Neue", config.UiFontFamily);
     }

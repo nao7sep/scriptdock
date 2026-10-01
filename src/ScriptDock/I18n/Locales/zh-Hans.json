@@ -113,6 +113,8 @@
   "settings.extensionDuplicate": "该扩展名已在列表中。",
   "settings.extensionEmpty": "请输入扩展名。",
   "settings.extensionSpaces": "扩展名不能包含空格或换行符。",
+  "settings.resetExtensions": "重置扩展名",
+  "settings.resetIgnorePatterns": "重置忽略模式",
   "settings.extensions": "扩展名",
   "settings.ignorePattern": "忽略模式",
   "settings.ignorePatterns": "忽略模式（对完整路径匹配的正则表达式）",

@@ -214,7 +214,8 @@ public sealed class DialogBoundsTests : WindowTest
             "the body must overflow, or there is no bar to measure against");
 
         var bar = body.GetVisualDescendants().OfType<ScrollBar>()
-            .Single(candidate => candidate.Orientation == Orientation.Vertical && candidate.Bounds.Width > 0);
+            .Single(candidate => candidate.Orientation == Orientation.Vertical && candidate.Bounds.Width > 0
+                && candidate.FindAncestorOfType<ScrollViewer>() == Body(dialog));
         var barLeft = bar.TranslatePoint(new Point(0, 0), dialog)!.Value.X;
         var barRight = bar.TranslatePoint(new Point(bar.Bounds.Width, 0), dialog)!.Value.X;
 
@@ -257,7 +258,8 @@ public sealed class DialogBoundsTests : WindowTest
 
         var declared = (double)dialog.FindResource("ScrollBarSize")!;
         var bar = Body(dialog).GetVisualDescendants().OfType<ScrollBar>()
-            .Single(candidate => candidate.Orientation == Orientation.Vertical && candidate.Bounds.Width > 0);
+            .Single(candidate => candidate.Orientation == Orientation.Vertical && candidate.Bounds.Width > 0
+                && candidate.FindAncestorOfType<ScrollViewer>() == Body(dialog));
         var presenter = dialog.GetVisualDescendants().OfType<ContentPresenter>()
             .Single(candidate => candidate.Name == "DialogContent");
         var inset = dialog.Bounds.Width
@@ -276,7 +278,14 @@ public sealed class DialogBoundsTests : WindowTest
     public void The_content_is_the_same_width_whether_the_body_scrolls_or_not()
     {
         var owner = Show(ShortOwner());
-        var dialog = OpenScrolling(owner);
+        // Keep this shell-only comparison short enough to fit the headless screen without the
+        // cap; the settings form can now naturally exceed that screen after adding its resets.
+        var dialog = new ShortcutsDialog(ShortcutCatalog.Build(owner));
+        Open(dialog, owner);
+        dialog.MaxHeight = dialog.Bounds.Height - 100;
+        dialog.InvalidateMeasure();
+        dialog.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
 
         var body = Body(dialog);
         var presenter = dialog.GetVisualDescendants().OfType<ContentPresenter>()

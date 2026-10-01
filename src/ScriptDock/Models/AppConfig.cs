@@ -1,7 +1,5 @@
 using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json.Serialization;
-using ScriptDock.Storage;
 
 namespace ScriptDock.Models;
 
@@ -9,13 +7,7 @@ namespace ScriptDock.Models;
 /// Durable user preferences, persisted to <c>~/.scriptdock/config.json</c>. These
 /// survive across sessions and are the settings a user deliberately changes.
 /// </summary>
-/// <remarks>
-/// The shape, with empty defaults; <c>ConfigDefaults</c> supplies the first-run seed
-/// (the platform-default extension and the built-in ignore patterns), applied by
-/// <c>ConfigBootstrap</c> only when no config file exists yet. Adding to this model
-/// later is forward-compatible — no field declared here is expected to be removed.
-/// </remarks>
-public sealed class AppConfig : IJsonNormalizable
+public sealed class AppConfig
 {
     /// <summary>The bundled default UI (chrome) font, registered via <c>.WithInterFont()</c>.</summary>
     public const string DefaultUiFontFamily = "Inter";
@@ -51,11 +43,11 @@ public sealed class AppConfig : IJsonNormalizable
     public List<string> RootDirs { get; set; } = [];
 
     /// <summary>File extensions a script must have to be listed (e.g. <c>.command</c>).</summary>
-    public List<string> Extensions { get; set; } = [];
+    public List<string> Extensions { get; set; } = [ConfigDefaults.DefaultExtension];
 
     /// <summary>Regex patterns matched against full paths: a directory match prunes the
     /// subtree, a file match skips that file.</summary>
-    public List<string> IgnorePatterns { get; set; } = [];
+    public List<string> IgnorePatterns { get; set; } = [.. ConfigDefaults.BuiltInIgnorePatterns];
 
     /// <summary>Absolute paths the user has hidden from the default list.</summary>
     public List<string> Hidden { get; set; } = [];
@@ -70,15 +62,8 @@ public sealed class AppConfig : IJsonNormalizable
     /// session, matched by PID and OS start-time; otherwise those are treated as no longer running.</summary>
     public bool RecaptureProcessesOnLaunch { get; set; } = true;
 
-    public void NormalizeAfterLoad()
-    {
-        UiFontFamily = string.Equals(UiFontFamily, DefaultUiFontFamily, System.StringComparison.Ordinal)
-            ? ""
-            : UiFontFamily ?? "";
-        Language = I18n.Languages.NormalizePreference(Language);
-        RootDirs = RootDirs?.OfType<string>().ToList() ?? [];
-        Extensions = Extensions?.OfType<string>().ToList() ?? [];
-        IgnorePatterns = IgnorePatterns?.OfType<string>().ToList() ?? [];
-        Hidden = Hidden?.OfType<string>().ToList() ?? [];
-    }
+    // Presence belongs to the loaded map; it lets a reset remove an explicit copy even when its
+    // current value happens to equal the built-in. It is never persisted as another config set.
+    [JsonIgnore]
+    public HashSet<string> StoredSetKeys { get; } = [];
 }

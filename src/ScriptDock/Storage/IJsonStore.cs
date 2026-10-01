@@ -10,9 +10,7 @@ namespace ScriptDock.Storage;
 public interface IJsonStore<T> where T : class, new()
 {
     /// <summary>
-    /// Whether the persisted document already exists — i.e. this is not a first run.
-    /// Lets callers seed defaults on genuine first use without re-seeding a document
-    /// the user has deliberately emptied.
+    /// Whether the persisted document already exists.
     /// </summary>
     bool Exists { get; }
 

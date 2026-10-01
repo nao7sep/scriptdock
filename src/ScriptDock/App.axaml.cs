@@ -124,16 +124,14 @@ public partial class App : Application
     /// <summary>
     /// Composition root: builds persistence and the view model by hand (no DI
     /// container). Durable preferences live in <c>config.json</c>, volatile session
-    /// state in <c>state.json</c>. On first run <see cref="ConfigBootstrap"/> seeds the
-    /// config from <see cref="ConfigDefaults"/> so the window opens against a usable
-    /// configuration rather than an empty one.
+    /// state in <c>state.json</c>. Absent config sets use live built-ins without writing.
     /// </summary>
     private static MainWindowViewModel CreateMainViewModel()
     {
-        var configStore = new JsonStore<AppConfig>(AppPaths.ConfigFileName, "config");
+        var configStore = new ConfigStore();
         var stateStore = new JsonStore<AppState>(AppPaths.StateFileName, "state");
 
-        var config = ConfigBootstrap.LoadOrSeed(configStore);
+        var config = configStore.Load();
         var state = stateStore.Load();
 
         Log.Info("config", new

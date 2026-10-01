@@ -117,6 +117,8 @@
   "settings.extensionDuplicate": "That extension is already listed.",
   "settings.extensionEmpty": "Enter an extension.",
   "settings.extensionSpaces": "An extension can’t contain spaces or line breaks.",
+  "settings.resetExtensions": "Reset extensions",
+  "settings.resetIgnorePatterns": "Reset ignore patterns",
   "settings.extensions": "Extensions",
   "settings.ignorePattern": "Ignore pattern",
   "settings.ignorePatterns": "Ignore patterns (regex over full path)",

@@ -23,7 +23,7 @@ public sealed class RecentActionAccessibilityTests : WindowTest
         var state = new AppState();
         var runner = new FakeProcessRunner { TerminateResult = false };
         var vm = new MainWindowViewModel(
-            new FakeJsonStore<AppConfig> { Value = config },
+            new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
             config,
             state,

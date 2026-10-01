@@ -23,7 +23,7 @@ public sealed class MainWindowViewModelTests
     {
         config ??= new AppConfig();
         state ??= new AppState();
-        var configStore = new FakeJsonStore<AppConfig> { Value = config };
+        var configStore = new FakeConfigStore { Value = config };
         var stateStore = new FakeJsonStore<AppState> { Value = state };
         var runner = new FakeProcessRunner();
         var vm = new MainWindowViewModel(configStore, stateStore, config, state, new ScriptScanner(), runner);
@@ -249,7 +249,7 @@ public sealed class MainWindowViewModelTests
         var state = new AppState();
         var runner = new FakeProcessRunner();
         var vm = new MainWindowViewModel(
-            new FakeJsonStore<AppConfig> { Value = config },
+            new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state, ThrowOnSave = true },
             config,
             state,
@@ -285,7 +285,7 @@ public sealed class MainWindowViewModelTests
     [Fact]
     public async Task CaptureWindowPlacement_IsPersistedWithPaneSizes()
     {
-        var configStore = new FakeJsonStore<AppConfig>();
+        var configStore = new FakeConfigStore();
         var stateStore = new FakeJsonStore<AppState>();
         var vm = new MainWindowViewModel(
             configStore, stateStore, configStore.Value, stateStore.Value,
@@ -306,7 +306,7 @@ public sealed class MainWindowViewModelTests
     public async Task TryApplySettings_SaveFailureDoesNotPublishCandidate()
     {
         var config = new AppConfig { RootDirs = ["/old"], UiFontFamily = "Inter" };
-        var configStore = new FakeJsonStore<AppConfig> { Value = config, ThrowOnSave = true };
+        var configStore = new FakeConfigStore { Value = config, ThrowOnSave = true };
         var stateStore = new FakeJsonStore<AppState>();
         var vm = new MainWindowViewModel(
             configStore, stateStore, config, new AppState(), new ScriptScanner(), new FakeProcessRunner());
@@ -326,7 +326,7 @@ public sealed class MainWindowViewModelTests
     public async Task SettingsSaveFailure_RemainsOwnedByDialogAndDoesNotPublishGlobalError()
     {
         var config = new AppConfig { RootDirs = [] };
-        var configStore = new FakeJsonStore<AppConfig> { Value = config, ThrowOnSave = true };
+        var configStore = new FakeConfigStore { Value = config, ThrowOnSave = true };
         var stateStore = new FakeJsonStore<AppState>();
         var vm = new MainWindowViewModel(
             configStore, stateStore, config, stateStore.Value, new ScriptScanner(), new FakeProcessRunner());
@@ -361,7 +361,7 @@ public sealed class MainWindowViewModelTests
     {
         var config = new AppConfig { UiFontFamily = "" };
         var vm = new MainWindowViewModel(
-            new FakeJsonStore<AppConfig> { Value = config },
+            new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState>(),
             config,
             new AppState(),
@@ -379,7 +379,7 @@ public sealed class MainWindowViewModelTests
     [Fact]
     public async Task PersistRunningSnapshot_RetriesAfterFailureAndKeysFullIdentity()
     {
-        var configStore = new FakeJsonStore<AppConfig>();
+        var configStore = new FakeConfigStore();
         var stateStore = new FakeJsonStore<AppState> { ThrowOnSave = true };
         var runner = new FakeProcessRunner();
         var process = runner.AddRunning("/x/run.command");

@@ -125,6 +125,8 @@
   "settings.extensionDuplicate": "Это расширение уже в списке.",
   "settings.extensionEmpty": "Введите расширение.",
   "settings.extensionSpaces": "Расширение не может содержать пробелы и переносы строк.",
+  "settings.resetExtensions": "Сбросить расширения",
+  "settings.resetIgnorePatterns": "Сбросить шаблоны исключения",
   "settings.extensions": "Расширения",
   "settings.ignorePattern": "Шаблон исключения",
   "settings.ignorePatterns": "Шаблоны исключения (регулярное выражение по полному пути)",

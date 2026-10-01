@@ -11,9 +11,32 @@ public sealed class SettingsDialogViewModelTests
     private static AppConfig Seed() => new()
     {
         RootDirs = { "/code" },
-        Extensions = { ".command" },
-        IgnorePatterns = { "/node_modules/" },
+        Extensions = [".command"],
+        IgnorePatterns = ["/node_modules/"],
     };
+
+    [Fact]
+    public void ResetAbsentBuiltIns_DoesNotDirtyTheDraft()
+    {
+        var vm = new SettingsDialogViewModel(new AppConfig());
+        vm.ResetExtensions();
+        vm.ResetIgnorePatterns();
+        Assert.False(vm.IsDirty);
+    }
+
+    [Fact]
+    public void EditingAfterReset_WritesTheEditedWholeSet()
+    {
+        var config = new AppConfig { Extensions = [".sh"] };
+        config.StoredSetKeys.Add(ConfigSets.Extensions);
+        var vm = new SettingsDialogViewModel(config);
+        vm.ResetExtensions();
+        Assert.Contains(ConfigSets.Extensions, vm.ResetSetKeys);
+        vm.AddExtension(".custom");
+        Assert.DoesNotContain(ConfigSets.Extensions, vm.ResetSetKeys);
+        Assert.True(vm.IsDirty);
+        Assert.Equal([ConfigDefaults.DefaultExtension, ".custom"], vm.Extensions);
+    }
 
     [Fact]
     public void New_IsNotDirty()

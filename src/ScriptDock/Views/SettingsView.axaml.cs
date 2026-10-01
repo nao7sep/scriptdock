@@ -60,6 +60,9 @@ public partial class SettingsView : UserControl
     private void OnCloseRootPickerResult(object? sender, RoutedEventArgs e) =>
         Vm?.ResolveRootPickerFailure();
 
+    private void OnResetExtensionsClick(object? sender, RoutedEventArgs e) => Vm?.ResetExtensions();
+    private void OnResetIgnorePatternsClick(object? sender, RoutedEventArgs e) => Vm?.ResetIgnorePatterns();
+
     private void OnAddExtClick(object? sender, RoutedEventArgs e) => AddExtension();
     private void OnAddPatternClick(object? sender, RoutedEventArgs e) => AddPattern();
 
