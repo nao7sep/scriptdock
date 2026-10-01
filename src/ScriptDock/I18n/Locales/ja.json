@@ -28,7 +28,7 @@
   "failure.scriptStart": "スクリプトを開始できませんでした。詳細はセッションログを確認してから、もう一度お試しください。",
   "failure.scriptStartPermission": "スクリプトを開始できませんでした。ScriptDock がそのスクリプトを実行できるか確認してから、もう一度お試しください。",
   "failure.startupData": "設定ファイルを読み取れず、退避することもできなかったため、上書きの危険を避けてそのまま残しました。スクリプトには影響ありません。該当ファイルは ScriptDock のデータフォルダにあります。修復または移動してから、ScriptDock を起動し直してください。",
-  "failure.startupStorage": "ScriptDock は保存場所を使用できないため、スクリプトを開くことも設定を変更することもしていません。SCRIPTDOCK_HOME の場所または権限を修復してから、ScriptDock を起動し直してください。",
+  "failure.startupStorage": "ScriptDock は保存場所を使用できないため、スクリプトを開くことも設定を変更することもしていません。SCRIPTDOCK_DATA_DIR の場所または権限を修復してから、ScriptDock を起動し直してください。",
   "guard.refresh": "一覧を更新できませんでした — ログを確認してください。",
   "guard.savePaneSizes": "ペインのサイズを保存できませんでした — ログを確認してください。",
   "guard.showHidden": "非表示のスクリプトを表示できませんでした — ログを確認してください。",

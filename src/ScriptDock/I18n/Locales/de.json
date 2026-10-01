@@ -29,7 +29,7 @@
   "failure.scriptStart": "Das Skript konnte nicht gestartet werden. Einzelheiten finden Sie im Sitzungsprotokoll; versuchen Sie es dann erneut.",
   "failure.scriptStartPermission": "Das Skript konnte nicht gestartet werden. Prüfen Sie, ob ScriptDock es ausführen darf, und versuchen Sie es erneut.",
   "failure.startupData": "Eine Einstellungsdatei konnte nicht gelesen und von ScriptDock auch nicht beiseitegelegt werden; sie blieb daher unverändert, statt ein Überschreiben zu riskieren. Ihre Skripte sind nicht betroffen. Die betroffene Datei liegt im ScriptDock-Datenordner: Reparieren oder verschieben Sie sie und starten Sie ScriptDock erneut.",
-  "failure.startupStorage": "ScriptDock kann seinen Speicherort nicht verwenden und hat daher keine Skripte geöffnet und keine Einstellungen geändert. Reparieren Sie den Speicherort SCRIPTDOCK_HOME oder dessen Berechtigungen und starten Sie ScriptDock erneut.",
+  "failure.startupStorage": "ScriptDock kann seinen Speicherort nicht verwenden und hat daher keine Skripte geöffnet und keine Einstellungen geändert. Reparieren Sie den Speicherort SCRIPTDOCK_DATA_DIR oder dessen Berechtigungen und starten Sie ScriptDock erneut.",
   "guard.refresh": "Die Listen konnten nicht aktualisiert werden — siehe Protokoll.",
   "guard.savePaneSizes": "Die Bereichsgrößen konnten nicht gespeichert werden — siehe Protokoll.",
   "guard.showHidden": "Ausgeblendete Skripte konnten nicht angezeigt werden — siehe Protokoll.",

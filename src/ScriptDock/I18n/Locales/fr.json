@@ -30,7 +30,7 @@
   "failure.scriptStart": "Le script n’a pas pu être démarré. Consultez le journal de session pour en savoir plus, puis réessayez.",
   "failure.scriptStartPermission": "Le script n’a pas pu être démarré. Vérifiez que ScriptDock a le droit de l’exécuter, puis réessayez.",
   "failure.startupData": "Un fichier de paramètres n’a pas pu être lu, et ScriptDock n’a pas pu le mettre de côté non plus\u00a0: il a donc été laissé tel quel plutôt que de risquer de l’écraser. Vos scripts ne sont pas affectés. Le fichier concerné se trouve dans le dossier de données de ScriptDock\u00a0: réparez-le ou déplacez-le, puis relancez ScriptDock.",
-  "failure.startupStorage": "ScriptDock ne peut pas utiliser son emplacement de stockage\u00a0: il n’a donc ni ouvert de scripts ni modifié de paramètres. Réparez l’emplacement SCRIPTDOCK_HOME ou ses autorisations, puis relancez ScriptDock.",
+  "failure.startupStorage": "ScriptDock ne peut pas utiliser son emplacement de stockage\u00a0: il n’a donc ni ouvert de scripts ni modifié de paramètres. Réparez l’emplacement SCRIPTDOCK_DATA_DIR ou ses autorisations, puis relancez ScriptDock.",
   "guard.refresh": "Les listes n’ont pas pu être actualisées — voir le journal.",
   "guard.savePaneSizes": "La taille des volets n’a pas pu être enregistrée — voir le journal.",
   "guard.showHidden": "Les scripts masqués n’ont pas pu être affichés — voir le journal.",

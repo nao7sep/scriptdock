@@ -11,7 +11,7 @@ namespace ScriptDock.Tests.Storage;
 
 /// <summary>
 /// Pins the write-through data-backup store (<see cref="BackupStore"/>) against a throwaway
-/// <c>SCRIPTDOCK_HOME</c> — the one relocation seam, used the same way in tests and production. These
+/// <c>SCRIPTDOCK_DATA_DIR</c> — the one relocation seam, used the same way in tests and production. These
 /// touch a real SQLite file on purpose: the whole point of the feature is a byte-identical on-disk copy,
 /// which a fake would not exercise. What is locked here: the <c>content</c> BLOB is byte-identical
 /// (including a CR/LF and a non-UTF-8 byte, proving it is raw bytes and not decoded text);
@@ -37,7 +37,7 @@ public sealed class BackupStoreTests : IDisposable
     public void Dispose()
     {
         // Release the singleton's handle on this throwaway root's store before the directory is deleted,
-        // and reset it so the next test re-opens against its own SCRIPTDOCK_HOME.
+        // and reset it so the next test re-opens against its own SCRIPTDOCK_DATA_DIR.
         BackupStore.Close();
         Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, _previousHome);
         try { Directory.Delete(_root, recursive: true); }
@@ -215,7 +215,7 @@ public sealed class BackupStoreTests : IDisposable
     public void Record_WhenStoreCannotOpen_DoesNotThrow_AndTheSaveIsUnaffected()
     {
         // Inject an open failure: put a *file* where the storage root's directory must be, so the store's
-        // Directory.CreateDirectory / open cannot succeed against this SCRIPTDOCK_HOME.
+        // Directory.CreateDirectory / open cannot succeed against this SCRIPTDOCK_DATA_DIR.
         var blockedRoot = Path.Combine(Path.GetTempPath(), "scriptdock-tests", NanoId.New() + "-blocked");
         File.WriteAllText(blockedRoot, "not a directory");
         var previous = Environment.GetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable);

@@ -30,7 +30,7 @@
   "failure.scriptStart": "No se pudo iniciar el script. Consulta el registro de sesión para ver los detalles y vuelve a intentarlo.",
   "failure.scriptStartPermission": "No se pudo iniciar el script. Comprueba que ScriptDock pueda ejecutarlo y vuelve a intentarlo.",
   "failure.startupData": "No se pudo leer un archivo de configuración y ScriptDock tampoco pudo apartarlo, así que lo dejó sin cambios en vez de arriesgarse a sobrescribirlo. Tus scripts no se ven afectados. El archivo afectado está en la carpeta de datos de ScriptDock: repáralo o muévelo y vuelve a iniciar ScriptDock.",
-  "failure.startupStorage": "ScriptDock no puede usar su ubicación de almacenamiento, así que no ha abierto scripts ni ha cambiado la configuración. Repara la ubicación SCRIPTDOCK_HOME o sus permisos y vuelve a iniciar ScriptDock.",
+  "failure.startupStorage": "ScriptDock no puede usar su ubicación de almacenamiento, así que no ha abierto scripts ni ha cambiado la configuración. Repara la ubicación SCRIPTDOCK_DATA_DIR o sus permisos y vuelve a iniciar ScriptDock.",
   "guard.refresh": "No se pudieron actualizar las listas — consulta el registro.",
   "guard.savePaneSizes": "No se pudieron guardar los tamaños de los paneles — consulta el registro.",
   "guard.showHidden": "No se pudieron mostrar los scripts ocultos — consulta el registro.",

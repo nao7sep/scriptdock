@@ -7,7 +7,7 @@ using Xunit;
 namespace ScriptDock.Tests.Storage;
 
 /// <summary>
-/// Storage-root resolution: <c>SCRIPTDOCK_HOME</c> relocates the whole tree when set, the default
+/// Storage-root resolution: <c>SCRIPTDOCK_DATA_DIR</c> relocates the whole tree when set, the default
 /// <c>~/.scriptdock</c> is used when it is not, and a relative override resolves against the home
 /// directory (never the working directory) so no path can depend on how the app was launched.
 /// </summary>

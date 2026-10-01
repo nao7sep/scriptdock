@@ -8,7 +8,7 @@ namespace ScriptDock.Storage;
 
 /// <summary>
 /// The write-through data-backup store (data-backup conventions). It owns one add-only SQLite file,
-/// <c>backups.sqlite3</c>, directly under ScriptDock's storage root (<c>SCRIPTDOCK_HOME</c> or
+/// <c>backups.sqlite3</c>, directly under ScriptDock's storage root (<c>SCRIPTDOCK_DATA_DIR</c> or
 /// <c>~/.scriptdock</c>, resolved in one place by <see cref="StorageRoot"/> — never a hardcoded path).
 /// Every managed <em>text</em> save records the exact bytes it just wrote here, strictly AFTER its atomic
 /// rename lands (see <see cref="JsonStore{T}"/>), so the history is always as current as the last save.
@@ -61,7 +61,7 @@ public static class BackupStore
     private static bool _initialized;
 
     /// <summary>The store file under the resolved storage root. Computed on each open (not frozen into a
-    /// constant at type-load) so <c>SCRIPTDOCK_HOME</c> is read after the environment is set, per the
+    /// constant at type-load) so <c>SCRIPTDOCK_DATA_DIR</c> is read after the environment is set, per the
     /// storage-path convention's caution against import-time resolution.</summary>
     public static string StoreFile => Path.Combine(StorageRoot.Directory, FileName);
 
@@ -184,7 +184,7 @@ public static class BackupStore
 
     /// <summary>Close the store (best-effort). For tests that need to release the file handle between
     /// throwaway roots; the app itself lets the process exit close it. Resets the singleton so the next
-    /// <see cref="Record"/> re-opens against the current <c>SCRIPTDOCK_HOME</c>.</summary>
+    /// <see cref="Record"/> re-opens against the current <c>SCRIPTDOCK_DATA_DIR</c>.</summary>
     public static void Close()
     {
         lock (Gate)

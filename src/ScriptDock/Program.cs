@@ -32,7 +32,7 @@ sealed class Program
         App.ComputerLanguages = LanguageBootstrap.Start();
 
         // Resolve and create the storage root before anything else reads or writes it.
-        // An unusable SCRIPTDOCK_HOME (or an unwritable home) is a startup error we report
+        // An unusable SCRIPTDOCK_DATA_DIR (or an unwritable home) is a startup error we report
         // and STOP on — never a silent fallback that lets the app run unable to persist.
         // This runs before Log.Start (the log directory lives under the root) and before
         // StorageRoot.LogsDirectory is ever evaluated, so a malformed override can never

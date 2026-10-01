@@ -11,7 +11,7 @@ namespace ScriptDock.Tests.Storage;
 
 /// <summary>
 /// Exercises the real file I/O of <see cref="JsonStore{T}"/> against a temp
-/// directory redirected via the <c>SCRIPTDOCK_HOME</c> environment variable — the one
+/// directory redirected via the <c>SCRIPTDOCK_DATA_DIR</c> environment variable — the one
 /// relocation seam, used the same way in tests and production. These touch the
 /// disk on purpose: the atomic write is the behaviour that protects the user's saved
 /// data from a torn write, and a fake filesystem would not exercise it. The <c>.bak</c>
@@ -54,7 +54,7 @@ public sealed class JsonStoreTests : IDisposable
     {
         // Close the write-through backup store's process-wide singleton so the file handle on this
         // throwaway root's backups.sqlite3 is released before the directory is deleted, and so the next
-        // test re-opens against its own SCRIPTDOCK_HOME rather than reusing a stale connection.
+        // test re-opens against its own SCRIPTDOCK_DATA_DIR rather than reusing a stale connection.
         BackupStore.Close();
         Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, _previousHome);
         try { Directory.Delete(_root, recursive: true); }

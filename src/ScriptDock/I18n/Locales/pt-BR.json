@@ -30,7 +30,7 @@
   "failure.scriptStart": "Não foi possível iniciar o script. Consulte o log da sessão para ver os detalhes e tente novamente.",
   "failure.scriptStartPermission": "Não foi possível iniciar o script. Verifique se o ScriptDock pode executá-lo e tente novamente.",
   "failure.startupData": "Não foi possível ler um arquivo de configurações, e o ScriptDock também não conseguiu separá-lo, então ele foi mantido sem alterações em vez de correr o risco de ser sobrescrito. Seus scripts não são afetados. O arquivo afetado está na pasta de dados do ScriptDock: repare-o ou mova-o e inicie o ScriptDock novamente.",
-  "failure.startupStorage": "O ScriptDock não consegue usar seu local de armazenamento, por isso não abriu scripts nem alterou configurações. Repare o local de SCRIPTDOCK_HOME ou suas permissões e inicie o ScriptDock novamente.",
+  "failure.startupStorage": "O ScriptDock não consegue usar seu local de armazenamento, por isso não abriu scripts nem alterou configurações. Repare o local de SCRIPTDOCK_DATA_DIR ou suas permissões e inicie o ScriptDock novamente.",
   "guard.refresh": "Não foi possível atualizar as listas — consulte o log.",
   "guard.savePaneSizes": "Não foi possível salvar os tamanhos dos painéis — consulte o log.",
   "guard.showHidden": "Não foi possível mostrar os scripts ocultos — consulte o log.",

@@ -29,7 +29,7 @@
   "failure.scriptStart": "The script could not be started. Check the session log for details, then try again.",
   "failure.scriptStartPermission": "The script could not be started. Check that ScriptDock can run it, then try again.",
   "failure.startupData": "A settings file could not be read, and ScriptDock could not set it aside either, so it was left unchanged rather than risk overwriting it. Your scripts are not affected. The affected file is in the ScriptDock data folder: repair or move it, then start ScriptDock again.",
-  "failure.startupStorage": "ScriptDock cannot use its storage location, so it has not opened scripts or changed settings. Repair the SCRIPTDOCK_HOME location or its permissions, then start ScriptDock again.",
+  "failure.startupStorage": "ScriptDock cannot use its storage location, so it has not opened scripts or changed settings. Repair the SCRIPTDOCK_DATA_DIR location or its permissions, then start ScriptDock again.",
   "guard.refresh": "The lists could not be refreshed — see the log.",
   "guard.savePaneSizes": "The pane sizes could not be saved — see the log.",
   "guard.showHidden": "Hidden scripts could not be shown — see the log.",

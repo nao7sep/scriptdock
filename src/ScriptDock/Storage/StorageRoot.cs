@@ -7,23 +7,23 @@ namespace ScriptDock.Storage;
 
 /// <summary>
 /// The single storage root for the app's own files, under <c>~/.scriptdock/</c>. The root is
-/// <c>SCRIPTDOCK_HOME</c> when that environment variable is set and non-empty (its value is expanded for
+/// <c>SCRIPTDOCK_DATA_DIR</c> when that environment variable is set and non-empty (its value is expanded for
 /// a leading <c>~</c> and for environment references, then made absolute against the home directory),
 /// otherwise the default <c>~/.scriptdock/</c>. Every subpath is derived from whichever root won, so the
 /// one variable relocates the whole tree. The working directory is never a base for any path, per the
-/// storage-path conventions. <c>SCRIPTDOCK_HOME</c> is the one relocation seam, used the same way by
+/// storage-path conventions. <c>SCRIPTDOCK_DATA_DIR</c> is the one relocation seam, used the same way by
 /// tests and in production. The user-configured scan roots are user content, not storage, and are
 /// resolved elsewhere.
 /// </summary>
 public static class StorageRoot
 {
     /// <summary>Environment variable that relocates the entire storage root.</summary>
-    public const string HomeEnvironmentVariable = "SCRIPTDOCK_HOME";
+    public const string HomeEnvironmentVariable = "SCRIPTDOCK_DATA_DIR";
 
     private static readonly object Gate = new();
 
     // The resolved root is cached alongside the raw override value it was computed from, so production
-    // resolves once while a test that changes SCRIPTDOCK_HOME (to a throwaway directory) re-resolves.
+    // resolves once while a test that changes SCRIPTDOCK_DATA_DIR (to a throwaway directory) re-resolves.
     private static string? _cachedOverride;
     private static bool _cachedOverridePresent;
     private static string? _cachedRoot;
