@@ -149,23 +149,6 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     public string ExtensionItemStatus => HasExtensionError ? "Invalid" : string.Empty;
     public string PatternItemStatus => HasPatternError ? "Invalid" : string.Empty;
 
-    public bool AddRootDir(string value)
-    {
-        var trimmed = value.Trim();
-        if (trimmed.Length == 0)
-            return false;
-
-        // Resolve to an absolute path at commit — expand a leading ~ and anchor a
-        // relative entry to the home directory, never the working directory, so it
-        // cannot later resolve against cwd in the scanner (storage-path-conventions).
-        var resolved = ResolveRoot(trimmed);
-        if (RootDirs.Any(root => PathIdentity.Same(root, resolved)))
-            return false;
-
-        RootDirs.Add(resolved);
-        return true;
-    }
-
     public void ReportRootPickerFailure(Exception error) =>
         RootPickerResultMessage = FailurePresentation.RootPicker(error);
 

@@ -11,7 +11,6 @@ namespace ScriptDock.Storage;
 public sealed class ConfigStore : IConfigStore
 {
     private readonly JsonStore<Dictionary<string, JsonElement>> _store = new(AppPaths.ConfigFileName, "config");
-    private readonly HashSet<string> _warnedKeys = [];
 
     public AppConfig Load()
     {
@@ -26,8 +25,7 @@ public sealed class ConfigStore : IConfigStore
             }
             catch (Exception ex) when (ex is JsonException or InvalidOperationException)
             {
-                if (_warnedKeys.Add(key))
-                    Log.Warn("config: invalid set, using built-in", ex, new { key });
+                Log.Warn("config: invalid set, using built-in", ex, new { key });
             }
         }
         return config;

@@ -58,11 +58,6 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         _recordBackups = recordBackups;
     }
 
-    /// <summary>
-    /// True when the live document already exists on disk.
-    /// </summary>
-    public bool Exists => File.Exists(_filePath);
-
     public T Load()
     {
         if (TryLoadFile(_filePath, out var value))

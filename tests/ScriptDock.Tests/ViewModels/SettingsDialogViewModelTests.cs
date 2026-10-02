@@ -67,57 +67,6 @@ public sealed class SettingsDialogViewModelTests
     }
 
     [Fact]
-    public void AddRootDir_TrimsDedupsAndDirties()
-    {
-        var vm = new SettingsDialogViewModel(Seed());
-        var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "scriptdock-more"));
-
-        Assert.True(vm.AddRootDir($"  {root}  "));
-        Assert.Contains(root, vm.RootDirs);
-        Assert.True(vm.IsDirty);
-
-        Assert.False(vm.AddRootDir(root));      // duplicate
-        Assert.False(vm.AddRootDir("   "));     // empty
-    }
-
-    [Fact]
-    public void AddRootDir_ResolvesToAbsoluteUnderHome_NotWorkingDirectory()
-    {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var vm = new SettingsDialogViewModel(Seed());
-
-        // A relative entry anchors to the home directory, never the cwd.
-        Assert.True(vm.AddRootDir("somedir"));
-        var expected = Path.GetFullPath(Path.Combine(home, "somedir"));
-        Assert.Contains(expected, vm.RootDirs);
-        Assert.DoesNotContain("somedir", vm.RootDirs);
-        Assert.NotEqual(
-            Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "somedir")),
-            expected);
-
-        // A ~/x entry expands to <home>/x.
-        Assert.True(vm.AddRootDir("~/x"));
-        Assert.Contains(Path.GetFullPath(Path.Combine(home, "x")), vm.RootDirs);
-
-        // An absolute entry is kept as-is.
-        var absolute = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "scriptdock-root-abs"));
-        Assert.True(vm.AddRootDir(absolute));
-        Assert.Contains(absolute, vm.RootDirs);
-    }
-
-    [Fact]
-    public void AddRootDir_RejectsDuplicateAfterResolution()
-    {
-        var vm = new SettingsDialogViewModel(Seed());
-
-        Assert.True(vm.AddRootDir("somedir"));
-        // The same logical root expressed differently resolves to the same absolute
-        // path and is therefore rejected as a duplicate.
-        Assert.False(vm.AddRootDir("  somedir  "));
-        Assert.False(vm.AddRootDir("~/somedir"));
-    }
-
-    [Fact]
     public void AddPickedRootDir_PreservesLegalLeadingAndTrailingSpaces()
     {
         var vm = new SettingsDialogViewModel(Seed());
@@ -125,6 +74,8 @@ public sealed class SettingsDialogViewModelTests
 
         Assert.True(vm.AddPickedRootDir(picked));
         Assert.Contains(Path.GetFullPath(picked), vm.RootDirs);
+        Assert.True(vm.IsDirty);
+        Assert.False(vm.AddPickedRootDir(picked));
     }
 
     [Fact]

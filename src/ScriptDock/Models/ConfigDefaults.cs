@@ -29,5 +29,4 @@ public static class ConfigDefaults
         "/target/",         // Rust — build output and dependency cache
         "/\\.git/",         // any repo — VCS internals (large, never holds your scripts)
     ];
-
 }

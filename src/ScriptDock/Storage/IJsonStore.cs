@@ -9,11 +9,6 @@ namespace ScriptDock.Storage;
 /// </summary>
 public interface IJsonStore<T> where T : class, new()
 {
-    /// <summary>
-    /// Whether the persisted document already exists.
-    /// </summary>
-    bool Exists { get; }
-
     T Load();
 
     /// <summary>Blocking save, for the startup path (before the window exists) and tests.</summary>
