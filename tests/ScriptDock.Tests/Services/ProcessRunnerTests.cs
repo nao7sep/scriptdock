@@ -346,10 +346,13 @@ public sealed class ProcessRunnerTests : IDisposable
         var script = WriteExecutableScript("ends.command", "exit 3\n");
         var runner = new ProcessRunner(_runsDir);
         var ended = new List<ScriptProcess>();
-        runner.RunEnded += (_, process) => { lock (ended) ended.Add(process); };
+        using var raised = new ManualResetEventSlim();
+        runner.RunEnded += (_, process) => { lock (ended) ended.Add(process); raised.Set(); };
 
         var handle = runner.Start(script);
         Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+        // RunEnded may be raised on the process's exit thread, after the wait has returned.
+        Assert.True(raised.Wait(TimeSpan.FromSeconds(20)));
         handle.Complete();
 
         lock (ended)

@@ -206,45 +206,36 @@ public sealed class ScriptProcess : IDisposable
 
     internal void ConfirmTerminationAttempt()
     {
-        var finalize = false;
         lock (_lifecycleGate)
         {
             if (_finalized == 1)
                 return;
             _terminationDisposition = TerminationDisposition.Confirmed;
-            if (_exitObserved)
-            {
-                _finalized = 1;
-                finalize = true;
-            }
+            if (!_exitObserved)
+                return;
+            Finish(RunState.Terminated);
         }
 
-        if (finalize)
-            FinalizeRun(RunState.Terminated);
+        AnnounceEnd();
     }
 
     internal void CancelTerminationAttempt()
     {
-        var finalize = false;
         lock (_lifecycleGate)
         {
             if (_finalized == 1)
                 return;
             _terminationDisposition = TerminationDisposition.None;
-            if (_exitObserved)
-            {
-                _finalized = 1;
-                finalize = true;
-            }
+            if (!_exitObserved)
+                return;
+            Finish(RunState.Exited);
         }
 
-        if (finalize)
-            FinalizeRun(RunState.Exited);
+        AnnounceEnd();
     }
 
     internal void Complete()
     {
-        RunState state;
         lock (_lifecycleGate)
         {
             if (_finalized == 1)
@@ -256,22 +247,12 @@ public sealed class ScriptProcess : IDisposable
                 _exitObserved = true;
                 return;
             }
-            _finalized = 1;
-            state = _terminationDisposition == TerminationDisposition.Confirmed
+            Finish(_terminationDisposition == TerminationDisposition.Confirmed
                 ? RunState.Terminated
-                : RunState.Exited;
+                : RunState.Exited);
         }
 
-        FinalizeRun(state);
-    }
-
-    private void FinalizeRun(RunState state)
-    {
-        _inputLifetime.Cancel();
-        try { ExitCode = Process?.ExitCode; }
-        catch { /* process state unavailable; leave ExitCode null */ }
-
-        SetState(state);
+        AnnounceEnd();
     }
 
     internal void Fail(I18n.Message message)
@@ -284,16 +265,29 @@ public sealed class ScriptProcess : IDisposable
             if (_finalized == 1)
                 return;
             _finalized = 1;
+            _failureMessage = message;
+            State = RunState.Failed;
         }
 
-        _inputLifetime.Cancel();
-        _failureMessage = message;
-        SetState(RunState.Failed);
+        AnnounceEnd();
     }
 
-    private void SetState(RunState state)
+    // Takes the once-only latch and publishes the terminal state together under the lifecycle gate,
+    // so a caller that finds the latch already taken (a lost race with the Exited event) returns only
+    // once State and ExitCode are final.
+    private void Finish(RunState state)
     {
+        _finalized = 1;
+        try { ExitCode = Process?.ExitCode; }
+        catch { /* process state unavailable; leave ExitCode null */ }
         State = state;
+    }
+
+    // Outside the gate: cancelling the input lifetime runs its callbacks inline, and StateChanged
+    // runs subscriber code.
+    private void AnnounceEnd()
+    {
+        _inputLifetime.Cancel();
         StateChanged?.Invoke(this, EventArgs.Empty);
     }
 
