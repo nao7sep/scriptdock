@@ -18,6 +18,13 @@ public interface IRecordStore
     /// <summary>Records a started run.</summary>
     Task AddRunAsync(RunRecord run);
 
+    /// <summary>Records a run's end.</summary>
+    Task AddRunEndAsync(RunEnd end);
+
+    /// <summary>The recorded runs that have a process id and start time and no recorded end: the runs that
+    /// may still be running.</summary>
+    Task<IReadOnlyList<RunRecord>> ReadUnendedRunsAsync();
+
     /// <summary>Records that the user dismissed a script from the Recent list.</summary>
     Task AddDismissalAsync(string scriptPath);
 

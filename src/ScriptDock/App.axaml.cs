@@ -126,14 +126,14 @@ public partial class App : Application
 
     /// <summary>
     /// Composition root: builds persistence and the view model by hand (no DI
-    /// container). Durable preferences live in <c>config.json</c>, volatile session
-    /// state in <c>state.json</c>, the last scan's paths in <c>known-paths.json</c>, what
+    /// container). Durable preferences live in <c>config.json</c>, view state in
+    /// <c>state.json</c>, the last scan's paths in <c>known-paths.json</c>, what
     /// happened in <c>records.sqlite3</c>. Absent config sets use live built-ins without writing.
     /// </summary>
     private static MainWindowViewModel CreateMainViewModel()
     {
         var configStore = new ConfigStore();
-        // not recorded: volatile presentation and process residue, harmless to lose.
+        // not recorded: view state, harmless to lose.
         var stateStore = new JsonStore<AppState>(AppPaths.StateFileName, "state", recordBackups: false);
         // not recorded: rebuildable, the last scan's result.
         var knownPathsStore = new JsonStore<KnownPaths>(

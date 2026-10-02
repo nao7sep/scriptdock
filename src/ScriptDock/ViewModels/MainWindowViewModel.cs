@@ -146,6 +146,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         ApplyUiFont();
         _runner.ProcessesChanged += (_, _) => Dispatcher.UIThread.Post(RebuildFromProcesses);
+        _runner.RunEnded += (_, process) => _ = RecordRunEndAsync(RunEnd.For(_records.Session, process));
 
         // Everything this view model shows is held as a key, so a language change means every projection
         // has new words: an empty name tells the bindings to re-read them all.
@@ -242,7 +243,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             try
             {
-                _runner.Recapture(_state.RunningProcesses);
+                var gone = _runner.Recapture(await _records.ReadUnendedRunsAsync());
+                foreach (var run in gone)
+                    _ = RecordRunEndAsync(RunEnd.GoneOf(run));
                 ResolveOperationalError("recapture");
             }
             catch (Exception ex)
@@ -302,9 +305,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Stops timers and scanning, ends or detaches owned processes per the close policy, and waits
-    /// for the running-set snapshot to actually land on disk before returning — the window only
-    /// finishes closing, and the app only exits, once this completes.
+    /// Stops timers and scanning, ends or detaches owned processes per the close policy, and waits,
+    /// within a bound, for the output import in flight — the window only finishes closing, and the
+    /// app only exits, once this completes.
     /// </summary>
     public Task ShutdownAsync() => GuardAsync("shutdown", Message.Of("guard.shutdown"), async () =>
     {
@@ -314,51 +317,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _scanCts?.Cancel(); // don't let a slow scan keep the closing window's work alive
         _outputImportCts.Cancel();
         _runner.ShutdownAll(_config.KillProcessesOnClose);
-        await PersistRunningSnapshotAsync(); // record what is still running (or none, if killed) for next launch
         await Task.WhenAny(_outputImport, Task.Delay(OutputImportShutdownWait));
     });
 
-    // The running snapshot last written to disk, as a cheap signature (pid:path per run), so a
-    // process event that doesn't actually change the running set doesn't rewrite state.json. Null
-    // until the first persist; "" means "persisted, nothing running".
-    private string? _persistedRunningSignature;
-
-    // Record the live running set so a relaunch can recapture it (see ProcessRunner.Recapture).
-    // Called whenever the running set may have changed and on shutdown — but only writes when it
-    // actually did, since this is driven by every process event (RebuildFromProcesses). The signature
-    // is recorded only after the save actually lands, so a failed save is retried (with the same or a
-    // newer signature) rather than being mistaken for one already persisted.
-    internal async Task PersistRunningSnapshotAsync()
+    // Called on whichever thread saw the run end, so a failure is logged, not shown; the records' fallback
+    // file keeps the end the database could not take.
+    private async Task RecordRunEndAsync(RunEnd end)
     {
-        var running = _runner.Active
-            .Where(p => p.State == RunState.Running)
-            .Select(ToPersisted)
-            .OfType<PersistedProcess>()
-            .ToList();
-
-        var signature = string.Join("|", running.Select(p =>
-            $"{p.Pid}:{p.OsStartedAt.ToUnixTimeMilliseconds()}:{p.LaunchedAt.ToUnixTimeMilliseconds()}:{p.ScriptPath}:{p.LogFilePath}"));
-        if (signature == _persistedRunningSignature)
-            return;
-
-        _state.RunningProcesses = running;
-        await _stateStore.SaveAsync(_state);
-        _persistedRunningSignature = signature;
-    }
-
-    private static PersistedProcess? ToPersisted(ScriptProcess process)
-    {
-        if (process.Pid is not { } pid || process.OsStartedAt is not { } osStartedAt)
-            return null;
-
-        return new PersistedProcess
+        try
         {
-            Pid = pid,
-            OsStartedAt = osStartedAt,
-            LaunchedAt = process.StartedAt,
-            ScriptPath = process.ScriptPath,
-            LogFilePath = process.LogFilePath ?? string.Empty,
-        };
+            await _records.AddRunEndAsync(end);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("ui: record run end failed", ex, new { session = end.RunSession, run = end.Run });
+        }
     }
 
     public SettingsDialogViewModel CreateSettingsDraft() => new(_config);
@@ -711,10 +684,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             RebuildRecent();
             RebuildScripts(); // refresh the tiles' running dots
         });
-        // Off the UI thread and not awaited here: a process event is last-writer-wins snapshot data,
-        // not something any command call is blocked on, and JsonStore<T> itself keeps every write to
-        // one store serialized and in order regardless of who queues it or how many overlap.
-        ObserveSave(PersistRunningSnapshotAsync(), "persist running snapshot", Message.Of("guard.refresh"));
     }
 
     private void OnProcessStateChanged(object? sender, EventArgs e) =>

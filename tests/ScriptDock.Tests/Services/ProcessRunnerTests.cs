@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -316,40 +317,44 @@ public sealed class ProcessRunnerTests : IDisposable
             Assert.NotNull(handle.Pid);
             Assert.NotNull(handle.OsStartedAt);
 
-            var record = new PersistedProcess
-            {
-                Pid = handle.Pid!.Value,
-                OsStartedAt = handle.OsStartedAt!.Value,
-                LaunchedAt = handle.StartedAt,
-                ScriptPath = handle.ScriptPath,
-                LogFilePath = handle.LogFilePath ?? "",
-            };
+            var run = RunRecord.For("2026-01-01T00:00:00.000Z", handle);
 
             // A fresh runner — as if the app restarted — re-attaches by PID + start-time.
             var relaunched = new ProcessRunner(_runsDir);
-            relaunched.Recapture([record]);
+            Assert.Empty(relaunched.Recapture([run]));
 
             var recaptured = Assert.Single(relaunched.Active);
             Assert.Equal(RunState.Running, recaptured.State);
             Assert.Equal(script, recaptured.ScriptPath);
+            Assert.Equal(run, recaptured.Recaptured);
 
-            // Reused-PID guard: same PID but a different start-time must NOT re-attach.
-            var mismatched = new PersistedProcess
-            {
-                Pid = handle.Pid!.Value,
-                OsStartedAt = handle.OsStartedAt!.Value.AddMinutes(5),
-                LaunchedAt = handle.StartedAt,
-                ScriptPath = handle.ScriptPath,
-                LogFilePath = handle.LogFilePath ?? "",
-            };
+            // Reused-PID guard: same PID but a different start-time must NOT re-attach, and is reported gone.
+            var mismatched = run with { OsStartedAt = run.OsStartedAt!.Value.AddMinutes(5) };
             var picky = new ProcessRunner(_runsDir);
-            picky.Recapture([mismatched]);
+            Assert.Equal([mismatched], picky.Recapture([mismatched]));
             Assert.Empty(picky.Active);
         }
         finally
         {
             await runner.TerminateAsync(handle);
         }
+    }
+
+    [MacOnlyFact]
+    public void RunEnded_IsRaisedOnceWhenARunEnds()
+    {
+        var script = WriteExecutableScript("ends.command", "exit 3\n");
+        var runner = new ProcessRunner(_runsDir);
+        var ended = new List<ScriptProcess>();
+        runner.RunEnded += (_, process) => { lock (ended) ended.Add(process); };
+
+        var handle = runner.Start(script);
+        Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+        handle.Complete();
+
+        lock (ended)
+            Assert.Equal([handle], ended);
+        Assert.Equal(3, RunEnd.For("s", handle).ExitCode);
     }
 
     private string QuietOutput(string name, string content)

@@ -18,12 +18,21 @@ public sealed class FakeRecordStore : IRecordStore
     public string Session { get; set; } = "2026-01-01T00:00:00.000Z";
     public bool ThrowOnWrite { get; set; }
     public List<RunRecord> Runs { get; } = [];
+    public List<RunEnd> RunEnds { get; } = [];
     public List<string> Dismissals { get; } = [];
     private readonly List<(string Path, DateTimeOffset At)> _dismissedAt = [];
     public List<ScanReport> ScanReports { get; } = [];
     public Dictionary<(string Session, int Run), byte[]> Outputs { get; } = [];
 
     public Task AddRunAsync(RunRecord run) => Write(() => Runs.Add(run));
+
+    public Task AddRunEndAsync(RunEnd end) => Write(() => RunEnds.Add(end));
+
+    public Task<IReadOnlyList<RunRecord>> ReadUnendedRunsAsync() =>
+        Task.FromResult<IReadOnlyList<RunRecord>>(Runs
+            .Where(run => run.Pid is not null && run.OsStartedAt is not null)
+            .Where(run => !RunEnds.Any(end => end.RunSession == run.Session && end.Run == run.Run))
+            .ToList());
 
     public Task AddDismissalAsync(string scriptPath) => Write(() =>
     {

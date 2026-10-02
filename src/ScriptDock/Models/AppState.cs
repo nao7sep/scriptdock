@@ -1,14 +1,10 @@
-using System.Collections.Generic;
-using System.Linq;
-using ScriptDock.Storage;
-
 namespace ScriptDock.Models;
 
 /// <summary>
-/// Volatile session state, persisted to <c>~/.scriptdock/state.json</c>. Regenerable UI
-/// state that should not churn the durable preferences in <see cref="AppConfig"/>.
+/// View state, persisted to <c>~/.scriptdock/state.json</c>: regenerable UI state that should not
+/// churn the durable preferences in <see cref="AppConfig"/>.
 /// </summary>
-public sealed class AppState : IJsonNormalizable
+public sealed class AppState
 {
     /// <summary>Whether hidden scripts are currently shown.</summary>
     public bool ShowHidden { get; set; }
@@ -24,17 +20,4 @@ public sealed class AppState : IJsonNormalizable
     public double? WindowWidth { get; set; }
     public double? WindowHeight { get; set; }
     public bool WindowMaximized { get; set; }
-
-    /// <summary>Snapshot of the scripts that were running when this state was last saved, recorded
-    /// so a relaunch can recapture them by PID + start-time. Replaced whenever the running set changes.</summary>
-    public List<PersistedProcess> RunningProcesses { get; set; } = [];
-
-    public void NormalizeAfterLoad()
-    {
-        RunningProcesses = RunningProcesses?.OfType<PersistedProcess>()
-            .Where(process => process.Pid > 0 && !string.IsNullOrEmpty(process.ScriptPath))
-            .ToList() ?? [];
-        foreach (var process in RunningProcesses)
-            process.LogFilePath ??= string.Empty;
-    }
 }

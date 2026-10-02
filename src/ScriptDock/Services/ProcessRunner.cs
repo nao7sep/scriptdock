@@ -15,9 +15,10 @@ namespace ScriptDock.Services;
 /// shell that writes the script's output to a per-run log file (so ScriptDock holds no pipe to
 /// the child's output — its own crash can't break the child's writes); the child's stdin is a
 /// pipe ScriptDock owns for interactive input, and a crash merely EOFs it. Termination kills the whole process tree (npm/dotnet
-/// spawn children) so restart is reliable and ports are freed. The running set is persisted by
-/// the view model (PID + OS start-time) so a relaunch can <see cref="Recapture"/> still-running
-/// children; whether quitting kills them is configurable (default: leave them running).
+/// spawn children) so restart is reliable and ports are freed. Each run's start (with its PID and OS
+/// start-time) and end are recorded by the view model, so a relaunch can <see cref="Recapture"/> the
+/// runs with no recorded end that are still running; whether quitting kills them is configurable
+/// (default: leave them running).
 /// </summary>
 public sealed class ProcessRunner : IProcessRunner
 {
@@ -51,6 +52,9 @@ public sealed class ProcessRunner : IProcessRunner
     /// <summary>Raised when a process is started, restarted, or dismissed.</summary>
     public event EventHandler? ProcessesChanged;
 
+    /// <summary>Raised once when a run ends, on whichever thread observed the end.</summary>
+    public event EventHandler<ScriptProcess>? RunEnded;
+
     public IReadOnlyList<ScriptProcess> Active
     {
         get { lock (_gate) return _processes.ToList(); }
@@ -73,6 +77,7 @@ public sealed class ProcessRunner : IProcessRunner
         var id = Interlocked.Increment(ref _nextId);
         var startedAt = DateTimeOffset.UtcNow;
         var handle = new ScriptProcess(id, scriptPath, startedAt);
+        WatchEnd(handle);
 
         try
         {
@@ -209,23 +214,27 @@ public sealed class ProcessRunner : IProcessRunner
     }
 
     /// <summary>
-    /// Re-attaches to scripts a previous session left running, matched by PID and OS start-time.
-    /// A persisted PID that is gone, has exited, or whose start-time no longer matches (a reused
-    /// PID) is treated as no longer running and skipped. Re-attached handles raise <c>Exited</c>
-    /// and can be tree-killed exactly like ones this session started; the console reads their
-    /// existing run-log.
+    /// Re-attaches to recorded runs that are still running, matched by PID and OS start-time, and
+    /// returns the runs that are not: a PID that is gone, has exited, or whose start-time no longer
+    /// matches (a reused PID). Re-attached handles raise <c>Exited</c> and can be tree-killed exactly
+    /// like ones this session started; the console reads their existing run-log.
     /// </summary>
-    public void Recapture(IReadOnlyList<PersistedProcess> records)
+    public IReadOnlyList<RunRecord> Recapture(IReadOnlyList<RunRecord> runs)
     {
+        var gone = new List<RunRecord>();
         var recaptured = 0;
-        foreach (var record in records)
+        foreach (var run in runs)
         {
-            var process = TryReattach(record.Pid, record.OsStartedAt);
+            var process = run is { Pid: { } pid, OsStartedAt: { } osStartedAt } ? TryReattach(pid, osStartedAt) : null;
             if (process is null)
+            {
+                gone.Add(run);
                 continue;
+            }
 
             var id = Interlocked.Increment(ref _nextId);
-            var handle = new ScriptProcess(id, record.ScriptPath, record.LaunchedAt) { LogFilePath = record.LogFilePath };
+            var handle = new ScriptProcess(id, run.ScriptPath, run.StartedAt) { LogFilePath = run.OutputPath, Recaptured = run };
+            WatchEnd(handle);
             process.EnableRaisingEvents = true;
             process.Exited += (_, _) => handle.Complete();
             handle.Process = process;
@@ -237,11 +246,12 @@ public sealed class ProcessRunner : IProcessRunner
             lock (_gate)
                 _processes.Add(handle);
             recaptured++;
-            Log.Info("run: recaptured", new { id, pid = record.Pid, script = record.ScriptPath });
+            Log.Info("run: recaptured", new { id, session = run.Session, run = run.Run, pid = run.Pid, script = run.ScriptPath });
         }
 
         if (recaptured > 0)
             ProcessesChanged?.Invoke(this, EventArgs.Empty);
+        return gone;
     }
 
     /// <summary>Backstop for a missed <c>Exited</c> event: finalise any process the OS has ended
@@ -298,6 +308,10 @@ public sealed class ProcessRunner : IProcessRunner
         if (imported > 0)
             Log.Info("run output: imported", new { imported, candidates = candidates.Count });
     }
+
+    // A handle's state changes once, when it reaches its terminal state.
+    private void WatchEnd(ScriptProcess handle) =>
+        handle.StateChanged += (_, _) => RunEnded?.Invoke(this, handle);
 
     private List<string> FindQuietOutput(HashSet<string> held, DateTime quietSince) =>
         Directory.Exists(_runsDirectory)
@@ -361,7 +375,7 @@ public sealed class ProcessRunner : IProcessRunner
         }
     }
 
-    // JSON persistence retains Unix-millisecond precision, so accepting a wider window can
+    // The run records keep millisecond precision, so accepting a wider window can
     // mistake a quickly reused PID for the process ScriptDock launched.
     internal static bool StartTimesMatch(DateTimeOffset persisted, DateTimeOffset actual) =>
         persisted.ToUnixTimeMilliseconds() == actual.ToUnixTimeMilliseconds();

@@ -107,6 +107,23 @@ public sealed class RecordStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task The_runs_that_may_still_be_running_are_those_with_a_process_and_no_end()
+    {
+        using var records = new RecordStore(_dir, SessionStart);
+        var open = Run(1, "/runs/1.log");
+        await records.AddRunAsync(open);
+        await records.AddRunAsync(Run(2, "/runs/2.log"));
+        await records.AddRunAsync(Run(3, "/runs/3.log") with { Pid = null, OsStartedAt = null });
+        await records.AddRunEndAsync(new RunEnd(Session, 2, SessionStart.AddMinutes(1), "exited", 0));
+
+        var unended = await records.ReadUnendedRunsAsync();
+
+        Assert.Equal(open, Assert.Single(unended));
+        Assert.Equal(Session, Scalar("SELECT session FROM run_ends"));
+        Assert.Equal(0L, Scalar("SELECT exit_code FROM run_ends"));
+    }
+
+    [Fact]
     public async Task Without_a_database_entries_go_to_the_sessions_fallback_file()
     {
         Directory.CreateDirectory(Path.Combine(_dir, RecordStore.FileName)); // a directory cannot be opened as one

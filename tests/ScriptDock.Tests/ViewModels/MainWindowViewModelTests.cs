@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Diagnostics;
 using System.Threading.Tasks;
 using ScriptDock.Models;
 using ScriptDock.Services;
@@ -400,25 +399,18 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task PersistRunningSnapshot_RetriesAfterFailureAndKeysFullIdentity()
+    public async Task RunEnd_IsRecordedForTheRunThisSessionStarted()
     {
-        var configStore = new FakeConfigStore();
-        var stateStore = new FakeJsonStore<AppState> { ThrowOnSave = true };
-        var runner = new FakeProcessRunner();
-        var process = runner.AddRunning("/x/run.command");
-        process.Process = Process.GetCurrentProcess();
-        process.LogFilePath = "/logs/first.log";
-        var vm = new MainWindowViewModel(
-            configStore, stateStore, new FakeJsonStore<KnownPaths>(), new FakeRecordStore(), configStore.Value, stateStore.Value, new KnownPaths(), new ScriptScanner(), runner);
+        var records = new FakeRecordStore();
+        var (vm, runner) = BuildVm(records: records);
+        await vm.RunScriptCommand.ExecuteAsync(new ScriptItem("/x/end.command") { DisplayName = "end.command" });
+        var started = Assert.Single(runner.Active);
 
-        await Assert.ThrowsAnyAsync<Exception>(() => vm.PersistRunningSnapshotAsync());
-        stateStore.ThrowOnSave = false;
-        await vm.PersistRunningSnapshotAsync();
-        Assert.Equal(1, stateStore.SaveCount);
+        started.Complete();
 
-        process.LogFilePath = "/logs/second.log";
-        await vm.PersistRunningSnapshotAsync();
-        Assert.Equal(2, stateStore.SaveCount);
+        var end = Assert.Single(records.RunEnds);
+        Assert.Equal((records.Session, started.Id), (end.RunSession, end.Run));
+        Assert.Equal("exited", end.State);
     }
 
     [Fact]

@@ -69,23 +69,10 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
     public async Task InitializeAsync_RecapturedRunningProcess_AppearsOnceInRecent()
     {
         var path = Path.Combine(_root, "live.command");
-        // A previous session left this running (persisted) and it is also in the recent list.
+        // A previous session's run has no recorded end, so it may still be running; it is also in the recent list.
         var records = new FakeRecordStore();
-        records.Runs.Add(new RunRecord("2025-12-31T00:00:00.000Z", 1, DateTimeOffset.UtcNow, path, 4242, null, null));
-        var state = new AppState
-        {
-            RunningProcesses =
-            [
-                new PersistedProcess
-                {
-                    Pid = 4242,
-                    OsStartedAt = DateTimeOffset.UtcNow,
-                    LaunchedAt = DateTimeOffset.UtcNow,
-                    ScriptPath = path,
-                    LogFilePath = "",
-                },
-            ],
-        };
+        records.Runs.Add(new RunRecord("2025-12-31T00:00:00.000Z", 1, DateTimeOffset.UtcNow, path, 4242, DateTimeOffset.UtcNow, null));
+        var state = new AppState();
         var config = new AppConfig { RootDirs = [_root], Extensions = [".command"], RecaptureProcessesOnLaunch = true };
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config },
@@ -100,6 +87,43 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         var entry = Assert.Single(vm.Recent, e => e.Path == path);
         Assert.True(entry.IsRunning);
         Assert.Equal(1, vm.RunningCount);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_RecapturesOnlyUnendedRuns_AndRecordsTheGoneOnesEnd()
+    {
+        var live = Path.Combine(_root, "live.command");
+        var ended = Path.Combine(_root, "ended.command");
+        var gone = Path.Combine(_root, "gone.command");
+        var records = new FakeRecordStore();
+        records.Runs.Add(new RunRecord("2025-12-31T00:00:00.000Z", 1, DateTimeOffset.UtcNow, live, 11, DateTimeOffset.UtcNow, null));
+        records.Runs.Add(new RunRecord("2025-12-31T00:00:00.000Z", 2, DateTimeOffset.UtcNow, ended, 12, DateTimeOffset.UtcNow, null));
+        records.Runs.Add(new RunRecord("2025-12-31T00:00:00.000Z", 3, DateTimeOffset.UtcNow, gone, 13, DateTimeOffset.UtcNow, null));
+        records.RunEnds.Add(new RunEnd("2025-12-31T00:00:00.000Z", 2, DateTimeOffset.UtcNow, "exited", 0));
+        var runner = new FakeProcessRunner();
+        runner.GoneScripts.Add(gone);
+        var state = new AppState();
+        var config = new AppConfig { RootDirs = [_root], Extensions = [".command"], RecaptureProcessesOnLaunch = true };
+        var vm = new MainWindowViewModel(
+            new FakeConfigStore { Value = config },
+            new FakeJsonStore<AppState> { Value = state },
+            new FakeJsonStore<KnownPaths>(),
+            records,
+            config, state, new KnownPaths(), new ScriptScanner(), runner);
+
+        await vm.InitializeAsync();
+
+        Assert.Equal([live, gone], runner.RecaptureCalls.Select(run => run.ScriptPath));
+        var goneEnd = Assert.Single(records.RunEnds, end => end.Run == 3);
+        Assert.Equal(RunEnd.Gone, goneEnd.State);
+        Assert.Null(goneEnd.ExitCode);
+
+        // The recaptured run's end names the run it was recorded as, not this session's handle.
+        var recaptured = Assert.Single(runner.Active);
+        recaptured.Complete();
+        var liveEnd = Assert.Single(records.RunEnds, end => end.Run == 1);
+        Assert.Equal("2025-12-31T00:00:00.000Z", liveEnd.RunSession);
+        Assert.Equal("exited", liveEnd.State);
     }
 
     [Fact]

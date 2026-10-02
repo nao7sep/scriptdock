@@ -17,6 +17,9 @@ public interface IProcessRunner
     /// <summary>Raised when a process is started, restarted, or dismissed.</summary>
     event EventHandler? ProcessesChanged;
 
+    /// <summary>Raised once when a run ends, on whichever thread observed the end.</summary>
+    event EventHandler<ScriptProcess>? RunEnded;
+
     /// <summary>The current set of runs ScriptDock owns (running and finished-but-not-dismissed).</summary>
     IReadOnlyList<ScriptProcess> Active { get; }
 
@@ -25,7 +28,7 @@ public interface IProcessRunner
     Task<ScriptProcess?> RestartAsync(ScriptProcess handle);
     void Dismiss(ScriptProcess handle);
     void ShutdownAll(bool kill);
-    void Recapture(IReadOnlyList<PersistedProcess> records);
+    IReadOnlyList<RunRecord> Recapture(IReadOnlyList<RunRecord> runs);
     void ReconcileExited();
     Task ImportFinishedOutputAsync(IRecordStore records, CancellationToken cancellationToken);
 }

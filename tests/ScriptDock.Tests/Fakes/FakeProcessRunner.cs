@@ -23,7 +23,7 @@ public sealed class FakeProcessRunner : IProcessRunner
     public List<ScriptProcess> TerminateCalls { get; } = new();
     public List<ScriptProcess> RestartCalls { get; } = new();
     public List<ScriptProcess> DismissCalls { get; } = new();
-    public List<PersistedProcess> RecaptureCalls { get; } = new();
+    public List<RunRecord> RecaptureCalls { get; } = new();
     public bool TerminateResult { get; set; } = true;
     public bool RestartResult { get; set; } = true;
     public Exception? RecaptureException { get; set; }
@@ -35,6 +35,8 @@ public sealed class FakeProcessRunner : IProcessRunner
 
     public event EventHandler? ProcessesChanged { add { } remove { } }
 
+    public event EventHandler<ScriptProcess>? RunEnded;
+
     public IReadOnlyList<ScriptProcess> Active => _active;
 
     /// <summary>Arrange a running process for a path directly (a ScriptProcess is Running on creation).
@@ -43,7 +45,7 @@ public sealed class FakeProcessRunner : IProcessRunner
     public ScriptProcess AddRunning(string scriptPath, bool acceptsInput = false)
     {
         var process = new ScriptProcess(_nextId++, scriptPath, DateTimeOffset.UtcNow) { AcceptsInput = acceptsInput };
-        _active.Add(process);
+        Add(process);
         return process;
     }
 
@@ -78,19 +80,37 @@ public sealed class FakeProcessRunner : IProcessRunner
 
     public void ShutdownAll(bool kill) { }
 
-    /// <summary>Re-attaches each persisted record as a Running process, mirroring the real runner so
-    /// the view model's recapture→Recent wiring is exercisable. A recaptured run owns no stdin pipe,
-    /// so AcceptsInput stays false; it has no live OS Process, so Pid/OsStartedAt read null.</summary>
-    public void Recapture(IReadOnlyList<PersistedProcess> records)
+    /// <summary>The scripts whose recorded runs <see cref="Recapture"/> reports gone instead of re-attaching.</summary>
+    public HashSet<string> GoneScripts { get; } = new();
+
+    /// <summary>Re-attaches each recorded run as a Running process, mirroring the real runner so
+    /// the view model's recapture→Recent wiring is exercisable, except the runs of <see cref="GoneScripts"/>,
+    /// which it returns. A recaptured run owns no stdin pipe, so AcceptsInput stays false; it has no live
+    /// OS Process, so Pid/OsStartedAt read null.</summary>
+    public IReadOnlyList<RunRecord> Recapture(IReadOnlyList<RunRecord> runs)
     {
         if (RecaptureException is not null)
             throw RecaptureException;
-        RecaptureCalls.AddRange(records);
-        foreach (var record in records)
-            _active.Add(new ScriptProcess(_nextId++, record.ScriptPath, record.LaunchedAt) { LogFilePath = record.LogFilePath });
+        RecaptureCalls.AddRange(runs);
+        var gone = new List<RunRecord>();
+        foreach (var run in runs)
+        {
+            if (GoneScripts.Contains(run.ScriptPath))
+                gone.Add(run);
+            else
+                Add(new ScriptProcess(_nextId++, run.ScriptPath, run.StartedAt) { LogFilePath = run.OutputPath, Recaptured = run });
+        }
+        return gone;
     }
 
     public void ReconcileExited() { }
+
+    // As the real runner does, a handle's end raises RunEnded.
+    private void Add(ScriptProcess process)
+    {
+        process.StateChanged += (_, _) => RunEnded?.Invoke(this, process);
+        _active.Add(process);
+    }
 
     public int ImportCalls { get; private set; }
 

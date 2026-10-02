@@ -43,12 +43,16 @@ public sealed class ScriptProcess : IDisposable
     /// <summary>Path of the file the child shell writes stdout+stderr to; null if the run never started.</summary>
     public string? LogFilePath { get; internal set; }
 
+    /// <summary>The recorded run a relaunch found still running and re-attached this handle to; null for a
+    /// run this session started.</summary>
+    public RunRecord? Recaptured { get; init; }
+
     /// <summary>Whether this run accepts stdin input from the app. True only for runs this session
     /// started (which own a redirected stdin pipe); a recaptured run has no input channel.</summary>
     public bool AcceptsInput { get; internal set; }
 
     /// <summary>OS process id while running, or null if it never started or is already gone.
-    /// Persisted with <see cref="OsStartedAt"/> so a relaunch can recapture this exact run.</summary>
+    /// Recorded with <see cref="OsStartedAt"/> so a relaunch can recapture this exact run.</summary>
     public int? Pid
     {
         get { try { return Process?.Id; } catch { return null; } }

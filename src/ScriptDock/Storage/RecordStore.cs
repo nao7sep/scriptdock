@@ -15,8 +15,8 @@ using ScriptDock.Services;
 namespace ScriptDock.Storage;
 
 /// <summary>
-/// <c>records.sqlite3</c> under the storage root: log lines, runs, run output, dismissals from the Recent list
-/// and scan reports, each carrying
+/// <c>records.sqlite3</c> under the storage root: log lines, runs, run ends, run output, dismissals from the
+/// Recent list and scan reports, each carrying
 /// the session it came from, per the data-lifecycle-conventions' Records section and the logging-conventions.
 /// One thread owns the connection and runs every write and read in the order it was queued, so no caller
 /// waits on the disk. A write that fails is appended to this session's plain text file under <c>logs/</c>,
@@ -31,7 +31,7 @@ public sealed class RecordStore : IRecordStore, IDisposable
 
     // Every table carries the session (one process launch, by its start time) and the time of its record.
     // A run is named by its session and in-session run id; its output and the log lines about it carry the
-    // same pair.
+    // same pair, and its end names it by that pair while carrying the session that saw it end.
     private const string Schema = """
         CREATE TABLE IF NOT EXISTS logs (
           id      INTEGER PRIMARY KEY,
@@ -54,6 +54,16 @@ public sealed class RecordStore : IRecordStore, IDisposable
           UNIQUE (session, run)
         );
         CREATE INDEX IF NOT EXISTS idx_runs_output_path ON runs (output_path);
+        CREATE TABLE IF NOT EXISTS run_ends (
+          id          INTEGER PRIMARY KEY,
+          session     TEXT NOT NULL,
+          time        TEXT NOT NULL,
+          run_session TEXT NOT NULL,
+          run         INTEGER NOT NULL,
+          state       TEXT NOT NULL,
+          exit_code   INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_run_ends_run ON run_ends (run_session, run);
         CREATE TABLE IF NOT EXISTS run_outputs (
           id      INTEGER PRIMARY KEY,
           session TEXT NOT NULL,
@@ -149,6 +159,31 @@ public sealed class RecordStore : IRecordStore, IDisposable
             return true;
         }, () => RecordLine("run", run));
 
+    public Task AddRunEndAsync(RunEnd end) =>
+        Enqueue(connection =>
+        {
+            Execute(connection,
+                "INSERT INTO run_ends (session, time, run_session, run, state, exit_code) " +
+                "VALUES ($session, $time, $runSession, $run, $state, $exitCode)",
+                ("$session", Session), ("$time", TimestampConventions.IsoMillis(end.EndedAt)),
+                ("$runSession", end.RunSession), ("$run", end.Run), ("$state", end.State), ("$exitCode", end.ExitCode));
+            return true;
+        }, () => RecordLine("runEnd", end));
+
+    public Task<IReadOnlyList<RunRecord>> ReadUnendedRunsAsync() =>
+        Enqueue<IReadOnlyList<RunRecord>>(connection =>
+        {
+            var runs = new List<RunRecord>();
+            using var command = connection.CreateCommand();
+            command.CommandText =
+                $"SELECT {RunColumns} FROM runs WHERE pid IS NOT NULL AND os_started_at IS NOT NULL " +
+                "AND NOT EXISTS (SELECT 1 FROM run_ends WHERE run_ends.run_session = runs.session AND run_ends.run = runs.run)";
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+                runs.Add(ReadRun(reader));
+            return runs;
+        }, fallbackLine: null);
+
     public Task AddDismissalAsync(string scriptPath)
     {
         var time = TimestampConventions.IsoMillis(DateTimeOffset.UtcNow);
@@ -182,24 +217,14 @@ public sealed class RecordStore : IRecordStore, IDisposable
         {
             var found = new Dictionary<string, RunRecord>(PathIdentity.Comparer);
             using var command = connection.CreateCommand();
-            command.CommandText =
-                "SELECT session, run, time, script, pid, os_started_at, output_path FROM runs WHERE output_path = $path";
+            command.CommandText = $"SELECT {RunColumns} FROM runs WHERE output_path = $path";
             var path = command.Parameters.Add("$path", SqliteType.Text);
             foreach (var outputPath in outputPaths)
             {
                 path.Value = outputPath;
                 using var reader = command.ExecuteReader();
                 if (reader.Read())
-                {
-                    found[outputPath] = new RunRecord(
-                        reader.GetString(0),
-                        reader.GetInt32(1),
-                        ParseTime(reader.GetString(2)),
-                        reader.GetString(3),
-                        reader.IsDBNull(4) ? null : reader.GetInt32(4),
-                        reader.IsDBNull(5) ? null : ParseTime(reader.GetString(5)),
-                        reader.IsDBNull(6) ? null : reader.GetString(6));
-                }
+                    found[outputPath] = ReadRun(reader);
             }
             return found;
         }, fallbackLine: null);
@@ -355,6 +380,18 @@ public sealed class RecordStore : IRecordStore, IDisposable
             latest.Add((reader.GetString(0), ParseTime(reader.GetString(1))));
         return latest;
     }
+
+    private const string RunColumns = "session, run, time, script, pid, os_started_at, output_path";
+
+    private static RunRecord ReadRun(SqliteDataReader reader) =>
+        new(
+            reader.GetString(0),
+            reader.GetInt32(1),
+            ParseTime(reader.GetString(2)),
+            reader.GetString(3),
+            reader.IsDBNull(4) ? null : reader.GetInt32(4),
+            reader.IsDBNull(5) ? null : ParseTime(reader.GetString(5)),
+            reader.IsDBNull(6) ? null : reader.GetString(6));
 
     private static DateTimeOffset ParseTime(string value) =>
         DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal);
