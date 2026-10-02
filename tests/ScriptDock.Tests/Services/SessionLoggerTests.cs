@@ -10,11 +10,8 @@ namespace ScriptDock.Tests.Services;
 
 public sealed class SessionLoggerTests
 {
-    private static readonly IReadOnlySet<string> Denied =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "token", "password", "secret" };
-
     private static SessionLogger NewLogger(StringWriter sw, bool debug = true) =>
-        new(sw, debug, Denied, leaveOpen: true);
+        new(sw, debug, leaveOpen: true);
 
     private static List<JsonNode> Lines(StringWriter sw)
     {
@@ -99,14 +96,14 @@ public sealed class SessionLoggerTests
     }
 
     [Fact]
-    public void Denied_field_values_are_redacted()
+    public void Field_values_are_written_as_given()
     {
         var sw = new StringWriter();
         NewLogger(sw).Info("login", new { user = "bob", password = "hunter2" });
 
         var line = Assert.Single(Lines(sw));
         Assert.Equal("bob", line["user"]!.GetValue<string>());
-        Assert.Equal(LogRedactor.Marker, line["password"]!.GetValue<string>());
+        Assert.Equal("hunter2", line["password"]!.GetValue<string>());
     }
 
     [Fact]
@@ -209,7 +206,7 @@ public sealed class SessionLoggerTests
     public void Flush_failure_is_reported_to_console_without_throwing()
     {
         var writer = new ThrowingFlushWriter();
-        var log = new SessionLogger(writer, debugEnabled: true, Denied, leaveOpen: true);
+        var log = new SessionLogger(writer, debugEnabled: true, leaveOpen: true);
         var originalErr = Console.Error;
         var console = new StringWriter();
         Console.SetError(console);
@@ -231,7 +228,7 @@ public sealed class SessionLoggerTests
     public void Dispose_final_flush_failure_is_reported_to_console_without_throwing()
     {
         var writer = new ThrowingFlushWriter();
-        var log = new SessionLogger(writer, debugEnabled: true, Denied, leaveOpen: true);
+        var log = new SessionLogger(writer, debugEnabled: true, leaveOpen: true);
         var originalErr = Console.Error;
         var console = new StringWriter();
         Console.SetError(console);
