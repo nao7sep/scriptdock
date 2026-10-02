@@ -177,7 +177,7 @@ public sealed class ConfigStoreTests : IDisposable
     }
 
     private static MainWindowViewModel NewViewModel(ConfigStore store, AppConfig config) =>
-        new(store, new FakeJsonStore<AppState>(), new FakeRecordStore(), config, new AppState(), new ScriptScanner(), new FakeProcessRunner());
+        new(store, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeRecordStore(), config, new AppState(), new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
 
     private string[] ReadKeys()
     {

@@ -15,7 +15,8 @@ using ScriptDock.Services;
 namespace ScriptDock.Storage;
 
 /// <summary>
-/// <c>records.sqlite3</c> under the storage root: log lines, runs, run output and scan reports, each carrying
+/// <c>records.sqlite3</c> under the storage root: log lines, runs, run output, dismissals from the Recent list
+/// and scan reports, each carrying
 /// the session it came from, per the data-lifecycle-conventions' Records section and the logging-conventions.
 /// One thread owns the connection and runs every write and read in the order it was queued, so no caller
 /// waits on the disk. A write that fails is appended to this session's plain text file under <c>logs/</c>,
@@ -60,6 +61,12 @@ public sealed class RecordStore : IRecordStore, IDisposable
           time    TEXT NOT NULL,
           output  BLOB NOT NULL,
           UNIQUE (session, run)
+        );
+        CREATE TABLE IF NOT EXISTS dismissals (
+          id      INTEGER PRIMARY KEY,
+          session TEXT NOT NULL,
+          time    TEXT NOT NULL,
+          script  TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS scan_reports (
           id      INTEGER PRIMARY KEY,
@@ -141,6 +148,25 @@ public sealed class RecordStore : IRecordStore, IDisposable
                 ("$outputPath", run.OutputPath));
             return true;
         }, () => RecordLine("run", run));
+
+    public Task AddDismissalAsync(string scriptPath)
+    {
+        var time = TimestampConventions.IsoMillis(DateTimeOffset.UtcNow);
+        return Enqueue(connection =>
+        {
+            Execute(connection,
+                "INSERT INTO dismissals (session, time, script) VALUES ($session, $time, $script)",
+                ("$session", Session), ("$time", time), ("$script", scriptPath));
+            return true;
+        }, () => RecordLine("dismissal", new { time, script = scriptPath }));
+    }
+
+    public Task<IReadOnlyList<RecentRun>> ReadRecentAsync() =>
+        Enqueue<IReadOnlyList<RecentRun>>(connection =>
+            RecentRuns.From(
+                LatestByScript(connection, "SELECT script, MAX(time) FROM runs GROUP BY script"),
+                LatestByScript(connection, "SELECT script, MAX(time) FROM dismissals GROUP BY script")),
+            fallbackLine: null);
 
     public void AddScanReport(ScanReport report)
     {
@@ -318,6 +344,17 @@ public sealed class RecordStore : IRecordStore, IDisposable
             ["message"] = message,
             ["error"] = SessionLogger.BuildErrorNode(failure),
         }.ToJsonString(LineOptions);
+
+    private static List<(string Path, DateTimeOffset At)> LatestByScript(SqliteConnection connection, string sql)
+    {
+        var latest = new List<(string Path, DateTimeOffset At)>();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+            latest.Add((reader.GetString(0), ParseTime(reader.GetString(1))));
+        return latest;
+    }
 
     private static DateTimeOffset ParseTime(string value) =>
         DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal);

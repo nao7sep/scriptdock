@@ -58,8 +58,9 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
+            new FakeJsonStore<KnownPaths>(),
             new FakeRecordStore(),
-            config, state, new ScriptScanner(), new FakeProcessRunner());
+            config, state, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
         await vm.RescanCommand.ExecuteAsync(null);
         return vm;
     }
@@ -69,9 +70,10 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
     {
         var path = Path.Combine(_root, "live.command");
         // A previous session left this running (persisted) and it is also in the recent list.
+        var records = new FakeRecordStore();
+        records.Runs.Add(new RunRecord("2025-12-31T00:00:00.000Z", 1, DateTimeOffset.UtcNow, path, 4242, null, null));
         var state = new AppState
         {
-            RecentlyRun = [new RecentRun { Path = path, RanAt = DateTimeOffset.UtcNow }],
             RunningProcesses =
             [
                 new PersistedProcess
@@ -88,10 +90,11 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
-            new FakeRecordStore(),
-            config, state, new ScriptScanner(), new FakeProcessRunner());
+            new FakeJsonStore<KnownPaths>(),
+            records,
+            config, state, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
 
-        await vm.InitializeAsync(); // recapture → RebuildRecent → scan
+        await vm.InitializeAsync(); // recapture → read Recent → RebuildRecent → scan
 
         // The recaptured run and its recent entry share a path → exactly one row, shown running.
         var entry = Assert.Single(vm.Recent, e => e.Path == path);
@@ -115,8 +118,9 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
+            new FakeJsonStore<KnownPaths>(),
             new FakeRecordStore(),
-            config, state, new ScriptScanner(), runner);
+            config, state, new KnownPaths(), new ScriptScanner(), runner);
 
         await vm.InitializeAsync();
 

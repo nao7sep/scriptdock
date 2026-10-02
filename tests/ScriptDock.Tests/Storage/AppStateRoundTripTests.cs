@@ -8,18 +8,17 @@ namespace ScriptDock.Tests.Storage;
 
 /// <summary>
 /// Confirms <see cref="AppState"/> survives the real serializer options (<see
-/// cref="JsonOptions.Default"/>), including the Phase 1 additions, and that timestamps
-/// land on disk in the conventional millisecond-<c>Z</c> form.
+/// cref="JsonOptions.Default"/>), and that timestamps land on disk in the conventional
+/// millisecond-<c>Z</c> form.
 /// </summary>
 public sealed class AppStateRoundTripTests
 {
     [Fact]
-    public void RoundTrips_StateAndRecentRuns()
+    public void RoundTrips_State()
     {
         var state = new AppState
         {
             ShowHidden = true,
-            KnownPaths = { "/a/x.command", "/b/y.command" },
             // The persisted pane intents (Recent column width / console row height) the window
             // restores and re-clamps on load; they must survive the serializer untouched.
             RecentPaneWidth = 420,
@@ -29,14 +28,6 @@ public sealed class AppStateRoundTripTests
             WindowWidth = 1100.5,
             WindowHeight = 720.25,
             WindowMaximized = true,
-            RecentlyRun =
-            {
-                new RecentRun
-                {
-                    Path = "/a/x.command",
-                    RanAt = new DateTimeOffset(2026, 6, 17, 0, 15, 41, 123, TimeSpan.Zero),
-                },
-            },
             RunningProcesses =
             {
                 new PersistedProcess
@@ -54,7 +45,6 @@ public sealed class AppStateRoundTripTests
         var back = JsonSerializer.Deserialize<AppState>(json, JsonOptions.Default)!;
 
         Assert.True(back.ShowHidden);
-        Assert.Equal(state.KnownPaths, back.KnownPaths);
         Assert.Equal(420, back.RecentPaneWidth);
         Assert.Equal(240, back.ConsoleHeight);
         Assert.Equal(-1400, back.WindowPositionX);
@@ -62,9 +52,6 @@ public sealed class AppStateRoundTripTests
         Assert.Equal(1100.5, back.WindowWidth);
         Assert.Equal(720.25, back.WindowHeight);
         Assert.True(back.WindowMaximized);
-        Assert.Single(back.RecentlyRun);
-        Assert.Equal("/a/x.command", back.RecentlyRun[0].Path);
-        Assert.Equal(state.RecentlyRun[0].RanAt, back.RecentlyRun[0].RanAt);
         Assert.Single(back.RunningProcesses);
         Assert.Equal(4321, back.RunningProcesses[0].Pid);
         Assert.Equal("/a/x.command", back.RunningProcesses[0].ScriptPath);
@@ -72,17 +59,18 @@ public sealed class AppStateRoundTripTests
     }
 
     [Fact]
-    public void RecentRun_Timestamp_StoredAsIsoMillisZ()
+    public void RunningProcess_Timestamp_StoredAsIsoMillisZ()
     {
         var state = new AppState
         {
-            RecentlyRun =
+            RunningProcesses =
             {
-                new RecentRun
+                new PersistedProcess
                 {
-                    Path = "/a/x.command",
+                    Pid = 4321,
+                    ScriptPath = "/a/x.command",
                     // 09:15:41.123 +09:00 must persist as 00:15:41.123Z.
-                    RanAt = new DateTimeOffset(2026, 6, 17, 9, 15, 41, 123, TimeSpan.FromHours(9)),
+                    LaunchedAt = new DateTimeOffset(2026, 6, 17, 9, 15, 41, 123, TimeSpan.FromHours(9)),
                 },
             },
         };

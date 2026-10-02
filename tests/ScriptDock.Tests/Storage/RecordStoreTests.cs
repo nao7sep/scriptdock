@@ -89,6 +89,24 @@ public sealed class RecordStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Recent_is_each_scripts_latest_run_that_no_later_dismissal_took_off()
+    {
+        using var records = new RecordStore(_dir, SessionStart);
+        var past = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        await records.AddRunAsync(Run(1, "/runs/1.log") with { ScriptPath = "/x/a.command", StartedAt = past });
+        await records.AddRunAsync(Run(2, "/runs/2.log") with { ScriptPath = "/x/b.command", StartedAt = past.AddMinutes(1) });
+        await records.AddRunAsync(Run(3, "/runs/3.log") with { ScriptPath = "/x/a.command", StartedAt = past.AddMinutes(2) });
+        await records.AddDismissalAsync("/x/b.command");
+
+        var recent = await records.ReadRecentAsync();
+
+        var only = Assert.Single(recent);
+        Assert.Equal("/x/a.command", only.Path);
+        Assert.Equal(past.AddMinutes(2), only.RanAt);
+        Assert.Equal(1L, Scalar("SELECT COUNT(*) FROM dismissals"));
+    }
+
+    [Fact]
     public async Task Without_a_database_entries_go_to_the_sessions_fallback_file()
     {
         Directory.CreateDirectory(Path.Combine(_dir, RecordStore.FileName)); // a directory cannot be opened as one

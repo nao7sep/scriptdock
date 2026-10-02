@@ -7,7 +7,7 @@ using ScriptDock.Services;
 namespace ScriptDock.ViewModels;
 
 /// <summary>
-/// Merges the persisted recently-run list with the live process list into the Recent list —
+/// Merges the recorded Recent list with the live process list into the Recent list —
 /// one <see cref="RecentEntry"/> per script path, newest first. A path's live process (a running
 /// one preferred, else the newest) is attached so the entry shows running state and output; a
 /// recent with no live process shows idle. A live run whose path is <em>not</em> in the recent

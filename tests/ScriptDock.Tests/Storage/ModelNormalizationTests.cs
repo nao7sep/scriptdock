@@ -33,19 +33,20 @@ public sealed class ModelNormalizationTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "config.json"),
             """{"uiFontFamily":null,"rootDirs":[null,"/ok"],"extensions":null,"ignorePatterns":null,"hidden":null}""");
         File.WriteAllText(Path.Combine(_root, "state.json"),
-            """{"knownPaths":null,"recentlyRun":[null,{"path":null}],"runningProcesses":[null,{"pid":0,"scriptPath":null}] }""");
+            """{"runningProcesses":[null,{"pid":0,"scriptPath":null}] }""");
+        File.WriteAllText(Path.Combine(_root, "known-paths.json"), """{"paths":[null,"/a.command"]}""");
 
         var config = new ConfigStore().Load();
         var state = new JsonStore<AppState>("state.json", "state").Load();
+        var knownPaths = new JsonStore<KnownPaths>("known-paths.json", "known paths").Load();
 
         Assert.Equal("", config.UiFontFamily);
         Assert.Empty(config.RootDirs);
         Assert.NotNull(config.Extensions);
         Assert.NotNull(config.IgnorePatterns);
         Assert.NotNull(config.Hidden);
-        Assert.NotNull(state.KnownPaths);
-        Assert.Empty(state.RecentlyRun);
         Assert.Empty(state.RunningProcesses);
+        Assert.Equal(["/a.command"], knownPaths.Paths);
     }
 
     [Fact]

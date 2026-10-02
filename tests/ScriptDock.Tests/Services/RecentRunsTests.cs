@@ -69,4 +69,32 @@ public sealed class RecentRunsTests
         Assert.Equal(3, list.Count);
         Assert.Equal("/new", list[0].Path);
     }
+
+    private static (string, DateTimeOffset) At(string path, int minute) =>
+        (path, new DateTimeOffset(2026, 6, 17, 0, minute, 0, TimeSpan.Zero));
+
+    [Fact]
+    public void From_TakesEachScriptsLatestRun_NewestFirst()
+    {
+        var list = RecentRuns.From([At("/a", 1), At("/b", 2), At("/a", 3)], []);
+
+        Assert.Equal(["/a", "/b"], list.Select(run => run.Path));
+        Assert.Equal(3, list[0].RanAt.Minute);
+    }
+
+    [Fact]
+    public void From_LeavesOutAScriptDismissedAfterItsLatestRun()
+    {
+        var list = RecentRuns.From([At("/a", 1), At("/b", 2)], [At("/a", 5)]);
+
+        Assert.Equal(["/b"], list.Select(run => run.Path));
+    }
+
+    [Fact]
+    public void From_KeepsAScriptRunAgainAfterItsDismissal()
+    {
+        var list = RecentRuns.From([At("/a", 1), At("/a", 9)], [At("/a", 5)]);
+
+        Assert.Equal(9, Assert.Single(list).RanAt.Minute);
+    }
 }

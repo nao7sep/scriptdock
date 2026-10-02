@@ -18,6 +18,12 @@ public interface IRecordStore
     /// <summary>Records a started run.</summary>
     Task AddRunAsync(RunRecord run);
 
+    /// <summary>Records that the user dismissed a script from the Recent list.</summary>
+    Task AddDismissalAsync(string scriptPath);
+
+    /// <summary>The Recent list: each script's latest run that no later dismissal took off the list.</summary>
+    Task<IReadOnlyList<RecentRun>> ReadRecentAsync();
+
     /// <summary>Records one scan's report.</summary>
     void AddScanReport(ScanReport report);
 

@@ -25,9 +25,11 @@ public sealed class RecentActionAccessibilityTests : WindowTest
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
+            new FakeJsonStore<KnownPaths>(),
             new FakeRecordStore(),
             config,
             state,
+            new KnownPaths(),
             new ScriptScanner(),
             runner);
         var process = runner.AddRunning("/x/live.command");

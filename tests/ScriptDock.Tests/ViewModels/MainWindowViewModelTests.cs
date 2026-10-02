@@ -19,15 +19,27 @@ namespace ScriptDock.Tests.ViewModels;
 public sealed class MainWindowViewModelTests
 {
     private static (MainWindowViewModel vm, FakeProcessRunner runner) BuildVm(
-        AppConfig? config = null, AppState? state = null)
+        AppConfig? config = null, AppState? state = null, FakeRecordStore? records = null)
     {
         config ??= new AppConfig();
         state ??= new AppState();
         var configStore = new FakeConfigStore { Value = config };
         var stateStore = new FakeJsonStore<AppState> { Value = state };
         var runner = new FakeProcessRunner();
-        var vm = new MainWindowViewModel(configStore, stateStore, new FakeRecordStore(), config, state, new ScriptScanner(), runner);
+        var vm = new MainWindowViewModel(
+            configStore, stateStore, new FakeJsonStore<KnownPaths>(), records ?? new FakeRecordStore(),
+            config, state, new KnownPaths(), new ScriptScanner(), runner);
         return (vm, runner);
+    }
+
+    // Records a past run of each path, newest first, the way an earlier session left them.
+    private static FakeRecordStore RecordsWithRuns(params string[] paths)
+    {
+        var records = new FakeRecordStore();
+        var now = DateTimeOffset.UtcNow;
+        for (var i = 0; i < paths.Length; i++)
+            records.Runs.Add(new RunRecord("2025-12-31T00:00:00.000Z", i + 1, now.AddMinutes(-i), paths[i], null, null, null));
+        return records;
     }
 
     // Records the requests it is asked and returns a fixed verdict.
@@ -74,8 +86,9 @@ public sealed class MainWindowViewModelTests
     [Fact]
     public async Task DismissEntry_FinishedEntry_DoesNotConfirm_AndRemoves()
     {
-        var state = new AppState { RecentlyRun = [new RecentRun { Path = "/x/done.command", RanAt = DateTimeOffset.UtcNow }] };
-        var (vm, _) = BuildVm(state: state);
+        var records = RecordsWithRuns("/x/done.command");
+        var (vm, _) = BuildVm(records: records);
+        await vm.LoadRecentAsync();
         var entry = new RecentEntry("/x/done.command", "done.command", DateTimeOffset.UtcNow, process: null);
         var confirm = new ConfirmSpy(result: false); // would block if consulted
         vm.ConfirmHandler = confirm.Handle;
@@ -83,14 +96,16 @@ public sealed class MainWindowViewModelTests
         await vm.DismissEntryCommand.ExecuteAsync(entry);
 
         Assert.Empty(confirm.Requests); // a finished entry is reversible — no prompt
-        Assert.DoesNotContain(state.RecentlyRun, r => r.Path == "/x/done.command");
+        Assert.Equal(["/x/done.command"], records.Dismissals);
+        Assert.Empty(vm.Recent);
+        Assert.Empty(await records.ReadRecentAsync());
     }
 
     [Fact]
     public async Task DismissEntry_RunningEntry_DeclinedConfirm_KeepsItAndDoesNotTerminate()
     {
-        var state = new AppState { RecentlyRun = [new RecentRun { Path = "/x/live.command", RanAt = DateTimeOffset.UtcNow }] };
-        var (vm, runner) = BuildVm(state: state);
+        var records = RecordsWithRuns("/x/live.command");
+        var (vm, runner) = BuildVm(records: records);
         var process = runner.AddRunning("/x/live.command");
         var entry = new RecentEntry("/x/live.command", "live.command", DateTimeOffset.UtcNow, process);
         vm.ConfirmHandler = new ConfirmSpy(result: false).Handle;
@@ -99,14 +114,15 @@ public sealed class MainWindowViewModelTests
 
         Assert.Empty(runner.TerminateCalls);
         Assert.Empty(runner.DismissCalls);
-        Assert.Contains(state.RecentlyRun, r => r.Path == "/x/live.command");
+        Assert.Empty(records.Dismissals);
     }
 
     [Fact]
     public async Task DismissEntry_RunningEntry_AcceptedConfirm_TerminatesAndRemoves()
     {
-        var state = new AppState { RecentlyRun = [new RecentRun { Path = "/x/live.command", RanAt = DateTimeOffset.UtcNow }] };
-        var (vm, runner) = BuildVm(state: state);
+        var records = RecordsWithRuns("/x/live.command");
+        var (vm, runner) = BuildVm(records: records);
+        await vm.LoadRecentAsync();
         var process = runner.AddRunning("/x/live.command");
         var entry = new RecentEntry("/x/live.command", "live.command", DateTimeOffset.UtcNow, process);
         vm.ConfirmHandler = new ConfirmSpy(result: true).Handle;
@@ -115,14 +131,15 @@ public sealed class MainWindowViewModelTests
 
         Assert.Same(process, Assert.Single(runner.TerminateCalls));
         Assert.Same(process, Assert.Single(runner.DismissCalls));
-        Assert.DoesNotContain(state.RecentlyRun, r => r.Path == "/x/live.command");
+        Assert.Equal(["/x/live.command"], records.Dismissals);
+        Assert.Empty(vm.Recent);
     }
 
     [Fact]
     public async Task DismissEntry_WhenTerminationIsUnconfirmed_RetainsOwnershipAndRecentEntry()
     {
-        var state = new AppState { RecentlyRun = [new RecentRun { Path = "/x/live.command", RanAt = DateTimeOffset.UtcNow }] };
-        var (vm, runner) = BuildVm(state: state);
+        var records = RecordsWithRuns("/x/live.command");
+        var (vm, runner) = BuildVm(records: records);
         runner.TerminateResult = false;
         var process = runner.AddRunning("/x/live.command");
         vm.ConfirmHandler = new ConfirmSpy(result: true).Handle;
@@ -132,7 +149,7 @@ public sealed class MainWindowViewModelTests
 
         Assert.Same(process, Assert.Single(runner.TerminateCalls));
         Assert.Empty(runner.DismissCalls);
-        Assert.Contains(state.RecentlyRun, run => run.Path == "/x/live.command");
+        Assert.Empty(records.Dismissals);
     }
 
     [Fact]
@@ -195,8 +212,8 @@ public sealed class MainWindowViewModelTests
     [Fact]
     public async Task RunScript_WhenOldTreeDoesNotExit_DoesNotRecordOrLaunchReplacement()
     {
-        var state = new AppState();
-        var (vm, runner) = BuildVm(state: state);
+        var records = new FakeRecordStore();
+        var (vm, runner) = BuildVm(records: records);
         runner.RestartResult = false;
         runner.AddRunning("/x/dev.command");
         vm.ConfirmHandler = new ConfirmSpy(result: true).Handle;
@@ -204,7 +221,7 @@ public sealed class MainWindowViewModelTests
         await vm.RunScriptCommand.ExecuteAsync(new ScriptItem("/x/dev.command") { DisplayName = "dev" });
 
         Assert.Empty(runner.StartCalls);
-        Assert.Empty(state.RecentlyRun);
+        Assert.Empty(records.Runs);
         Assert.Contains("no replacement", vm.RecentActionError, StringComparison.OrdinalIgnoreCase);
         Assert.True(vm.HasRecentActionError);
         Assert.False(vm.HasOperationalError);
@@ -250,10 +267,12 @@ public sealed class MainWindowViewModelTests
         var runner = new FakeProcessRunner();
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config },
-            new FakeJsonStore<AppState> { Value = state, ThrowOnSave = true },
-            new FakeRecordStore(),
+            new FakeJsonStore<AppState> { Value = state },
+            new FakeJsonStore<KnownPaths>(),
+            new FakeRecordStore { ThrowOnWrite = true },
             config,
             state,
+            new KnownPaths(),
             new ScriptScanner(),
             runner);
         vm.ConfirmHandler = new ConfirmSpy(result: true).Handle;
@@ -289,8 +308,8 @@ public sealed class MainWindowViewModelTests
         var configStore = new FakeConfigStore();
         var stateStore = new FakeJsonStore<AppState>();
         var vm = new MainWindowViewModel(
-            configStore, stateStore, new FakeRecordStore(), configStore.Value, stateStore.Value,
-            new ScriptScanner(), new FakeProcessRunner());
+            configStore, stateStore, new FakeJsonStore<KnownPaths>(), new FakeRecordStore(), configStore.Value, stateStore.Value,
+            new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
 
         vm.CaptureWindowPlacement(-1400, 80, 1100.5, 720.25, maximized: true);
         await vm.PersistPaneSizesAsync(420, 240);
@@ -310,7 +329,7 @@ public sealed class MainWindowViewModelTests
         var configStore = new FakeConfigStore { Value = config, ThrowOnSave = true };
         var stateStore = new FakeJsonStore<AppState>();
         var vm = new MainWindowViewModel(
-            configStore, stateStore, new FakeRecordStore(), config, new AppState(), new ScriptScanner(), new FakeProcessRunner());
+            configStore, stateStore, new FakeJsonStore<KnownPaths>(), new FakeRecordStore(), config, new AppState(), new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
         var draft = vm.CreateSettingsDraft();
         draft.RootDirs.Clear();
         draft.RootDirs.Add("/new");
@@ -330,7 +349,7 @@ public sealed class MainWindowViewModelTests
         var configStore = new FakeConfigStore { Value = config, ThrowOnSave = true };
         var stateStore = new FakeJsonStore<AppState>();
         var vm = new MainWindowViewModel(
-            configStore, stateStore, new FakeRecordStore(), config, stateStore.Value, new ScriptScanner(), new FakeProcessRunner());
+            configStore, stateStore, new FakeJsonStore<KnownPaths>(), new FakeRecordStore(), config, stateStore.Value, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
         var draft = vm.CreateSettingsDraft();
         draft.UiFontFamily = "Helvetica";
 
@@ -364,9 +383,11 @@ public sealed class MainWindowViewModelTests
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState>(),
+            new FakeJsonStore<KnownPaths>(),
             new FakeRecordStore(),
             config,
             new AppState(),
+            new KnownPaths(),
             new ScriptScanner(),
             new FakeProcessRunner());
         var fontChanges = 0;
@@ -388,7 +409,7 @@ public sealed class MainWindowViewModelTests
         process.Process = Process.GetCurrentProcess();
         process.LogFilePath = "/logs/first.log";
         var vm = new MainWindowViewModel(
-            configStore, stateStore, new FakeRecordStore(), configStore.Value, stateStore.Value, new ScriptScanner(), runner);
+            configStore, stateStore, new FakeJsonStore<KnownPaths>(), new FakeRecordStore(), configStore.Value, stateStore.Value, new KnownPaths(), new ScriptScanner(), runner);
 
         await Assert.ThrowsAnyAsync<Exception>(() => vm.PersistRunningSnapshotAsync());
         stateStore.ThrowOnSave = false;
@@ -433,17 +454,8 @@ public sealed class MainWindowViewModelTests
     [Fact]
     public async Task DismissEntry_SelectsNeighbourAtRemovedPosition()
     {
-        var now = DateTimeOffset.UtcNow;
-        var state = new AppState
-        {
-            RecentlyRun =
-            [
-                new RecentRun { Path = "/x/a.command", RanAt = now },
-                new RecentRun { Path = "/x/b.command", RanAt = now.AddMinutes(-1) },
-                new RecentRun { Path = "/x/c.command", RanAt = now.AddMinutes(-2) },
-            ],
-        };
-        var (vm, _) = BuildVm(state: state);
+        var (vm, _) = BuildVm(records: RecordsWithRuns("/x/a.command", "/x/b.command", "/x/c.command"));
+        await vm.LoadRecentAsync();
 
         // Populate the Recent list (RunScript triggers the rebuild); 'a' is already newest.
         await vm.RunScriptCommand.ExecuteAsync(new ScriptItem("/x/a.command") { DisplayName = "a" });

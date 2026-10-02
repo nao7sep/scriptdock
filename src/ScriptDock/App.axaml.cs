@@ -127,30 +127,32 @@ public partial class App : Application
     /// <summary>
     /// Composition root: builds persistence and the view model by hand (no DI
     /// container). Durable preferences live in <c>config.json</c>, volatile session
-    /// state in <c>state.json</c>, what happened in <c>records.sqlite3</c>. Absent config
-    /// sets use live built-ins without writing.
+    /// state in <c>state.json</c>, the last scan's paths in <c>known-paths.json</c>, what
+    /// happened in <c>records.sqlite3</c>. Absent config sets use live built-ins without writing.
     /// </summary>
     private static MainWindowViewModel CreateMainViewModel()
     {
         var configStore = new ConfigStore();
         // not recorded: volatile presentation and process residue, harmless to lose.
         var stateStore = new JsonStore<AppState>(AppPaths.StateFileName, "state", recordBackups: false);
+        // not recorded: rebuildable, the last scan's result.
+        var knownPathsStore = new JsonStore<KnownPaths>(AppPaths.KnownPathsFileName, "known paths", recordBackups: false);
 
         var config = configStore.Load();
         var state = stateStore.Load();
+        var knownPaths = knownPathsStore.Load();
 
         Log.Info("config", new
         {
             rootDirs = config.RootDirs.Count,
             extensions = config.Extensions.Count,
-            recentlyRun = state.RecentlyRun.Count,
         });
 
         var scanner = new ScriptScanner();
         var runner = new ProcessRunner();
 
         var records = Records ?? throw new InvalidOperationException("The records are not open.");
-        return new MainWindowViewModel(configStore, stateStore, records, config, state, scanner, runner)
+        return new MainWindowViewModel(configStore, stateStore, knownPathsStore, records, config, state, knownPaths, scanner, runner)
         {
             ComputerLanguages = ComputerLanguages,
         };

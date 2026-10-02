@@ -28,9 +28,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 {
     private readonly IConfigStore _configStore;
     private readonly IJsonStore<AppState> _stateStore;
+    private readonly IJsonStore<KnownPaths> _knownPathsStore;
     private readonly IRecordStore _records;
     private readonly AppConfig _config;
     private readonly AppState _state;
+    private readonly KnownPaths _knownPaths;
     private readonly ScriptScanner _scanner;
     private readonly IProcessRunner _runner;
 
@@ -39,6 +41,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private IReadOnlyList<string> _lastFound = [];
     private ISet<string> _newPaths = new HashSet<string>(StringComparer.Ordinal);
     private IReadOnlyList<string> _removed = [];
+
+    // The Recent list as read from the run and dismissal records, kept current in memory as each run or
+    // dismissal is recorded. The version moves with every such change, so a read that a change overtook
+    // is read again.
+    private List<RecentRun> _recent = [];
+    private int _recentVersion;
 
     private readonly List<ScriptProcess> _subscribed = [];
     private DispatcherTimer? _outputTimer;
@@ -117,17 +125,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public MainWindowViewModel(
         IConfigStore configStore,
         IJsonStore<AppState> stateStore,
+        IJsonStore<KnownPaths> knownPathsStore,
         IRecordStore records,
         AppConfig config,
         AppState state,
+        KnownPaths knownPaths,
         ScriptScanner scanner,
         IProcessRunner runner)
     {
         _configStore = configStore;
         _stateStore = stateStore;
+        _knownPathsStore = knownPathsStore;
         _records = records;
         _config = config;
         _state = state;
+        _knownPaths = knownPaths;
         _scanner = scanner;
         _runner = runner;
         _showHidden = state.ShowHidden; // field, not property: no save/rebuild during construction
@@ -244,8 +256,32 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         StartOutputTimer();
         StartOutputImport();
+        await LoadRecentAsync();
         RebuildRecent();
         await RescanAsync();
+    }
+
+    internal async Task LoadRecentAsync()
+    {
+        try
+        {
+            int version;
+            IReadOnlyList<RecentRun> recent;
+            do
+            {
+                version = _recentVersion;
+                recent = await _records.ReadRecentAsync();
+            }
+            while (version != _recentVersion);
+
+            _recent = recent.ToList();
+            ResolveOperationalError("recent");
+        }
+        catch (Exception ex)
+        {
+            Log.Error("ui: read recent runs failed", ex);
+            ReportOperationalError("recent", Message.Of("guard.refresh"));
+        }
     }
 
     public Task PersistPaneSizesAsync(double recentWidth, double consoleHeight) =>
@@ -423,15 +459,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             cts.Token.ThrowIfCancellationRequested(); // a newer scan superseded us between completion and here
             ScanReportLog.Write(_records, report);
 
-            var diff = ScanDiff.Compute(report.Found, _state.KnownPaths);
+            var diff = ScanDiff.Compute(report.Found, _knownPaths.Paths);
             _lastFound = report.Found;
             _newPaths = new HashSet<string>(diff.Added.Select(PathIdentity.Key), PathIdentity.Comparer);
             _removed = diff.Removed;
 
             RebuildScripts();
 
-            _state.KnownPaths = report.Found.ToList();
-            await _stateStore.SaveAsync(_state);
+            _knownPaths.Paths = report.Found.ToList();
+            await _knownPathsStore.SaveAsync(_knownPaths);
 
             ResolveOperationalError("scan");
             ShowCatalogResult(ScanResultMessage(diff), transient: true);
@@ -530,19 +566,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 _runner.Dismiss(entry.Process);
             }
 
-            var previousRecents = _state.RecentlyRun;
-            _state.RecentlyRun = previousRecents
-                .Where(r => !PathIdentity.Same(r.Path, entry.Path))
-                .ToList();
-            try
-            {
-                await _stateStore.SaveAsync(_state);
-            }
-            catch
-            {
-                _state.RecentlyRun = previousRecents;
-                throw;
-            }
+            await _records.AddDismissalAsync(entry.Path);
+            _recent.RemoveAll(r => PathIdentity.Same(r.Path, entry.Path));
+            _recentVersion++;
 
             _processActionErrors.Remove(PathIdentity.Key(entry.Path));
             Log.Info("ui: dismiss", new { script = entry.Path });
@@ -646,15 +672,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        _ = RecordRunAsync(started);
-        _state.RecentlyRun = RecentRuns.Add(_state.RecentlyRun, path, DateTimeOffset.UtcNow);
+        _recent = RecentRuns.Add(_recent, path, started.StartedAt);
+        _recentVersion++;
         try
         {
-            await _stateStore.SaveAsync(_state);
+            await _records.AddRunAsync(RunRecord.For(_records.Session, started));
         }
         catch (Exception ex)
         {
-            Log.Error("ui: save recent run failed", ex, new { script = path });
+            Log.Error("ui: record run failed", ex, new { script = path });
             ReportProcessActionError(path, "recent-history", Message.Of("process.historyFailed"));
         }
         RebuildRecent();
@@ -710,7 +736,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         var selectedPath = SelectedRecentEntry?.Path;
 
         Recent.Clear();
-        foreach (var entry in RecentListBuilder.Build(_state.RecentlyRun, _runner.Active, BuildLabels()))
+        foreach (var entry in RecentListBuilder.Build(_recent, _runner.Active, BuildLabels()))
             Recent.Add(entry);
 
         SelectedRecentEntry = selectedPath is null ? null : Recent.FirstOrDefault(e => PathIdentity.Same(e.Path, selectedPath));
@@ -732,7 +758,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         var paths = new HashSet<string>(StringComparer.Ordinal);
         foreach (var path in _lastFound) paths.Add(path);
         foreach (var path in _removed) paths.Add(path);
-        foreach (var run in _state.RecentlyRun) paths.Add(run.Path);
+        foreach (var run in _recent) paths.Add(run.Path);
         foreach (var process in _runner.Active) paths.Add(process.ScriptPath);
 
         if (_labelPaths is not null && _labelPaths.SetEquals(paths))
@@ -788,19 +814,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _outputTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
         _outputTimer.Tick += (_, _) => OnOutputTick();
         _outputTimer.Start();
-    }
-
-    // The record keeps the run; a failure has already left the entry in the records' fallback file.
-    private async Task RecordRunAsync(ScriptProcess process)
-    {
-        try
-        {
-            await _records.AddRunAsync(RunRecord.For(_records.Session, process));
-        }
-        catch (Exception ex)
-        {
-            Log.Warn("ui: record run failed", ex, new { script = process.ScriptPath, id = process.Id });
-        }
     }
 
     private void StartOutputImport()
@@ -1034,9 +1047,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private void EnsureRecentPath(string path)
     {
-        if (_state.RecentlyRun.Any(run => PathIdentity.Same(run.Path, path)))
+        if (_recent.Any(run => PathIdentity.Same(run.Path, path)))
             return;
-        _state.RecentlyRun = RecentRuns.Add(_state.RecentlyRun, path, DateTimeOffset.UtcNow);
+        _recent = RecentRuns.Add(_recent, path, DateTimeOffset.UtcNow);
+        _recentVersion++;
     }
 
     private void SelectRecentPath(string path) =>
