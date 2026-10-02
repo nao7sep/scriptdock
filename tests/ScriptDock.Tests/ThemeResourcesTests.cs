@@ -13,7 +13,6 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using ScriptDock.Models;
-using ScriptDock.Storage;
 using ScriptDock.ViewModels;
 using ScriptDock.Views;
 using Xunit;
@@ -37,19 +36,29 @@ public sealed class ThemeResourcesTests
         var config = new AppConfig();
         Assert.Equal(ThemePreference.System, config.Theme);
         config.Theme = ThemePreference.Dark;
-        Assert.Contains("\"theme\": \"dark\"", JsonSerializer.Serialize(config, JsonOptions.Default));
+        Assert.Equal("dark", ConfigSets.Changed(config)["theme"].GetString());
     }
 
     [Theory]
-    [InlineData("{}", ThemePreference.System)]
-    [InlineData("{\"theme\":\"light\"}", ThemePreference.Light)]
-    [InlineData("{\"theme\":\"Dark\"}", ThemePreference.Dark)]
-    [InlineData("{\"theme\":\"sepia\"}", ThemePreference.System)]
-    [InlineData("{\"theme\":\"2\"}", ThemePreference.System)]
-    [InlineData("{\"theme\":2}", ThemePreference.System)]
-    [InlineData("{\"theme\":null}", ThemePreference.System)]
-    public void AMissingOrUnrecognizedThemeReadsAsSystem(string json, ThemePreference expected) =>
-        Assert.Equal(expected, JsonSerializer.Deserialize<AppConfig>(json, JsonOptions.Default)!.Theme);
+    [InlineData("\"light\"", ThemePreference.Light)]
+    [InlineData("\"Dark\"", ThemePreference.Dark)]
+    public void AThemeNameIsReadCaseInsensitively(string json, ThemePreference expected)
+    {
+        var config = new AppConfig();
+        ConfigSets.Apply(config, "theme", JsonDocument.Parse(json).RootElement);
+        Assert.Equal(expected, config.Theme);
+    }
+
+    [Theory]
+    [InlineData("\"sepia\"")]
+    [InlineData("\"2\"")]
+    [InlineData("2")]
+    [InlineData("null")]
+    public void AnUnrecognizedThemeFailsItsSet(string json)
+    {
+        var error = Record.Exception(() => ConfigSets.Apply(new AppConfig(), "theme", JsonDocument.Parse(json).RootElement));
+        Assert.True(error is JsonException or InvalidOperationException, error?.ToString());
+    }
 
     [Fact]
     public void LightAndDarkDefineTheSameThemedBrushes()

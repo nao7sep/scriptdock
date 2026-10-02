@@ -17,12 +17,7 @@ public static class ConfigSets
     {
         ["uiFontFamily"] = new(c => c.UiFontFamily, (c, v) => c.UiFontFamily = TextCleanup.SingleLine(String(v))),
         ["language"] = new(c => c.Language, (c, v) =>
-        {
-            var language = String(v);
-            if (language != Languages.System && !Languages.Tags.Contains(language))
-                throw new JsonException("Unknown language");
-            c.Language = language;
-        }),
+            c.Language = Languages.TryParse(String(v), out var language) ? language : throw new JsonException("Unknown language")),
         ["theme"] = new(c => c.Theme, (c, v) =>
         {
             var name = String(v);

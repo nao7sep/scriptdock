@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 
@@ -46,20 +47,25 @@ internal static class Languages
         All.FirstOrDefault(language => language.Tag == tag).Name ?? tag;
 
     /// <summary>
-    /// A saved preference as the app should act on it: a tag in the set, or <see cref="System"/> for a
-    /// missing, blank or unrecognized value, so a hand-edited file can never leave the app without a
-    /// language.
+    /// Reads a saved preference, trimmed and case-insensitive: <see cref="System"/> or a tag in the set,
+    /// in its canonical form.
     /// </summary>
-    internal static string NormalizePreference(string? saved)
+    internal static bool TryParse(string? saved, [NotNullWhen(true)] out string? preference)
     {
-        if (string.IsNullOrWhiteSpace(saved))
-            return System;
-        var trimmed = saved.Trim();
-        if (string.Equals(trimmed, System, StringComparison.OrdinalIgnoreCase))
-            return System;
-        return Tags.FirstOrDefault(tag => string.Equals(tag, trimmed, StringComparison.OrdinalIgnoreCase))
-            ?? System;
+        var trimmed = saved?.Trim();
+        preference = string.Equals(trimmed, System, StringComparison.OrdinalIgnoreCase)
+            ? System
+            : Tags.FirstOrDefault(tag => string.Equals(tag, trimmed, StringComparison.OrdinalIgnoreCase));
+        return preference is not null;
     }
+
+    /// <summary>
+    /// A saved preference as the app should act on it: <see cref="TryParse"/>'s reading, or
+    /// <see cref="System"/> for a missing, blank or unrecognized value, so the app is never left
+    /// without a language.
+    /// </summary>
+    internal static string NormalizePreference(string? saved) =>
+        TryParse(saved, out var preference) ? preference : System;
 
     /// <summary>
     /// The language a preference resolves to, given the computer's preferred languages in order.

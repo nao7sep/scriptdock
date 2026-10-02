@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Text.Json.Serialization;
 
 namespace ScriptDock.Models;
 
@@ -36,7 +35,6 @@ public sealed class AppConfig
 
     /// <summary>The app theme. System follows the OS; applied app-wide before the main window exists
     /// and again on each Save.</summary>
-    [JsonConverter(typeof(ThemePreferenceJsonConverter))]
     public ThemePreference Theme { get; set; } = ThemePreference.System;
 
     /// <summary>Root directories scanned for scripts.</summary>

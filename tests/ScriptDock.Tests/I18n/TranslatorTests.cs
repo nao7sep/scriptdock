@@ -1,6 +1,8 @@
 using System;
 using System.Globalization;
+using System.Text.Json;
 using ScriptDock.I18n;
+using ScriptDock.Models;
 using Xunit;
 
 namespace ScriptDock.Tests.I18n;
@@ -22,6 +24,16 @@ public class TranslatorTests
     [InlineData(" zh-Hans ", "zh-Hans")]
     public void a_saved_preference_is_read_forgivingly(string? saved, string expected) =>
         Assert.Equal(expected, Languages.NormalizePreference(saved));
+
+    [Theory]
+    [InlineData("\" pt-br \"", "pt-BR")]
+    [InlineData("\"SYSTEM\"", Languages.System)]
+    public void the_config_set_reads_a_language_as_the_preference_does(string json, string expected)
+    {
+        var config = new AppConfig();
+        ConfigSets.Apply(config, "language", JsonDocument.Parse(json).RootElement);
+        Assert.Equal(expected, config.Language);
+    }
 
     [Theory]
     [InlineData("ja-JP", "ja")]
