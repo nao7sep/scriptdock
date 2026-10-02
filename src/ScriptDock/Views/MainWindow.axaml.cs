@@ -183,10 +183,8 @@ public partial class MainWindow : Window
 
     private void ApplyNativeMinimum(Screen? target = null)
     {
-        // The window's minimum is the layout's own floor. Every pane here bounds itself and scrolls
-        // its own content, and the floor sits well inside any work area this app runs on, so there is
-        // nothing to cap it against and no window-level scroll region to fall back on
-        // (app-chrome conventions).
+        // The window's minimum is the layout's own floor, uncapped, with no window-level scroll region
+        // (window-conventions).
         MinWidth = LayoutRoot.MinWidth;
         MinHeight = LayoutRoot.MinHeight;
     }
