@@ -133,8 +133,9 @@ public partial class App : Application
     private static MainWindowViewModel CreateMainViewModel()
     {
         var configStore = new ConfigStore();
-        // not recorded: view state, harmless to lose.
-        var stateStore = new JsonStore<AppState>(AppPaths.StateFileName, "state", recordBackups: false);
+        // not recorded: rebuildable, view state harmless to lose.
+        var stateStore = new JsonStore<AppState>(
+            AppPaths.StateFileName, "state", recordBackups: false, rebuildable: true);
         // not recorded: rebuildable, the last scan's result.
         var knownPathsStore = new JsonStore<KnownPaths>(
             AppPaths.KnownPathsFileName, "known paths", recordBackups: false, rebuildable: true);
