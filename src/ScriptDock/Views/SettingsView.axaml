@@ -83,10 +83,14 @@
             </Grid>
         </StackPanel>
 
-        <!-- Extensions -->
+        <!-- Extensions. A list's reset sits in its header row (config-sets-conventions); a long header
+             wraps beside it rather than being cut off. -->
         <StackPanel Spacing="8">
-            <TextBlock i18n:Localized.Text="settings.extensions" Classes="cardHeader"/>
-            <Button x:Name="ResetExtensions" HorizontalAlignment="Right" i18n:Localized.Content="settings.resetExtensions" Click="OnResetExtensionsClick"/>
+            <DockPanel>
+                <Button x:Name="ResetExtensions" DockPanel.Dock="Right" Classes="tool" VerticalAlignment="Center"
+                        i18n:Localized.Content="settings.resetExtensions" Click="OnResetExtensionsClick"/>
+                <TextBlock i18n:Localized.Text="settings.extensions" Classes="cardHeader" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            </DockPanel>
             <ListBox x:Name="ExtList" ItemsSource="{Binding Extensions}" Height="80"
                      Classes="boxed"/>
             <DockPanel>
@@ -107,8 +111,11 @@
 
         <!-- Ignore patterns -->
         <StackPanel Spacing="8">
-            <TextBlock i18n:Localized.Text="settings.ignorePatterns" Classes="cardHeader"/>
-            <Button x:Name="ResetIgnorePatterns" HorizontalAlignment="Right" i18n:Localized.Content="settings.resetIgnorePatterns" Click="OnResetIgnorePatternsClick"/>
+            <DockPanel>
+                <Button x:Name="ResetIgnorePatterns" DockPanel.Dock="Right" Classes="tool" VerticalAlignment="Center"
+                        i18n:Localized.Content="settings.resetIgnorePatterns" Click="OnResetIgnorePatternsClick"/>
+                <TextBlock i18n:Localized.Text="settings.ignorePatterns" Classes="cardHeader" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            </DockPanel>
             <ListBox x:Name="PatternList" ItemsSource="{Binding IgnorePatterns}" Height="96"
                      Classes="boxed"/>
             <DockPanel>
