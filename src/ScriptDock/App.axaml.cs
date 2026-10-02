@@ -136,7 +136,8 @@ public partial class App : Application
         // not recorded: volatile presentation and process residue, harmless to lose.
         var stateStore = new JsonStore<AppState>(AppPaths.StateFileName, "state", recordBackups: false);
         // not recorded: rebuildable, the last scan's result.
-        var knownPathsStore = new JsonStore<KnownPaths>(AppPaths.KnownPathsFileName, "known paths", recordBackups: false);
+        var knownPathsStore = new JsonStore<KnownPaths>(
+            AppPaths.KnownPathsFileName, "known paths", recordBackups: false, rebuildable: true);
 
         var config = configStore.Load();
         var state = stateStore.Load();

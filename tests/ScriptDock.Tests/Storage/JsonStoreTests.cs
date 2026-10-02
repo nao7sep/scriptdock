@@ -168,6 +168,24 @@ public sealed class JsonStoreTests : IDisposable
     }
 
     [Fact]
+    public void Load_UnreadableRebuildableFile_ReturnsDefaultWithoutQuarantineOrNotice()
+    {
+        File.WriteAllText(PathOf("doc.json"), "{ not valid json");
+        QuarantineJournal.Drain();
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", recordBackups: false, rebuildable: true);
+
+        var loaded = store.Load();
+
+        Assert.Equal("", loaded.Name);
+        Assert.Empty(Directory.EnumerateFiles(_root, "doc-*.invalid"));
+        Assert.Empty(QuarantineJournal.Drain());
+
+        store.Save(new SampleDoc { Name = "rebuilt" });
+
+        Assert.Equal("rebuilt", store.Load().Name);
+    }
+
+    [Fact]
     public void Load_LiteralNullDocument_ReturnsDefault()
     {
         File.WriteAllText(PathOf("doc.json"), "null");

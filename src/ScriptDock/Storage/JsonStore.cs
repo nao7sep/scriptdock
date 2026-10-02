@@ -13,7 +13,8 @@ namespace ScriptDock.Storage;
 /// crash mid-write never tears it. If the live document is missing, the type's
 /// default-constructed value is returned. If it exists but will not parse, it is
 /// quarantined (moved aside, bytes preserved) and the default-constructed value is
-/// returned in its place — see <see cref="TryLoadFile"/>.
+/// returned in its place — see <see cref="TryLoadFile"/>; a rebuildable store's unreadable
+/// file is only logged, and its next save replaces it (store-recovery-conventions).
 /// </summary>
 /// <remarks>
 /// The app's single managed-text atomic-write choke point, and so the one place the
@@ -39,6 +40,7 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
     private readonly string _filePath;
     private readonly string _label;
     private readonly bool _recordBackups;
+    private readonly bool _rebuildable;
 
     // The queue's tail: the next write chains onto this so writes run one at a time, strictly in
     // the order they were queued. Guarded by _queueGate since callers may queue from any thread.
@@ -51,11 +53,13 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
     /// <param name="fileName">File name (no directory component), e.g. <c>"config.json"</c>.</param>
     /// <param name="label">Human-readable noun used in log messages, e.g. <c>"config"</c>.</param>
     /// <param name="recordBackups">False for volatile state; durable text is recorded by default.</param>
-    public JsonStore(string fileName, string label, bool recordBackups = true)
+    /// <param name="rebuildable">True for a store the app rebuilds on its own, whose unreadable file is not preserved.</param>
+    public JsonStore(string fileName, string label, bool recordBackups = true, bool rebuildable = false)
     {
         _filePath = Path.Combine(StorageRoot.Directory, fileName);
         _label = label;
         _recordBackups = recordBackups;
+        _rebuildable = rebuildable;
     }
 
     public T Load()
@@ -136,6 +140,11 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
                 normalizable.NormalizeAfterLoad();
             Log.Info("store: loaded", new { label = _label, path = filePath });
             return true;
+        }
+        catch (Exception ex) when (_rebuildable)
+        {
+            Log.Warn("store: file unreadable, rebuilding", ex, new { label = _label, path = filePath });
+            return false;
         }
         catch (Exception ex)
         {
