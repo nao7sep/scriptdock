@@ -18,14 +18,14 @@ namespace ScriptDock.Tests.ViewModels;
 /// a real <see cref="ScriptScanner"/> over a temp directory populates the list, then a rescan or a
 /// hide/show toggle rebuilds it. Selection must survive a rebuild by path, and fall to the
 /// position-neighbour when the selected script vanishes (hidden while "Show hidden" is off).
-/// Joins the SCRIPTDOCK_DATA_DIR collection because Rescan writes a scan report under the storage root,
-/// which is redirected to a temp directory so the suite never touches the real <c>~/.scriptdock</c>.
+/// Joins the SCRIPTDOCK_DATA_DIR collection so anything the view model resolves under the storage root
+/// lands in a temp directory and the suite never touches the real <c>~/.scriptdock</c>.
 /// </summary>
 [Collection(StorageRootEnvironment.CollectionName)]
 public sealed class MainWindowViewModelScriptsTests : IDisposable
 {
     private readonly string _root;          // scanned for scripts
-    private readonly string _home;          // SCRIPTDOCK_DATA_DIR (scan reports land here)
+    private readonly string _home;          // SCRIPTDOCK_DATA_DIR
     private readonly string? _previousHome;
 
     public MainWindowViewModelScriptsTests()
@@ -58,6 +58,7 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
+            new FakeRecordStore(),
             config, state, new ScriptScanner(), new FakeProcessRunner());
         await vm.RescanCommand.ExecuteAsync(null);
         return vm;
@@ -87,6 +88,7 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
+            new FakeRecordStore(),
             config, state, new ScriptScanner(), new FakeProcessRunner());
 
         await vm.InitializeAsync(); // recapture → RebuildRecent → scan
@@ -113,6 +115,7 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
+            new FakeRecordStore(),
             config, state, new ScriptScanner(), runner);
 
         await vm.InitializeAsync();

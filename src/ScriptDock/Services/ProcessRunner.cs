@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ScriptDock.Models;
+using ScriptDock.Storage;
 
 namespace ScriptDock.Services;
 
@@ -23,6 +24,10 @@ public sealed class ProcessRunner : IProcessRunner
     // Grace for a process tree to die after a tree-kill. Ownership is retained if the grace
     // expires: starting a replacement while the old tree is alive would create a duplicate.
     private static readonly TimeSpan DefaultTerminationGrace = TimeSpan.FromSeconds(10);
+
+    // How long a finished run's output file stays unchanged before it moves into the records, so output a
+    // process the run left behind is still writing is not cut off.
+    internal static readonly TimeSpan OutputQuietPeriod = TimeSpan.FromMinutes(1);
 
     private readonly List<ScriptProcess> _processes = new();
     private readonly object _gate = new();
@@ -215,7 +220,7 @@ public sealed class ProcessRunner : IProcessRunner
         var recaptured = 0;
         foreach (var record in records)
         {
-            var process = TryReattach(record);
+            var process = TryReattach(record.Pid, record.OsStartedAt);
             if (process is null)
                 continue;
 
@@ -254,14 +259,78 @@ public sealed class ProcessRunner : IProcessRunner
         }
     }
 
-    // Probe a persisted record: return the live process only if its PID exists, has not exited,
+    /// <summary>
+    /// Moves the output file of each finished run into the records and deletes the file, per the
+    /// data-lifecycle-conventions' Records section. A file stays while a run this session holds reads it,
+    /// while its run's process (by process id and start time) is alive, while it has changed within
+    /// <see cref="OutputQuietPeriod"/>, and when no run record names it. An import replaces any earlier
+    /// import of the same run, so a file whose deletion failed is imported again in full on a later pass.
+    /// </summary>
+    public async Task ImportFinishedOutputAsync(IRecordStore records, CancellationToken cancellationToken)
+    {
+        var held = new HashSet<string>(Active.Select(p => p.LogFilePath).OfType<string>(), PathIdentity.Comparer);
+        var quietSince = DateTime.UtcNow - OutputQuietPeriod;
+        var candidates = await Task.Run(() => FindQuietOutput(held, quietSince), cancellationToken).ConfigureAwait(false);
+        if (candidates.Count == 0)
+            return;
+
+        var runs = await records.FindRunsByOutputPathAsync(candidates).ConfigureAwait(false);
+        var imported = 0;
+        foreach (var path in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!runs.TryGetValue(path, out var run) || IsAlive(run))
+                continue;
+
+            var output = await Task.Run(() => ReadShared(path), cancellationToken).ConfigureAwait(false);
+            await records.AddRunOutputAsync(run, output).ConfigureAwait(false);
+            imported++;
+            try
+            {
+                File.Delete(path);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("run output: imported but not deleted; the next pass imports it again", ex, new { path });
+            }
+        }
+
+        if (imported > 0)
+            Log.Info("run output: imported", new { imported, candidates = candidates.Count });
+    }
+
+    private List<string> FindQuietOutput(HashSet<string> held, DateTime quietSince) =>
+        Directory.Exists(_runsDirectory)
+            ? Directory.EnumerateFiles(_runsDirectory, "*.log")
+                .Where(path => !held.Contains(path) && File.GetLastWriteTimeUtc(path) < quietSince)
+                .ToList()
+            : [];
+
+    private static byte[] ReadShared(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return buffer.ToArray();
+    }
+
+    private static bool IsAlive(RunRecord run)
+    {
+        if (run.Pid is not { } pid || run.OsStartedAt is not { } osStartedAt)
+            return false;
+
+        using var process = TryReattach(pid, osStartedAt);
+        return process is not null;
+    }
+
+    // Probe a recorded process: return the live process only if its PID exists, has not exited,
     // and its start-time still matches (so a reused PID can't be mistaken for the original).
-    private static Process? TryReattach(PersistedProcess record)
+    private static Process? TryReattach(int pid, DateTimeOffset osStartedAt)
     {
         Process process;
         try
         {
-            process = Process.GetProcessById(record.Pid);
+            process = Process.GetProcessById(pid);
         }
         catch
         {
@@ -277,7 +346,7 @@ public sealed class ProcessRunner : IProcessRunner
             }
 
             var actualStart = new DateTimeOffset(process.StartTime).ToUniversalTime();
-            if (!StartTimesMatch(record.OsStartedAt, actualStart))
+            if (!StartTimesMatch(osStartedAt, actualStart))
             {
                 process.Dispose(); // PID was reused by an unrelated process
                 return null;

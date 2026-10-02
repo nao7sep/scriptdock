@@ -22,6 +22,9 @@ public partial class App : Application
     /// </summary>
     internal static System.Collections.Generic.IReadOnlyList<string> ComputerLanguages { get; set; } = [];
 
+    /// <summary>This session's records, opened by <c>Program</c> before the app was built.</summary>
+    internal static IRecordStore? Records { get; set; }
+
     // The main window, which the app menu's About and Settings items open through. Null while a
     // startup failure is shown instead, when those items are disabled.
     private MainWindow? _mainWindow;
@@ -124,7 +127,8 @@ public partial class App : Application
     /// <summary>
     /// Composition root: builds persistence and the view model by hand (no DI
     /// container). Durable preferences live in <c>config.json</c>, volatile session
-    /// state in <c>state.json</c>. Absent config sets use live built-ins without writing.
+    /// state in <c>state.json</c>, what happened in <c>records.sqlite3</c>. Absent config
+    /// sets use live built-ins without writing.
     /// </summary>
     private static MainWindowViewModel CreateMainViewModel()
     {
@@ -145,7 +149,8 @@ public partial class App : Application
         var scanner = new ScriptScanner();
         var runner = new ProcessRunner();
 
-        return new MainWindowViewModel(configStore, stateStore, config, state, scanner, runner)
+        var records = Records ?? throw new InvalidOperationException("The records are not open.");
+        return new MainWindowViewModel(configStore, stateStore, records, config, state, scanner, runner)
         {
             ComputerLanguages = ComputerLanguages,
         };

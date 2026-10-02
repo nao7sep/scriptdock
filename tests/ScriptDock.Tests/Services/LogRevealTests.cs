@@ -1,8 +1,8 @@
 using System;
 using System.IO;
-using System.Threading;
 using ScriptDock;
 using ScriptDock.Services;
+using ScriptDock.Storage;
 using Xunit;
 
 namespace ScriptDock.Tests.Services;
@@ -10,61 +10,41 @@ namespace ScriptDock.Tests.Services;
 public sealed class LogRevealTests
 {
     [Fact]
-    public void SelectTarget_prefers_the_session_log_over_a_newer_scan_report()
+    public void SelectTarget_reveals_the_records_database()
     {
         using var temp = new TempDirectory();
         Directory.CreateDirectory(temp.Path);
-        var sessionLog = Path.Combine(temp.Path, "20260610-093015-utc.log");
-        File.WriteAllText(sessionLog, "{}\n");
-        // A scan report written later is the newest *.log, so the newest-file heuristic would pick it.
-        Thread.Sleep(10);
-        File.WriteAllText(Path.Combine(temp.Path, "scan-20260610-093020-utc.log"), "report\n");
+        var records = Path.Combine(temp.Path, RecordStore.FileName);
+        File.WriteAllText(records, "");
 
-        var target = LogReveal.SelectTarget(temp.Path, sessionLog, () => { });
+        var target = LogReveal.SelectTarget(records, temp.Path, () => { });
 
         Assert.Equal(LogRevealTargetKind.File, target.Kind);
-        Assert.Equal(sessionLog, target.Path); // the session log, not the newer scan report
+        Assert.Equal(records, target.Path);
     }
 
     [Fact]
-    public void SelectTarget_flushes_before_looking_for_the_current_log()
+    public void SelectTarget_flushes_before_looking_for_the_database()
     {
         using var temp = new TempDirectory();
-        var logPath = Path.Combine(temp.Path, "20260610-093015-utc.log");
+        var records = Path.Combine(temp.Path, RecordStore.FileName);
 
-        // No session-log path supplied (logging fell back to console), so it finds the newest *.log,
-        // which the flush callback writes — proving the flush runs before the lookup.
-        var target = LogReveal.SelectTarget(temp.Path, sessionLogPath: null, () =>
+        var target = LogReveal.SelectTarget(records, temp.Path, () =>
         {
             Directory.CreateDirectory(temp.Path);
-            File.WriteAllText(logPath, "{}\n");
+            File.WriteAllText(records, "");
         });
 
         Assert.Equal(LogRevealTargetKind.File, target.Kind);
-        Assert.Equal(logPath, target.Path);
+        Assert.Equal(records, target.Path);
     }
 
     [Fact]
-    public void SelectTarget_falls_back_to_newest_when_session_log_path_is_missing()
-    {
-        using var temp = new TempDirectory();
-        Directory.CreateDirectory(temp.Path);
-        var present = Path.Combine(temp.Path, "20260610-093015-utc.log");
-        File.WriteAllText(present, "{}\n");
-        var missing = Path.Combine(temp.Path, "does-not-exist.log");
-
-        var target = LogReveal.SelectTarget(temp.Path, missing, () => { });
-
-        Assert.Equal(LogRevealTargetKind.File, target.Kind);
-        Assert.Equal(present, target.Path);
-    }
-
-    [Fact]
-    public void SelectTarget_uses_the_logs_directory_when_no_log_exists()
+    public void SelectTarget_opens_the_storage_root_before_the_database_exists()
     {
         using var temp = new TempDirectory();
 
-        var target = LogReveal.SelectTarget(temp.Path, sessionLogPath: null, () => { });
+        var target = LogReveal.SelectTarget(Path.Combine(temp.Path, RecordStore.FileName), temp.Path, () => { });
 
         Assert.Equal(LogRevealTargetKind.Directory, target.Kind);
         Assert.Equal(temp.Path, target.Path);

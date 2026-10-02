@@ -34,9 +34,8 @@ sealed class Program
         // Resolve and create the storage root before anything else reads or writes it.
         // An unusable SCRIPTDOCK_DATA_DIR (or an unwritable home) is a startup error we report
         // and STOP on — never a silent fallback that lets the app run unable to persist.
-        // This runs before Log.Start (the log directory lives under the root) and before
-        // StorageRoot.LogsDirectory is ever evaluated, so a malformed override can never
-        // throw uncaught ahead of the try below.
+        // This runs before the records open (they live under the root), so a malformed
+        // override can never throw uncaught ahead of the try below.
         try
         {
             StorageRoot.EnsureExists();
@@ -52,9 +51,11 @@ sealed class Program
             return 1;
         }
 
-        // One JSON-Lines file per launch under the app's logs directory; the logger
-        // installs its own crash hooks and console fallback.
-        Log.Start(StorageRoot.LogsDirectory);
+        // The records hold this session's log; the logger installs its own crash hooks and
+        // console fallback. The session is this launch, by its start time.
+        var records = new RecordStore(StorageRoot.Directory, DateTimeOffset.UtcNow);
+        Log.Start(records);
+        App.Records = records;
         var clean = true;
         try
         {
@@ -80,6 +81,7 @@ sealed class Program
         {
             Log.Info("shutdown", new { clean });
             Log.Shutdown();
+            records.Dispose();
         }
     }
 

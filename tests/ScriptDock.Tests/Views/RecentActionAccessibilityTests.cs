@@ -25,6 +25,7 @@ public sealed class RecentActionAccessibilityTests : WindowTest
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
+            new FakeRecordStore(),
             config,
             state,
             new ScriptScanner(),

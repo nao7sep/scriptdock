@@ -1,7 +1,6 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
 using ScriptDock.Storage;
 
@@ -16,12 +15,9 @@ internal enum LogRevealTargetKind
 internal readonly record struct LogRevealTarget(string Path, LogRevealTargetKind Kind);
 
 /// <summary>
-/// Best-effort "show me the log" helper. Reveals this session's log file under
-/// <see cref="StorageRoot.LogsDirectory"/> in the host platform's file manager (Finder on macOS,
-/// Explorer on Windows). The logs directory also holds scan reports (<c>scan-*.log</c>) and the
-/// per-run output logs, so it targets the known session-log path rather than the newest file;
-/// when that path is unavailable (logging fell back to the console) it reveals the newest log, and
-/// failing that opens the directory.
+/// Best-effort "show me the log" helper. Reveals the records database, which holds the log, in the host
+/// platform's file manager (Finder on macOS, Explorer on Windows); before the database exists it opens the
+/// storage root, where the fallback files under <c>logs/</c> are.
 /// </summary>
 public static class LogReveal
 {
@@ -31,7 +27,7 @@ public static class LogReveal
     {
         try
         {
-            var target = SelectTarget(StorageRoot.LogsDirectory, Log.SessionLogPath, Log.Flush);
+            var target = SelectTarget(Path.Combine(StorageRoot.Directory, RecordStore.FileName), StorageRoot.Directory, Log.Flush);
             var opened = OpenTarget(target, start);
             if (!opened)
                 Log.Error("reveal log: no process returned", new { target = target.Path, kind = target.Kind.ToString() });
@@ -49,37 +45,12 @@ public static class LogReveal
             ? RevealInFileManager(target.Path, start)
             : OpenDirectoryInFileManager(target.Path, start);
 
-    internal static LogRevealTarget SelectTarget(string logsDirectory, string? sessionLogPath, Action flush)
+    internal static LogRevealTarget SelectTarget(string recordsFile, string directory, Action flush)
     {
         flush();
-        Directory.CreateDirectory(logsDirectory);
-
-        // Prefer this session's actual log file; it is the one the user means by "the log", and the
-        // newest-file heuristic would otherwise surface a scan report written after it.
-        if (sessionLogPath is not null && File.Exists(sessionLogPath))
-            return new LogRevealTarget(sessionLogPath, LogRevealTargetKind.File);
-
-        var current = TryFindMostRecentLog(logsDirectory);
-        return current is not null
-            ? new LogRevealTarget(current, LogRevealTargetKind.File)
-            : new LogRevealTarget(logsDirectory, LogRevealTargetKind.Directory);
-    }
-
-    private static string? TryFindMostRecentLog(string dir)
-    {
-        try
-        {
-            return new DirectoryInfo(dir)
-                .EnumerateFiles("*.log")
-                .OrderByDescending(f => f.LastWriteTimeUtc)
-                .FirstOrDefault()
-                ?.FullName;
-        }
-        catch (Exception ex)
-        {
-            Log.Debug("reveal log: enumerate failed", ex, new { dir });
-            return null;
-        }
+        return File.Exists(recordsFile)
+            ? new LogRevealTarget(recordsFile, LogRevealTargetKind.File)
+            : new LogRevealTarget(directory, LogRevealTargetKind.Directory);
     }
 
     private static bool RevealInFileManager(string path, Func<ProcessStartInfo, Process?> start)

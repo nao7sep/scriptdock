@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using ScriptDock.Models;
+using ScriptDock.Storage;
 
 namespace ScriptDock.Services;
 
@@ -25,4 +27,5 @@ public interface IProcessRunner
     void ShutdownAll(bool kill);
     void Recapture(IReadOnlyList<PersistedProcess> records);
     void ReconcileExited();
+    Task ImportFinishedOutputAsync(IRecordStore records, CancellationToken cancellationToken);
 }

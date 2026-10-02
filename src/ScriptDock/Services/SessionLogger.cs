@@ -17,11 +17,10 @@ namespace ScriptDock.Services;
 /// and cause chain).
 /// </summary>
 /// <remarks>
-/// The logger owns a <see cref="TextWriter"/> and writes under a lock. It gates
+/// The logger hands each line to an <see cref="ILogSink"/> under a lock. It gates
 /// <c>debug</c> to developers, writes the free fields as given (logging-conventions),
-/// flushes <c>warn</c> / <c>error</c> / <c>debug</c> immediately (while <c>info</c> may
-/// stay buffered), and degrades to the console if the writer ever fails. By contract it never throws and never takes the app down because logging
-/// failed.
+/// and degrades to the console if the sink ever fails. By contract it never throws and
+/// never takes the app down because logging failed.
 /// </remarks>
 public sealed class SessionLogger : IDisposable
 {
@@ -47,26 +46,26 @@ public sealed class SessionLogger : IDisposable
     private static readonly HashSet<string> ReservedKeys =
         new(StringComparer.OrdinalIgnoreCase) { "time", "level", "message", "error" };
 
-    private readonly TextWriter _writer;
-    private readonly bool _leaveOpen;
+    private readonly ILogSink _sink;
     private readonly object _gate = new();
     private bool _disposed;
 
     /// <summary>
-    /// Creates a logger over <paramref name="writer"/>. When
-    /// <paramref name="debugEnabled"/> is false, <see cref="Debug(string, object?)"/>
-    /// calls are dropped. Set <paramref name="leaveOpen"/> for shared writers (the console)
-    /// that this logger must not close on <see cref="Dispose"/>.
+    /// Creates a logger over <paramref name="sink"/>. When <paramref name="debugEnabled"/>
+    /// is false, <see cref="Debug(string, object?)"/> calls are dropped.
     /// </summary>
-    public SessionLogger(
-        TextWriter writer,
-        bool debugEnabled,
-        bool leaveOpen = false)
+    public SessionLogger(ILogSink sink, bool debugEnabled)
     {
-        _writer = writer ?? throw new ArgumentNullException(nameof(writer));
+        _sink = sink ?? throw new ArgumentNullException(nameof(sink));
         DebugEnabled = debugEnabled;
-        _leaveOpen = leaveOpen;
     }
+
+    /// <summary>
+    /// Creates a logger over <paramref name="writer"/>. Set <paramref name="leaveOpen"/> for
+    /// shared writers (the console) that this logger must not close on <see cref="Dispose"/>.
+    /// </summary>
+    public SessionLogger(TextWriter writer, bool debugEnabled, bool leaveOpen = false)
+        : this(new TextWriterLogSink(writer, leaveOpen), debugEnabled) { }
 
     /// <summary>Whether developer-only <c>debug</c> events are written.</summary>
     public bool DebugEnabled { get; }
@@ -101,18 +100,13 @@ public sealed class SessionLogger : IDisposable
     public void Error(string message, Exception exception, object? fields = null) =>
         Write(LogLevel.Error, message, exception, fields);
 
-    /// <summary>Flushes buffered lines to the underlying writer. Best-effort.</summary>
+    /// <summary>Flushes buffered lines to the sink. Best-effort.</summary>
     public void Flush()
     {
         lock (_gate)
         {
-            if (_disposed)
-                return;
-            try { _writer.Flush(); }
-            catch (Exception ex)
-            {
-                EmitToConsole($"[logger] flush failed: {ex.GetType().Name}: {ex.Message}");
-            }
+            if (!_disposed)
+                _sink.Flush();
         }
     }
 
@@ -123,43 +117,30 @@ public sealed class SessionLogger : IDisposable
             if (_disposed)
                 return;
             _disposed = true;
-
-            try { _writer.Flush(); }
-            catch (Exception ex)
-            {
-                EmitToConsole($"[logger] final flush failed: {ex.GetType().Name}: {ex.Message}");
-            }
-
-            if (!_leaveOpen)
-            {
-                try { _writer.Dispose(); }
-                catch (Exception ex)
-                {
-                    EmitToConsole($"[logger] dispose failed: {ex.GetType().Name}: {ex.Message}");
-                }
-            }
+            _sink.Dispose();
         }
     }
 
     private void Write(LogLevel level, string message, Exception? exception, object? fields)
     {
         // Serialize under the same lock that writes, so a line's `time` and its
-        // physical position in the file agree: two threads cannot stamp their
+        // position in the log agree: two threads cannot stamp their
         // timestamps in one order and then write in the opposite order. Logging here
         // is low-volume (human-cadence actions and IO boundaries), so holding the lock
         // across serialization costs nothing and removes a class of ordering surprises.
         lock (_gate)
         {
+            var time = TimestampConventions.IsoMillis(DateTimeOffset.UtcNow);
             string line;
             try
             {
-                line = Serialize(level, message, exception, fields);
+                line = Serialize(time, level, message, exception, fields);
             }
             catch (Exception serializeError)
             {
                 // Serialization must never take the app down. Emit a minimal line so
                 // the event is not lost, and record that serialization failed.
-                line = FallbackLine(level, message, serializeError);
+                line = FallbackLine(time, level, message, serializeError);
             }
 
             if (_disposed)
@@ -172,25 +153,21 @@ public sealed class SessionLogger : IDisposable
 
             try
             {
-                _writer.WriteLine(line);
-                // info may stay buffered for efficiency; everything else is wanted
-                // on disk immediately (you are actively debugging when you read it).
-                if (level != LogLevel.Info)
-                    _writer.Flush();
+                _sink.Write(level, time, message, line);
             }
             catch (Exception writeError)
             {
                 EmitToConsole(line);
-                EmitToConsole($"[logger] file write failed: {writeError.GetType().Name}: {writeError.Message}");
+                EmitToConsole($"[logger] write failed: {writeError.GetType().Name}: {writeError.Message}");
             }
         }
     }
 
-    private string Serialize(LogLevel level, string message, Exception? exception, object? fields)
+    private static string Serialize(string time, LogLevel level, string message, Exception? exception, object? fields)
     {
         var root = new JsonObject
         {
-            ["time"] = TimestampConventions.IsoMillis(DateTimeOffset.UtcNow),
+            ["time"] = time,
             ["level"] = LevelName(level),
             ["message"] = message,
         };
@@ -227,7 +204,7 @@ public sealed class SessionLogger : IDisposable
         }
     }
 
-    private static JsonObject BuildErrorNode(Exception exception)
+    internal static JsonObject BuildErrorNode(Exception exception)
     {
         var node = new JsonObject
         {
@@ -253,7 +230,7 @@ public sealed class SessionLogger : IDisposable
         return node;
     }
 
-    private static string LevelName(LogLevel level) => level switch
+    internal static string LevelName(LogLevel level) => level switch
     {
         LogLevel.Debug => "debug",
         LogLevel.Info => "info",
@@ -262,7 +239,7 @@ public sealed class SessionLogger : IDisposable
         _ => "info",
     };
 
-    private static string FallbackLine(LogLevel level, string message, Exception serializeError)
+    private static string FallbackLine(string time, LogLevel level, string message, Exception serializeError)
     {
         // Last resort: even serialization failed. Build a valid line by hand from the
         // few values we fully control, escaping the message defensively.
@@ -271,14 +248,13 @@ public sealed class SessionLogger : IDisposable
             .Replace("\"", "\\\"")
             .Replace("\n", "\\n")
             .Replace("\r", "\\r");
-        var time = TimestampConventions.IsoMillis(DateTimeOffset.UtcNow);
         return $"{{\"time\":\"{time}\",\"level\":\"{LevelName(level)}\",\"message\":\"{safeMessage}\","
              + $"\"logError\":\"{serializeError.GetType().Name}\"}}";
     }
 
-    private static void EmitToConsole(string text)
+    internal static void EmitToConsole(string text)
     {
-        // The file is unavailable (disk full, permissions) or already closed. Degrade
+        // The sink is unavailable (disk full, permissions) or already closed. Degrade
         // to the console using only what is already available — no new dependencies —
         // and keep running. If even the console is gone, by contract we still never throw.
         try { Console.Error.WriteLine(text); }

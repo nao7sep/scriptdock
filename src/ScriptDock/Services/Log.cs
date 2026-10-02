@@ -1,14 +1,14 @@
 using System;
 using System.Threading.Tasks;
+using ScriptDock.Storage;
 
 namespace ScriptDock.Services;
 
 /// <summary>
-/// Process-wide logging facade. <see cref="Start"/> opens the one per-launch log
-/// file under the app's logs directory, installs last-resort crash hooks, and routes
-/// every subsequent call to a <see cref="SessionLogger"/>. Before <see cref="Start"/>
-/// — or if the file cannot be opened — calls degrade to the console rather than being
-/// lost.
+/// Process-wide logging facade. <see cref="Start"/> installs last-resort crash hooks and
+/// routes every subsequent call to a <see cref="SessionLogger"/> that writes log records
+/// into the <see cref="RecordStore"/>. Before <see cref="Start"/> and after
+/// <see cref="Shutdown"/>, calls degrade to the console rather than being lost.
 /// </summary>
 /// <remarks>
 /// The facade is a thin pass-through; the testable behavior lives in
@@ -20,27 +20,19 @@ public static class Log
 {
     private static readonly object Gate = new();
 
-    // Always non-null: a console-backed logger until Start swaps in the file-backed
+    // Always non-null: a console-backed logger until Start swaps in the records-backed
     // one, and again after Shutdown, so an event is never silently dropped.
     private static volatile SessionLogger _logger = CreateConsoleLogger();
-    private static volatile string? _sessionLogPath;
     private static bool _started;
     private static bool _hooksInstalled;
 
     /// <summary>Whether developer-only <c>debug</c> events are being written.</summary>
     public static bool DebugEnabled => _logger.DebugEnabled;
 
-    /// <summary>The path of the current session's log file, or null when logging to the console
-    /// (before <see cref="Start"/>, or if the file could not be opened). Lets the UI reveal the
-    /// actual session log rather than guessing the newest file in the logs directory.</summary>
-    public static string? SessionLogPath => _sessionLogPath;
-
     /// <summary>
-    /// Opens the per-session log file for this process launch and begins logging. A
-    /// second call is ignored — one session is one file. If the file cannot be opened
-    /// the app still runs, logging to the console.
+    /// Begins writing this session's log records. A second call is ignored.
     /// </summary>
-    public static void Start(string logsDirectory)
+    public static void Start(RecordStore records)
     {
         lock (Gate)
         {
@@ -50,32 +42,15 @@ public static class Log
 
             InstallCrashHooks();
 
-            SessionLogger fileLogger;
-            try
-            {
-                // One timestamp drives both the opened file and the recorded path, so SessionLogPath
-                // names the exact file this session writes to.
-                var timestamp = DateTimeOffset.UtcNow;
-                fileLogger = new SessionLogger(SessionLog.OpenWriter(logsDirectory, timestamp), IsDebugEnabled());
-                _sessionLogPath = SessionLog.PathFor(logsDirectory, timestamp);
-            }
-            catch (Exception ex)
-            {
-                // Best-effort: keep the console logger and report why. Launching must
-                // never fail because logging could not open its file.
-                _logger.Error("logger: could not open session file; logging to console", ex, new { logsDirectory });
-                return;
-            }
-
             var previous = _logger;
-            _logger = fileLogger;
+            _logger = new SessionLogger(new RecordLogSink(records), IsDebugEnabled());
             previous.Dispose(); // console logger: leaveOpen, so this only flushes
         }
     }
 
     /// <summary>
-    /// Flushes and closes the session file. Idempotent. Late events that arrive after
-    /// shutdown fall back to the console rather than being lost.
+    /// Writes what is pending and stops writing records. Idempotent. Late events that
+    /// arrive after shutdown fall back to the console rather than being lost.
     /// </summary>
     public static void Shutdown()
     {
@@ -91,7 +66,7 @@ public static class Log
         }
     }
 
-    /// <summary>Flushes buffered lines without closing the file.</summary>
+    /// <summary>Waits, within a bound, until the pending lines are written.</summary>
     public static void Flush() => _logger.Flush();
 
     public static void Debug(string message, object? fields = null) => _logger.Debug(message, fields);

@@ -26,7 +26,7 @@ public sealed class MainWindowViewModelTests
         var configStore = new FakeConfigStore { Value = config };
         var stateStore = new FakeJsonStore<AppState> { Value = state };
         var runner = new FakeProcessRunner();
-        var vm = new MainWindowViewModel(configStore, stateStore, config, state, new ScriptScanner(), runner);
+        var vm = new MainWindowViewModel(configStore, stateStore, new FakeRecordStore(), config, state, new ScriptScanner(), runner);
         return (vm, runner);
     }
 
@@ -251,6 +251,7 @@ public sealed class MainWindowViewModelTests
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state, ThrowOnSave = true },
+            new FakeRecordStore(),
             config,
             state,
             new ScriptScanner(),
@@ -288,7 +289,7 @@ public sealed class MainWindowViewModelTests
         var configStore = new FakeConfigStore();
         var stateStore = new FakeJsonStore<AppState>();
         var vm = new MainWindowViewModel(
-            configStore, stateStore, configStore.Value, stateStore.Value,
+            configStore, stateStore, new FakeRecordStore(), configStore.Value, stateStore.Value,
             new ScriptScanner(), new FakeProcessRunner());
 
         vm.CaptureWindowPlacement(-1400, 80, 1100.5, 720.25, maximized: true);
@@ -309,7 +310,7 @@ public sealed class MainWindowViewModelTests
         var configStore = new FakeConfigStore { Value = config, ThrowOnSave = true };
         var stateStore = new FakeJsonStore<AppState>();
         var vm = new MainWindowViewModel(
-            configStore, stateStore, config, new AppState(), new ScriptScanner(), new FakeProcessRunner());
+            configStore, stateStore, new FakeRecordStore(), config, new AppState(), new ScriptScanner(), new FakeProcessRunner());
         var draft = vm.CreateSettingsDraft();
         draft.RootDirs.Clear();
         draft.RootDirs.Add("/new");
@@ -329,7 +330,7 @@ public sealed class MainWindowViewModelTests
         var configStore = new FakeConfigStore { Value = config, ThrowOnSave = true };
         var stateStore = new FakeJsonStore<AppState>();
         var vm = new MainWindowViewModel(
-            configStore, stateStore, config, stateStore.Value, new ScriptScanner(), new FakeProcessRunner());
+            configStore, stateStore, new FakeRecordStore(), config, stateStore.Value, new ScriptScanner(), new FakeProcessRunner());
         var draft = vm.CreateSettingsDraft();
         draft.UiFontFamily = "Helvetica";
 
@@ -363,6 +364,7 @@ public sealed class MainWindowViewModelTests
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState>(),
+            new FakeRecordStore(),
             config,
             new AppState(),
             new ScriptScanner(),
@@ -386,7 +388,7 @@ public sealed class MainWindowViewModelTests
         process.Process = Process.GetCurrentProcess();
         process.LogFilePath = "/logs/first.log";
         var vm = new MainWindowViewModel(
-            configStore, stateStore, configStore.Value, stateStore.Value, new ScriptScanner(), runner);
+            configStore, stateStore, new FakeRecordStore(), configStore.Value, stateStore.Value, new ScriptScanner(), runner);
 
         await Assert.ThrowsAnyAsync<Exception>(() => vm.PersistRunningSnapshotAsync());
         stateStore.ThrowOnSave = false;

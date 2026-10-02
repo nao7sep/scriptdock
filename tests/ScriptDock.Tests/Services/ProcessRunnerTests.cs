@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using ScriptDock;
 using ScriptDock.Models;
 using ScriptDock.Services;
+using ScriptDock.Tests.Fakes;
 using Xunit;
 
 namespace ScriptDock.Tests.Services;
@@ -349,5 +350,91 @@ public sealed class ProcessRunnerTests : IDisposable
         {
             await runner.TerminateAsync(handle);
         }
+    }
+
+    private string QuietOutput(string name, string content)
+    {
+        Directory.CreateDirectory(_runsDir);
+        var path = Path.Combine(_runsDir, name);
+        File.WriteAllText(path, content);
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow - ProcessRunner.OutputQuietPeriod - TimeSpan.FromMinutes(1));
+        return path;
+    }
+
+    private static RunRecord RecordedRun(string outputPath, int run, int? pid = null, DateTimeOffset? osStartedAt = null) =>
+        new("2026-01-01T00:00:00.000Z", run, DateTimeOffset.UtcNow, "/x/a.command", pid, osStartedAt, outputPath);
+
+    [Fact]
+    public async Task ImportFinishedOutput_MovesAFinishedRunsOutputIntoTheRecords_AndDeletesTheFile()
+    {
+        var path = QuietOutput("finished.log", "done\n");
+        var records = new FakeRecordStore();
+        records.Runs.Add(RecordedRun(path, run: 4));
+
+        await new ProcessRunner(_runsDir).ImportFinishedOutputAsync(records, CancellationToken.None);
+
+        Assert.Equal("done\n"u8.ToArray(), records.Outputs[("2026-01-01T00:00:00.000Z", 4)]);
+        Assert.False(File.Exists(path));
+    }
+
+    [Fact]
+    public async Task ImportFinishedOutput_LeavesAFileNoRunRecordNames()
+    {
+        var path = QuietOutput("unrecorded.log", "old\n");
+        var records = new FakeRecordStore();
+
+        await new ProcessRunner(_runsDir).ImportFinishedOutputAsync(records, CancellationToken.None);
+
+        Assert.Empty(records.Outputs);
+        Assert.True(File.Exists(path));
+    }
+
+    [Fact]
+    public async Task ImportFinishedOutput_LeavesAFileThatChangedRecently()
+    {
+        Directory.CreateDirectory(_runsDir);
+        var path = Path.Combine(_runsDir, "recent.log");
+        File.WriteAllText(path, "still writing\n");
+        var records = new FakeRecordStore();
+        records.Runs.Add(RecordedRun(path, run: 1));
+
+        await new ProcessRunner(_runsDir).ImportFinishedOutputAsync(records, CancellationToken.None);
+
+        Assert.Empty(records.Outputs);
+        Assert.True(File.Exists(path));
+    }
+
+    [Fact]
+    public async Task ImportFinishedOutput_LeavesTheOutputOfARunWhoseProcessIsAlive()
+    {
+        using var self = Process.GetCurrentProcess();
+        var path = QuietOutput("alive.log", "serving\n");
+        var records = new FakeRecordStore();
+        records.Runs.Add(RecordedRun(path, run: 1, self.Id, new DateTimeOffset(self.StartTime).ToUniversalTime()));
+
+        await new ProcessRunner(_runsDir).ImportFinishedOutputAsync(records, CancellationToken.None);
+
+        Assert.Empty(records.Outputs);
+        Assert.True(File.Exists(path));
+    }
+
+    [MacOnlyFact]
+    public async Task ImportFinishedOutput_WaitsUntilTheRunLeavesTheActiveSet()
+    {
+        var script = WriteExecutableScript("brief.command", "echo brief\nexit 0\n");
+        var runner = new ProcessRunner(_runsDir);
+        var records = new FakeRecordStore();
+        var handle = runner.Start(script);
+        Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+        records.Runs.Add(RunRecord.For(records.Session, handle));
+        File.SetLastWriteTimeUtc(handle.LogFilePath!, DateTime.UtcNow - ProcessRunner.OutputQuietPeriod - TimeSpan.FromMinutes(1));
+
+        await runner.ImportFinishedOutputAsync(records, CancellationToken.None);
+        Assert.Empty(records.Outputs); // the console still reads it
+
+        runner.Dismiss(handle);
+        await runner.ImportFinishedOutputAsync(records, CancellationToken.None);
+        Assert.Contains("brief", System.Text.Encoding.UTF8.GetString(records.Outputs[(records.Session, handle.Id)]));
+        Assert.False(File.Exists(handle.LogFilePath!));
     }
 }

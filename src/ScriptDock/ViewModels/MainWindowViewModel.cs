@@ -28,6 +28,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 {
     private readonly IConfigStore _configStore;
     private readonly IJsonStore<AppState> _stateStore;
+    private readonly IRecordStore _records;
     private readonly AppConfig _config;
     private readonly AppState _state;
     private readonly ScriptScanner _scanner;
@@ -41,6 +42,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private readonly List<ScriptProcess> _subscribed = [];
     private DispatcherTimer? _outputTimer;
+
+    // Moves finished runs' output into the records now and then; one pass at a time, cancelled on shutdown.
+    private static readonly TimeSpan OutputImportInterval = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan OutputImportShutdownWait = TimeSpan.FromSeconds(5);
+    private DispatcherTimer? _outputImportTimer;
+    private readonly CancellationTokenSource _outputImportCts = new();
+    private Task _outputImport = Task.CompletedTask;
 
     // Cancels the in-flight scan when a newer scan supersedes it or the window closes, so a scan over
     // a slow/unresponsive root can never strand IsScanning (and thus the Rescan command) forever.
@@ -109,6 +117,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public MainWindowViewModel(
         IConfigStore configStore,
         IJsonStore<AppState> stateStore,
+        IRecordStore records,
         AppConfig config,
         AppState state,
         ScriptScanner scanner,
@@ -116,6 +125,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         _configStore = configStore;
         _stateStore = stateStore;
+        _records = records;
         _config = config;
         _state = state;
         _scanner = scanner;
@@ -233,6 +243,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
 
         StartOutputTimer();
+        StartOutputImport();
         RebuildRecent();
         await RescanAsync();
     }
@@ -262,10 +273,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public Task ShutdownAsync() => GuardAsync("shutdown", Message.Of("guard.shutdown"), async () =>
     {
         _outputTimer?.Stop();
+        _outputImportTimer?.Stop();
         _catalogResultTimer?.Stop();
         _scanCts?.Cancel(); // don't let a slow scan keep the closing window's work alive
+        _outputImportCts.Cancel();
         _runner.ShutdownAll(_config.KillProcessesOnClose);
         await PersistRunningSnapshotAsync(); // record what is still running (or none, if killed) for next launch
+        await Task.WhenAny(_outputImport, Task.Delay(OutputImportShutdownWait));
     });
 
     // The running snapshot last written to disk, as a cheap signature (pid:path per run), so a
@@ -407,7 +421,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
             var report = await Task.Run(() => _scanner.Scan(roots, extensions, patterns, cts.Token), cts.Token);
             cts.Token.ThrowIfCancellationRequested(); // a newer scan superseded us between completion and here
-            ScanReportLog.Write(report);
+            ScanReportLog.Write(_records, report);
 
             var diff = ScanDiff.Compute(report.Found, _state.KnownPaths);
             _lastFound = report.Found;
@@ -632,6 +646,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        _ = RecordRunAsync(started);
         _state.RecentlyRun = RecentRuns.Add(_state.RecentlyRun, path, DateTimeOffset.UtcNow);
         try
         {
@@ -773,6 +788,48 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _outputTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
         _outputTimer.Tick += (_, _) => OnOutputTick();
         _outputTimer.Start();
+    }
+
+    // The record keeps the run; a failure has already left the entry in the records' fallback file.
+    private async Task RecordRunAsync(ScriptProcess process)
+    {
+        try
+        {
+            await _records.AddRunAsync(RunRecord.For(_records.Session, process));
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("ui: record run failed", ex, new { script = process.ScriptPath, id = process.Id });
+        }
+    }
+
+    private void StartOutputImport()
+    {
+        if (_outputImportTimer is null)
+        {
+            _outputImportTimer = new DispatcherTimer { Interval = OutputImportInterval };
+            _outputImportTimer.Tick += (_, _) => StartOutputImport();
+            _outputImportTimer.Start();
+        }
+
+        if (_outputImport.IsCompleted && !_outputImportCts.IsCancellationRequested)
+            _outputImport = ImportFinishedOutputAsync();
+    }
+
+    private async Task ImportFinishedOutputAsync()
+    {
+        try
+        {
+            await _runner.ImportFinishedOutputAsync(_records, _outputImportCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutting down; the files stay for the next launch.
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("run output: import failed; the files stay for the next pass", ex);
+        }
     }
 
     private void OnOutputTick()

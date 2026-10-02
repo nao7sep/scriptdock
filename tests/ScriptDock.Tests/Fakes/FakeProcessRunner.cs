@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using ScriptDock.Models;
 using ScriptDock.Services;
+using ScriptDock.Storage;
 
 namespace ScriptDock.Tests.Fakes;
 
@@ -89,4 +91,12 @@ public sealed class FakeProcessRunner : IProcessRunner
     }
 
     public void ReconcileExited() { }
+
+    public int ImportCalls { get; private set; }
+
+    public Task ImportFinishedOutputAsync(IRecordStore records, CancellationToken cancellationToken)
+    {
+        ImportCalls++;
+        return Task.CompletedTask;
+    }
 }
