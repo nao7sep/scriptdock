@@ -16,7 +16,7 @@ namespace ScriptDock.Tests.Views;
 public sealed class SettingsAccessibilityTests : WindowTest
 {
     [AvaloniaFact]
-    public void ResetButtons_RestoreTheDraftAndMarkTheirSetsForDeletion()
+    public void ResetButtons_FillTheDraftWithTheBuiltIns()
     {
         var config = new AppConfig { Extensions = [".custom"], IgnorePatterns = ["/custom/"] };
         var vm = new SettingsDialogViewModel(config);
@@ -28,8 +28,6 @@ public sealed class SettingsAccessibilityTests : WindowTest
 
         Assert.Equal([ConfigDefaults.DefaultExtension], vm.Extensions);
         Assert.Equal(ConfigDefaults.BuiltInIgnorePatterns, vm.IgnorePatterns);
-        Assert.Contains(ConfigSets.Extensions, vm.ResetSetKeys);
-        Assert.Contains(ConfigSets.IgnorePatterns, vm.ResetSetKeys);
         Assert.True(vm.IsDirty);
     }
 

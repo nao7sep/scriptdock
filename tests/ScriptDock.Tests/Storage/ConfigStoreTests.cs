@@ -44,25 +44,13 @@ public sealed class ConfigStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task UnchangedDialog_DoesNotWriteAFile()
-    {
-        var store = new ConfigStore();
-        var config = store.Load();
-        var vm = new MainWindowViewModel(store, new FakeJsonStore<AppState>(), config,
-            new AppState(), new ScriptScanner(), new FakeProcessRunner());
-        Assert.True(await vm.TryApplySettingsAsync(new SettingsDialogViewModel(config)));
-        Assert.False(File.Exists(ConfigPath));
-    }
-
-    [Fact]
     public async Task Hide_WritesExactlyHiddenAndLeavesOtherSetsAbsent()
     {
         var store = new ConfigStore();
         var config = store.Load();
-        var vm = new MainWindowViewModel(store, new FakeJsonStore<AppState>(), config,
-            new AppState(), new ScriptScanner(), new FakeProcessRunner());
+        var vm = NewViewModel(store, config);
         await vm.ToggleHiddenCommand.ExecuteAsync(new ScriptItem("/scripts/run.command"));
-        Assert.Equal([ConfigSets.Hidden], ReadKeys());
+        Assert.Equal(["hidden"], ReadKeys());
         var loaded = store.Load();
         Assert.Equal(["/scripts/run.command"], loaded.Hidden);
         Assert.Equal([ConfigDefaults.DefaultExtension], loaded.Extensions);
@@ -76,13 +64,24 @@ public sealed class ConfigStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Dialog_WritesOnlyChangedSetsAndPreservesExistingCopies()
+    public async Task Unhide_LastScript_RemovesHiddenAndKeepsTheFile()
+    {
+        var store = new ConfigStore();
+        var vm = NewViewModel(store, store.Load());
+        var item = new ScriptItem("/scripts/run.command");
+        await vm.ToggleHiddenCommand.ExecuteAsync(item);
+        await vm.ToggleHiddenCommand.ExecuteAsync(item);
+        Assert.Empty(ReadKeys());
+        Assert.Empty(store.Load().Hidden);
+    }
+
+    [Fact]
+    public async Task Dialog_WritesEverySetThatDiffersAndDropsUnknownKeys()
     {
         File.WriteAllText(ConfigPath, """{"hidden":["/hidden"],"extensions":[],"version":1,"unknown":true}""");
         var store = new ConfigStore();
         var config = store.Load();
-        var vm = new MainWindowViewModel(store, new FakeJsonStore<AppState>(), config,
-            new AppState(), new ScriptScanner(), new FakeProcessRunner());
+        var vm = NewViewModel(store, config);
         var draft = new SettingsDialogViewModel(config) { KillProcessesOnClose = true };
         Assert.True(await vm.TryApplySettingsAsync(draft));
         Assert.Equal(["extensions", "hidden", "killProcessesOnClose"], ReadKeys());
@@ -91,23 +90,40 @@ public sealed class ConfigStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Reset_DeletesCopiesIncludingAnExplicitCopyEqualToTheBuiltIn()
+    public async Task Reset_RemovesTheResetSets()
     {
+        File.WriteAllText(ConfigPath, """{"extensions":[".sh"],"ignorePatterns":["/custom/"]}""");
         var store = new ConfigStore();
         var config = store.Load();
-        await store.SaveSetsAsync(config, [ConfigSets.Extensions, ConfigSets.IgnorePatterns]);
-        config = store.Load();
-        var vm = new MainWindowViewModel(store, new FakeJsonStore<AppState>(), config,
-            new AppState(), new ScriptScanner(), new FakeProcessRunner());
+        var vm = NewViewModel(store, config);
         var draft = new SettingsDialogViewModel(config);
         draft.ResetExtensions();
         draft.ResetIgnorePatterns();
         Assert.True(draft.IsDirty);
         Assert.True(await vm.TryApplySettingsAsync(draft));
         Assert.Empty(ReadKeys());
-        Assert.Empty(config.StoredSetKeys);
         Assert.Equal([ConfigDefaults.DefaultExtension], store.Load().Extensions);
         Assert.Equal(ConfigDefaults.BuiltInIgnorePatterns, store.Load().IgnorePatterns);
+    }
+
+    [Fact]
+    public async Task CopiesEqualToTheirBuiltInAfterCleanup_LoseTheirKeysAtTheNextSave()
+    {
+        File.WriteAllText(ConfigPath, $$"""{"extensions":[" {{ConfigDefaults.DefaultExtension}}\n"],"uiFontFamily":"  ","theme":"system"}""");
+        var store = new ConfigStore();
+        var vm = NewViewModel(store, store.Load());
+        await vm.ToggleHiddenCommand.ExecuteAsync(new ScriptItem("/scripts/run.command"));
+        Assert.Equal(["hidden"], ReadKeys());
+    }
+
+    [Fact]
+    public async Task InvalidSet_LosesItsKeyAtTheNextSave()
+    {
+        File.WriteAllText(ConfigPath, """{"extensions":[null,".sh"],"theme":"future","hidden":["/ok"]}""");
+        var store = new ConfigStore();
+        var config = store.Load();
+        await store.SaveAsync(config);
+        Assert.Equal(["hidden"], ReadKeys());
     }
 
     [Fact]
@@ -126,6 +142,13 @@ public sealed class ConfigStoreTests : IDisposable
     }
 
     [Fact]
+    public void BuiltInTexts_AreKeptCleaned()
+    {
+        Assert.Equal(TextCleanup.SingleLine(ConfigDefaults.DefaultExtension), ConfigDefaults.DefaultExtension);
+        Assert.All(ConfigDefaults.BuiltInIgnorePatterns, pattern => Assert.Equal(TextCleanup.SingleLine(pattern), pattern));
+    }
+
+    [Fact]
     public void CorruptFile_IsQuarantinedWithoutSeedingAReplacement()
     {
         File.WriteAllText(ConfigPath, "{ broken");
@@ -136,22 +159,25 @@ public sealed class ConfigStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task OverlappingWrites_SnapshotValuesAndPreserveIndependentSets()
+    public async Task OverlappingWrites_EachSnapshotTheirCallAndLandInOrder()
     {
         var store = new ConfigStore();
         var config = store.Load();
         config.Hidden.Add("/one");
-        var first = store.SaveSetsAsync(config, [ConfigSets.Hidden]);
+        var first = store.SaveAsync(config);
         config.Hidden.Add("/two");
-        var second = store.SaveSetsAsync(config, [ConfigSets.Hidden]);
+        var second = store.SaveAsync(config);
         config.Extensions = [".sh"];
-        var third = store.SaveSetsAsync(config, [ConfigSets.Extensions]);
+        var third = store.SaveAsync(config);
         config.Extensions.Add(".late");
         await Task.WhenAll(first, second, third);
         Assert.Equal(["/one", "/two"], store.Load().Hidden);
         Assert.Equal([".sh"], store.Load().Extensions);
-        Assert.Equal([ConfigSets.Extensions, ConfigSets.Hidden], ReadKeys());
+        Assert.Equal(["extensions", "hidden"], ReadKeys());
     }
+
+    private static MainWindowViewModel NewViewModel(ConfigStore store, AppConfig config) =>
+        new(store, new FakeJsonStore<AppState>(), config, new AppState(), new ScriptScanner(), new FakeProcessRunner());
 
     private string[] ReadKeys()
     {

@@ -61,9 +61,4 @@ public sealed class AppConfig
     /// <summary>When true (default), a relaunch re-attaches to scripts left running by a previous
     /// session, matched by PID and OS start-time; otherwise those are treated as no longer running.</summary>
     public bool RecaptureProcessesOnLaunch { get; set; } = true;
-
-    // Presence belongs to the loaded map; it lets a reset remove an explicit copy even when its
-    // current value happens to equal the built-in. It is never persisted as another config set.
-    [JsonIgnore]
-    public HashSet<string> StoredSetKeys { get; } = [];
 }

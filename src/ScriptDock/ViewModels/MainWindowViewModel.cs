@@ -329,24 +329,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public async Task<bool> TryApplySettingsAsync(SettingsDialogViewModel draft)
     {
-        var candidate = new AppConfig
-        {
-            RootDirs = draft.RootDirs.ToList(),
-            Extensions = draft.Extensions.ToList(),
-            IgnorePatterns = draft.IgnorePatterns.ToList(),
-            Hidden = _config.Hidden.ToList(),
-            KillProcessesOnClose = draft.KillProcessesOnClose,
-            RecaptureProcessesOnLaunch = draft.RecaptureProcessesOnLaunch,
-            UiFontFamily = draft.UiFontFamily.Trim(),
-            Theme = draft.Theme,
-            Language = draft.Language.Value,
-        };
-
-        var changedKeys = ConfigSets.ChangedKeys(_config, candidate).Where(key => key != ConfigSets.Hidden).ToArray();
-        var resetKeys = draft.ResetSetKeys.ToArray();
+        var candidate = draft.ToConfig();
+        candidate.Hidden = _config.Hidden.ToList();
         try
         {
-            await _configStore.SaveSetsAsync(candidate, changedKeys, resetKeys);
+            await _configStore.SaveAsync(candidate);
         }
         catch (Exception ex)
         {
@@ -358,10 +345,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _config.RootDirs = candidate.RootDirs;
         _config.Extensions = candidate.Extensions;
         _config.IgnorePatterns = candidate.IgnorePatterns;
-        foreach (var key in changedKeys)
-            _config.StoredSetKeys.Add(key);
-        foreach (var key in resetKeys)
-            _config.StoredSetKeys.Remove(key);
         _config.KillProcessesOnClose = candidate.KillProcessesOnClose;
         _config.RecaptureProcessesOnLaunch = candidate.RecaptureProcessesOnLaunch;
         _config.UiFontFamily = candidate.UiFontFamily;
@@ -575,8 +558,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            await _configStore.SaveSetsAsync(_config, [ConfigSets.Hidden]);
-            _config.StoredSetKeys.Add(ConfigSets.Hidden);
+            await _configStore.SaveAsync(_config);
             ResolveOperationalError("toggle hidden");
         }
         catch (Exception ex)

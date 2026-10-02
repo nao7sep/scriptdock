@@ -17,28 +17,12 @@ namespace ScriptDock.ViewModels;
 /// no duplicate; an extension rejects whitespace and is normalised to a leading dot; a pattern must
 /// be a single line and must compile) — all at commit time, never mid-keystroke, per the
 /// text-input-ime-conventions; rejection is validation, which the text-cleanup conventions leave to
-/// the app. <see cref="IsDirty"/> is the draft differing from the config it was seeded from, so the
-/// dialog can gate Save and prompt on discard.
+/// the app. <see cref="IsDirty"/> is the cleaned draft differing from the config it was seeded from, so
+/// the dialog can gate Save and prompt on discard.
 /// </summary>
 public sealed partial class SettingsDialogViewModel : ObservableObject
 {
-    private readonly List<string> _originalRoots;
-    private readonly List<string> _originalExtensions;
-    private readonly List<string> _originalPatterns;
-    private readonly bool _originalKillProcessesOnClose;
-    private readonly bool _originalRecaptureProcessesOnLaunch;
-    private readonly string _originalUiFontFamily;
-    private readonly ThemePreference _originalTheme;
-    private readonly string _originalLanguage;
-
-    private readonly HashSet<string> _originalStoredKeys;
-    private bool _resetting;
-    private bool _resetExtensions;
-    private bool _resetIgnorePatterns;
-
-    public IReadOnlyCollection<string> ResetSetKeys =>
-        new[] { _resetExtensions ? ConfigSets.Extensions : null, _resetIgnorePatterns ? ConfigSets.IgnorePatterns : null }
-            .OfType<string>().ToArray();
+    private readonly AppConfig _opened;
 
     public ObservableCollection<string> RootDirs { get; }
     public ObservableCollection<string> Extensions { get; }
@@ -97,49 +81,37 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
 
     public SettingsDialogViewModel(AppConfig config)
     {
-        _originalStoredKeys = new(config.StoredSetKeys);
-        _originalRoots = config.RootDirs.ToList();
-        _originalExtensions = config.Extensions.ToList();
-        _originalPatterns = config.IgnorePatterns.ToList();
-        _originalKillProcessesOnClose = config.KillProcessesOnClose;
-        _originalRecaptureProcessesOnLaunch = config.RecaptureProcessesOnLaunch;
-        _originalUiFontFamily = config.UiFontFamily;
-        _originalTheme = config.Theme;
         _theme = config.Theme;
-        _originalLanguage = Languages.NormalizePreference(config.Language);
         LanguageOptions = LanguageOption.All();
-        _language = LanguageOption.For(_originalLanguage, LanguageOptions);
+        _language = LanguageOption.For(Languages.NormalizePreference(config.Language), LanguageOptions);
         _killProcessesOnClose = config.KillProcessesOnClose;          // field, not property: no dirty flip during construction
         _recaptureProcessesOnLaunch = config.RecaptureProcessesOnLaunch;
         _uiFontFamily = config.UiFontFamily;
 
-        RootDirs = new ObservableCollection<string>(_originalRoots);
-        Extensions = new ObservableCollection<string>(_originalExtensions);
-        IgnorePatterns = new ObservableCollection<string>(_originalPatterns);
+        RootDirs = new ObservableCollection<string>(config.RootDirs);
+        Extensions = new ObservableCollection<string>(config.Extensions);
+        IgnorePatterns = new ObservableCollection<string>(config.IgnorePatterns);
+        _opened = ToConfig();
 
         RootDirs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsDirty));
-        Extensions.CollectionChanged += (_, _) =>
-        {
-            if (!_resetting) _resetExtensions = false;
-            OnPropertyChanged(nameof(IsDirty));
-        };
-        IgnorePatterns.CollectionChanged += (_, _) =>
-        {
-            if (!_resetting) _resetIgnorePatterns = false;
-            OnPropertyChanged(nameof(IsDirty));
-        };
+        Extensions.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsDirty));
+        IgnorePatterns.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsDirty));
     }
 
-    public bool IsDirty =>
-        ResetSetKeys.Any(_originalStoredKeys.Contains) ||
-        !RootDirs.SequenceEqual(_originalRoots) ||
-        !Extensions.SequenceEqual(_originalExtensions) ||
-        !IgnorePatterns.SequenceEqual(_originalPatterns) ||
-        KillProcessesOnClose != _originalKillProcessesOnClose ||
-        RecaptureProcessesOnLaunch != _originalRecaptureProcessesOnLaunch ||
-        UiFontFamily != _originalUiFontFamily ||
-        Theme != _originalTheme ||
-        Language.Value != _originalLanguage;
+    /// <summary>The draft as a config, its text cleaned. It holds no hidden scripts: the dialog does not edit them.</summary>
+    public AppConfig ToConfig() => new()
+    {
+        RootDirs = RootDirs.ToList(),
+        Extensions = Extensions.ToList(),
+        IgnorePatterns = IgnorePatterns.ToList(),
+        KillProcessesOnClose = KillProcessesOnClose,
+        RecaptureProcessesOnLaunch = RecaptureProcessesOnLaunch,
+        UiFontFamily = TextCleanup.SingleLine(UiFontFamily),
+        Theme = Theme,
+        Language = Language.Value,
+    };
+
+    public bool IsDirty => !ConfigSets.Same(ToConfig(), _opened);
 
     // One flag per radio: checking one selects its theme; the others clear through the group.
     public bool IsThemeSystem
@@ -297,25 +269,17 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
 
     public void ResetExtensions()
     {
-        _resetting = true;
         Extensions.Clear();
         Extensions.Add(ConfigDefaults.DefaultExtension);
-        _resetting = false;
-        _resetExtensions = true;
         ExtensionErrorMessage = null;
-        OnPropertyChanged(nameof(IsDirty));
     }
 
     public void ResetIgnorePatterns()
     {
-        _resetting = true;
         IgnorePatterns.Clear();
         foreach (var pattern in ConfigDefaults.BuiltInIgnorePatterns)
             IgnorePatterns.Add(pattern);
-        _resetting = false;
-        _resetIgnorePatterns = true;
         PatternErrorMessage = null;
-        OnPropertyChanged(nameof(IsDirty));
     }
 
     public void RemoveRootDir(string value) => RootDirs.Remove(value);

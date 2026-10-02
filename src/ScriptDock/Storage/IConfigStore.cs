@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using ScriptDock.Models;
 
@@ -7,5 +6,7 @@ namespace ScriptDock.Storage;
 public interface IConfigStore
 {
     AppConfig Load();
-    Task SaveSetsAsync(AppConfig value, IReadOnlyCollection<string> keys, IReadOnlyCollection<string>? resetKeys = null);
+
+    /// <summary>Writes the file from <paramref name="value"/>: every set that differs from its built-in, whole.</summary>
+    Task SaveAsync(AppConfig value);
 }

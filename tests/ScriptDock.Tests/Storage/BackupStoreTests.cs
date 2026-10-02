@@ -213,7 +213,7 @@ public sealed class BackupStoreTests : IDisposable
         var configStore = new ConfigStore();
         var config = configStore.Load();
         config.Hidden = ["/hidden.command"];
-        await configStore.SaveSetsAsync(config, [ConfigSets.Hidden]);
+        await configStore.SaveAsync(config);
 
         state.WindowWidth = 1200;
         await stateStore.SaveAsync(state);

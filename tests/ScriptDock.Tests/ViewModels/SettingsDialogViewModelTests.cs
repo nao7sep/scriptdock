@@ -25,17 +25,23 @@ public sealed class SettingsDialogViewModelTests
     }
 
     [Fact]
-    public void EditingAfterReset_WritesTheEditedWholeSet()
+    public void ResetThenEdit_KeepsTheEditedWholeSet()
     {
-        var config = new AppConfig { Extensions = [".sh"] };
-        config.StoredSetKeys.Add(ConfigSets.Extensions);
-        var vm = new SettingsDialogViewModel(config);
+        var vm = new SettingsDialogViewModel(new AppConfig { Extensions = [".sh"] });
         vm.ResetExtensions();
-        Assert.Contains(ConfigSets.Extensions, vm.ResetSetKeys);
-        vm.AddExtension(".custom");
-        Assert.DoesNotContain(ConfigSets.Extensions, vm.ResetSetKeys);
         Assert.True(vm.IsDirty);
-        Assert.Equal([ConfigDefaults.DefaultExtension, ".custom"], vm.Extensions);
+        vm.AddExtension(".custom");
+        Assert.True(vm.IsDirty);
+        Assert.Equal([ConfigDefaults.DefaultExtension, ".custom"], vm.ToConfig().Extensions);
+    }
+
+    [Fact]
+    public void IsDirty_ComparesTheCleanedDraft()
+    {
+        var vm = new SettingsDialogViewModel(new AppConfig { UiFontFamily = "Inter" });
+        vm.UiFontFamily = "  Inter\n";
+        Assert.False(vm.IsDirty);
+        Assert.Equal("Inter", vm.ToConfig().UiFontFamily);
     }
 
     [Fact]
