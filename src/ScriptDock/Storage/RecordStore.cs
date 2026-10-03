@@ -20,9 +20,9 @@ namespace ScriptDock.Storage;
 /// the session it came from, per the data-lifecycle-conventions' Records section and the logging-conventions.
 /// One thread owns the connection and runs every write and read in the order it was queued, so no caller
 /// waits on the disk. A write that fails is appended to this session's plain text file under <c>logs/</c>,
-/// then to the console.
+/// then to the console. The Records window's reads are <see cref="RecordQueries"/>.
 /// </summary>
-public sealed class RecordStore : IRecordStore, IDisposable
+public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
 {
     public const string FileName = "records.sqlite3";
 
@@ -133,6 +133,8 @@ public sealed class RecordStore : IRecordStore, IDisposable
 
     public string Session { get; }
 
+    public event Action? Stored;
+
     /// <summary>The database file.</summary>
     public string FilePath { get; }
 
@@ -147,7 +149,7 @@ public sealed class RecordStore : IRecordStore, IDisposable
             () => line);
 
     public Task AddRunAsync(RunRecord run) =>
-        Enqueue(connection =>
+        Write(connection =>
         {
             Execute(connection,
                 "INSERT INTO runs (session, run, time, script, pid, os_started_at, output_path) " +
@@ -156,22 +158,20 @@ public sealed class RecordStore : IRecordStore, IDisposable
                 ("$script", run.ScriptPath), ("$pid", run.Pid),
                 ("$osStartedAt", run.OsStartedAt is { } started ? TimestampConventions.IsoMillis(started) : null),
                 ("$outputPath", run.OutputPath));
-            return true;
         }, () => RecordLine("run", run));
 
     public Task AddRunEndAsync(RunEnd end) =>
-        Enqueue(connection =>
+        Write(connection =>
         {
             Execute(connection,
                 "INSERT INTO run_ends (session, time, run_session, run, state, exit_code) " +
                 "VALUES ($session, $time, $runSession, $run, $state, $exitCode)",
                 ("$session", Session), ("$time", TimestampConventions.IsoMillis(end.EndedAt)),
                 ("$runSession", end.RunSession), ("$run", end.Run), ("$state", end.State), ("$exitCode", end.ExitCode));
-            return true;
         }, () => RecordLine("runEnd", end));
 
     public Task<IReadOnlyList<RunRecord>> ReadUnendedRunsAsync() =>
-        Enqueue<IReadOnlyList<RunRecord>>(connection =>
+        Read<IReadOnlyList<RunRecord>>(connection =>
         {
             var runs = new List<RunRecord>();
             using var command = connection.CreateCommand();
@@ -182,26 +182,24 @@ public sealed class RecordStore : IRecordStore, IDisposable
             while (reader.Read())
                 runs.Add(ReadRun(reader));
             return runs;
-        }, fallbackLine: null);
+        });
 
     public Task AddDismissalAsync(string scriptPath)
     {
         var time = TimestampConventions.IsoMillis(DateTimeOffset.UtcNow);
-        return Enqueue(connection =>
+        return Write(connection =>
         {
             Execute(connection,
                 "INSERT INTO dismissals (session, time, script) VALUES ($session, $time, $script)",
                 ("$session", Session), ("$time", time), ("$script", scriptPath));
-            return true;
         }, () => RecordLine("dismissal", new { time, script = scriptPath }));
     }
 
     public Task<IReadOnlyList<RecentRun>> ReadRecentAsync() =>
-        Enqueue<IReadOnlyList<RecentRun>>(connection =>
+        Read<IReadOnlyList<RecentRun>>(connection =>
             RecentRuns.From(
                 LatestByScript(connection, "SELECT script, MAX(time) FROM runs GROUP BY script"),
-                LatestByScript(connection, "SELECT script, MAX(time) FROM dismissals GROUP BY script")),
-            fallbackLine: null);
+                LatestByScript(connection, "SELECT script, MAX(time) FROM dismissals GROUP BY script")));
 
     public void AddScanReport(ScanReport report)
     {
@@ -213,7 +211,7 @@ public sealed class RecordStore : IRecordStore, IDisposable
     }
 
     public Task<IReadOnlyDictionary<string, RunRecord>> FindRunsByOutputPathAsync(IReadOnlyCollection<string> outputPaths) =>
-        Enqueue<IReadOnlyDictionary<string, RunRecord>>(connection =>
+        Read<IReadOnlyDictionary<string, RunRecord>>(connection =>
         {
             var found = new Dictionary<string, RunRecord>(PathIdentity.Comparer);
             using var command = connection.CreateCommand();
@@ -227,17 +225,25 @@ public sealed class RecordStore : IRecordStore, IDisposable
                     found[outputPath] = ReadRun(reader);
             }
             return found;
-        }, fallbackLine: null);
+        });
+
+    public Task<RecordsPage> ReadRecordsPageAsync(RecordsQuery query) =>
+        Read(connection => RecordQueries.ReadPage(connection, query));
+
+    public Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id) =>
+        Read(connection => RecordQueries.ReadDetail(connection, kind, id));
+
+    public Task<RecordSources> ReadRecordSourcesAsync() =>
+        Read(connection => new RecordSources(Session, RecordQueries.ReadSessions(connection)));
 
     public Task AddRunOutputAsync(RunRecord run, byte[] output) =>
-        Enqueue(connection =>
+        Write(connection =>
         {
             Execute(connection,
                 "INSERT INTO run_outputs (session, run, time, output) VALUES ($session, $run, $time, $output) " +
                 "ON CONFLICT (session, run) DO UPDATE SET time = excluded.time, output = excluded.output",
                 ("$session", run.Session), ("$run", run.Run),
                 ("$time", TimestampConventions.IsoMillis(DateTimeOffset.UtcNow)), ("$output", output));
-            return true;
         }, fallbackLine: null);
 
     /// <summary>Waits, within a bound, until everything queued so far is written.</summary>
@@ -282,29 +288,62 @@ public sealed class RecordStore : IRecordStore, IDisposable
             catch (Exception ex)
             {
                 Fallback(fallbackLine(), _connection is null ? null : ex);
+                return;
             }
+
+            SignalStored();
         }
 
         if (!TryQueue(Run))
             Fallback(fallbackLine(), null);
     }
 
-    private Task<T> Enqueue<T>(Func<SqliteConnection, T> work, Func<string>? fallbackLine)
+    // An awaited write: its entry goes to the fallback file when it has a line for it, and the task faults.
+    private Task Write(Action<SqliteConnection> write, Func<string>? fallbackLine) =>
+        Enqueue(connection =>
+        {
+            write(connection);
+            return true;
+        }, fallbackLine, stores: true);
+
+    // A read writes nothing, so it keeps no fallback line and signals nothing.
+    private Task<T> Read<T>(Func<SqliteConnection, T> read) => Enqueue(read, fallbackLine: null, stores: false);
+
+    private void SignalStored()
+    {
+        try
+        {
+            Stored?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            // A listener's failure must not stop the records' thread; it is surfaced like a failed write.
+            Fallback(FailureLine("records: a stored-record listener failed", ex), null);
+        }
+    }
+
+    private Task<T> Enqueue<T>(Func<SqliteConnection, T> work, Func<string>? fallbackLine, bool stores)
     {
         var done = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         void Run()
         {
+            T result;
             try
             {
-                done.SetResult(work(_connection ?? throw new InvalidOperationException("The records database is not open.")));
+                result = work(_connection ?? throw new InvalidOperationException("The records database is not open."));
             }
             catch (Exception ex)
             {
                 if (fallbackLine is not null)
                     Fallback(fallbackLine(), _connection is null ? null : ex);
                 done.SetException(ex);
+                return;
             }
+
+            done.SetResult(result);
+            if (stores)
+                SignalStored();
         }
 
         if (!TryQueue(Run))
