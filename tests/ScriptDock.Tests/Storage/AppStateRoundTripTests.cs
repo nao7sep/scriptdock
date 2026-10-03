@@ -27,6 +27,12 @@ public sealed class AppStateRoundTripTests
             WindowWidth = 1100.5,
             WindowHeight = 720.25,
             WindowMaximized = true,
+            RecordsListWidth = 452,
+            RecordsWindowPositionX = -900,
+            RecordsWindowPositionY = 40,
+            RecordsWindowWidth = 1000.5,
+            RecordsWindowHeight = 680.25,
+            RecordsWindowMaximized = true,
         };
 
         var json = JsonSerializer.Serialize(state, JsonOptions.Default);
@@ -40,6 +46,12 @@ public sealed class AppStateRoundTripTests
         Assert.Equal(1100.5, back.WindowWidth);
         Assert.Equal(720.25, back.WindowHeight);
         Assert.True(back.WindowMaximized);
+        Assert.Equal(452, back.RecordsListWidth);
+        Assert.Equal(-900, back.RecordsWindowPositionX);
+        Assert.Equal(40, back.RecordsWindowPositionY);
+        Assert.Equal(1000.5, back.RecordsWindowWidth);
+        Assert.Equal(680.25, back.RecordsWindowHeight);
+        Assert.True(back.RecordsWindowMaximized);
     }
 
     [Fact]

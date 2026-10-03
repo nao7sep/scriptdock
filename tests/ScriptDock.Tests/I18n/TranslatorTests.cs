@@ -172,4 +172,18 @@ public class TranslatorTests
         Assert.StartsWith("3/4/2026", american);
         Assert.StartsWith("04.03.2026", german);
     }
+
+    [Fact]
+    public void a_record_s_moment_is_shown_to_the_second_or_the_millisecond_after_the_readers_decimal_mark()
+    {
+        var moment = new DateTimeOffset(2026, 3, 4, 17, 5, 9, 42, TimeSpan.Zero);
+        var zone = TimeZoneInfo.Utc;
+
+        var german = new Translator("de", CultureInfo.GetCultureInfo("de-DE"));
+        var japanese = new Translator("ja", CultureInfo.GetCultureInfo("ja-JP"));
+
+        Assert.Equal("04.03.2026 17:05:09", german.DateAndSecond(moment, zone));
+        Assert.Equal("04.03.2026 17:05:09,042", german.DateAndSecond(moment, zone, milliseconds: true));
+        Assert.Equal("2026/03/04 17:05:09.042", japanese.DateAndSecond(moment, zone, milliseconds: true));
+    }
 }

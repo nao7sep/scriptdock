@@ -20,4 +20,13 @@ public sealed class AppState
     public double? WindowWidth { get; set; }
     public double? WindowHeight { get; set; }
     public bool WindowMaximized { get; set; }
+
+    /// <summary>Persisted width of the Records window's list pane; null until first dragged.</summary>
+    public double? RecordsListWidth { get; set; }
+
+    public int? RecordsWindowPositionX { get; set; }
+    public int? RecordsWindowPositionY { get; set; }
+    public double? RecordsWindowWidth { get; set; }
+    public double? RecordsWindowHeight { get; set; }
+    public bool RecordsWindowMaximized { get; set; }
 }

@@ -28,17 +28,20 @@ public class CatalogueTests
     {
         // "Version" and "Navigation" are the German words, and System is the standard German label
         // for following the computer.
-        ["de"] = ["about.version", "settings.languageSystem", "settings.themeSystem", "shortcuts.groupNavigation"],
+        // Details, Debug and Info are the German words a record's view uses too.
+        ["de"] = [
+            "about.version", "records.details", "records.levelDebug", "records.levelInfo",
+            "settings.languageSystem", "settings.themeSystem", "shortcuts.groupNavigation"],
         // "script" is the ordinary developer's word in each of these languages, and Apple leaves the
         // Window menu's Zoom untranslated in all of them.
-        ["es"] = ["scripts.title", "shortcuts.groupScripts", "status.scriptCount", "error.count", "nativeMenu.zoom"],
-        // French keeps Services, Zoom, Version, Navigation, Extension(s) and Scripts as they are.
+        ["es"] = ["scripts.title", "shortcuts.groupScripts", "status.scriptCount", "error.count", "nativeMenu.zoom", "records.levelError"],
+        // French keeps Services, Zoom, Version, Info, Navigation, Extension(s) and Scripts as they are.
         ["fr"] = [
-            "about.version", "nativeMenu.services", "nativeMenu.zoom", "scripts.title",
+            "about.version", "nativeMenu.services", "nativeMenu.zoom", "records.levelInfo", "scripts.title",
             "settings.extension", "settings.extensions", "shortcuts.groupNavigation",
             "shortcuts.groupScripts", "status.scriptCount"],
         // Italian also keeps "Output" as the console's name; "Uscita" would read as exiting.
-        ["it"] = ["nativeMenu.zoom", "output.title", "status.scriptCount"],
+        ["it"] = ["nativeMenu.zoom", "output.title", "records.output", "records.levelDebug", "records.levelInfo", "status.scriptCount"],
         ["pt-BR"] = ["nativeMenu.zoom", "scripts.title", "shortcuts.groupScripts", "status.scriptCount"],
         ["ru"] = [],
         ["ja"] = [],

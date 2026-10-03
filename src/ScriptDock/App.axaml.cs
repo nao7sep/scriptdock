@@ -65,9 +65,10 @@ public partial class App : Application
 
             // If an unreadable store cannot be set aside, stop before defaults can overwrite it.
             MainWindowViewModel viewModel;
+            Func<RecordsWindowViewModel> recordsViewModel;
             try
             {
-                viewModel = CreateMainViewModel();
+                (viewModel, recordsViewModel) = CreateViewModels();
             }
             catch (Exception ex)
             {
@@ -86,11 +87,13 @@ public partial class App : Application
             var mainWindow = new MainWindow
             {
                 DataContext = viewModel,
+                Records = new RecordsWindowHost(recordsViewModel),
             };
             mainWindow.RestoreWindowGeometry();
             desktop.MainWindow = mainWindow;
             _mainWindow = mainWindow;
             RegisterOwnerActivation(mainWindow);
+            RegisterReopen(mainWindow);
 
             // Report material recovery once the main window can own the dialog.
             mainWindow.Opened += async (_, _) =>
@@ -114,23 +117,30 @@ public partial class App : Application
         if (!OperatingSystem.IsWindows())
             return;
 
-        SingleInstanceLease.RegisterOwnerActivationHandler(() => Dispatcher.UIThread.Post(() =>
+        SingleInstanceLease.RegisterOwnerActivationHandler(() => Dispatcher.UIThread.Post(() => WindowActivation.BringBack(window)));
+    }
+
+    // On macOS a Dock click or a second launch asks the running app to reopen. AppKit restores a window
+    // only when none is visible, so while the Records window shows, the main window is brought back here.
+    private void RegisterReopen(Window window)
+    {
+        if (this.TryGetFeature<IActivatableLifetime>() is not { } activatable)
+            return;
+
+        activatable.Activated += (_, e) =>
         {
-            if (window.WindowState == WindowState.Minimized)
-                window.WindowState = WindowState.Normal;
-            if (!window.IsVisible)
-                window.Show();
-            window.Activate();
-        }));
+            if (e.Kind == ActivationKind.Reopen)
+                WindowActivation.BringBack(window);
+        };
     }
 
     /// <summary>
-    /// Composition root: builds persistence and the view model by hand (no DI
+    /// Composition root: builds persistence and the view models by hand (no DI
     /// container). Durable preferences live in <c>config.json</c>, view state in
     /// <c>state.json</c>, the last scan's paths in <c>known-paths.json</c>, what
     /// happened in <c>records.sqlite3</c>. Absent config sets use live built-ins without writing.
     /// </summary>
-    private static MainWindowViewModel CreateMainViewModel()
+    private static (MainWindowViewModel Main, Func<RecordsWindowViewModel> Records) CreateViewModels()
     {
         var configStore = new ConfigStore();
         // not recorded: rebuildable, view state harmless to lose.
@@ -154,9 +164,12 @@ public partial class App : Application
         var runner = new ProcessRunner();
 
         var records = Records ?? throw new InvalidOperationException("The records are not open.");
-        return new MainWindowViewModel(configStore, stateStore, knownPathsStore, records, config, state, knownPaths, scanner, runner)
+        var main = new MainWindowViewModel(configStore, stateStore, knownPathsStore, records, config, state, knownPaths, scanner, runner)
         {
             ComputerLanguages = ComputerLanguages,
         };
+        // The Records window reads the same records and keeps its placement in the same view state.
+        var reader = records as IRecordReader ?? throw new InvalidOperationException("The records cannot be read.");
+        return (main, () => new RecordsWindowViewModel(reader, stateStore, state));
     }
 }

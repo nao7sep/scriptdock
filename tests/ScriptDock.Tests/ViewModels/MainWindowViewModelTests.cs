@@ -293,12 +293,12 @@ public sealed class MainWindowViewModelTests
         var (vm, _) = BuildVm();
 
         vm.ReportShellActionError("open-about", ScriptDock.I18n.Message.Of("shell.aboutFailed"));
-        vm.ReportShellActionError("reveal-logs", ScriptDock.I18n.Message.Of("shell.revealLogsFailed"));
+        vm.ReportShellActionError("open-records", ScriptDock.I18n.Message.Of("shell.recordsFailed"));
         vm.ResolveShellActionError("open-about");
 
         Assert.True(vm.HasOperationalError);
         Assert.Equal(1, vm.OperationalErrorCount);
-        Assert.Equal(English.Of("shell.revealLogsFailed"), vm.OperationalError);
+        Assert.Equal(English.Of("shell.recordsFailed"), vm.OperationalError);
     }
 
     [Fact]

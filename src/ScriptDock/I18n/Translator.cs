@@ -145,4 +145,19 @@ internal sealed class Translator
         var time = Culture.DateTimeFormat.ShortTimePattern;
         return local.ToString($"{date} {time}", Culture);
     }
+
+    /// <summary>
+    /// A moment in the reader's own format, in <paramref name="zone"/>, to the second, or with
+    /// <paramref name="milliseconds"/> to the millisecond after the reader's decimal mark: what a record
+    /// says about when it happened.
+    /// </summary>
+    internal string DateAndSecond(DateTimeOffset moment, TimeZoneInfo zone, bool milliseconds = false)
+    {
+        var local = TimeZoneInfo.ConvertTime(moment, zone);
+        var date = Culture.DateTimeFormat.ShortDatePattern;
+        var time = Culture.DateTimeFormat.LongTimePattern;
+        if (milliseconds)
+            time = time.Replace("ss", $"ss'{Culture.NumberFormat.NumberDecimalSeparator}'fff", StringComparison.Ordinal);
+        return local.ToString($"{date} {time}", Culture);
+    }
 }

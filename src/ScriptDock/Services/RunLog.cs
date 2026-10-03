@@ -48,12 +48,7 @@ public static class RunLog
                 stream.Seek(-maxBytes, SeekOrigin.End);
 
             using var reader = new StreamReader(stream, Encoding.UTF8);
-            var lines = reader.ReadToEnd()
-                .Replace("\r\n", "\n")
-                .Split('\n')
-                .Select(CollapseCarriageReturns)
-                .Select(AnsiStripper.Strip)
-                .ToList();
+            var lines = Lines(reader.ReadToEnd());
 
             // When we cut into the middle of the file, the first line is a fragment.
             if (trimmed && lines.Count > 0)
@@ -75,6 +70,18 @@ public static class RunLog
             return Array.Empty<string>();
         }
     }
+
+    /// <summary>
+    /// Output as a terminal shows it: one entry per line, each line's carriage-return redraws collapsed to
+    /// what stays visible and its ANSI escapes removed. The console and the Records window read output this way.
+    /// </summary>
+    public static List<string> Lines(string output) =>
+        output
+            .Replace("\r\n", "\n")
+            .Split('\n')
+            .Select(CollapseCarriageReturns)
+            .Select(AnsiStripper.Strip)
+            .ToList();
 
     // Emulate a terminal's carriage-return overwrite: within a line, only the content after the
     // last bare '\r' stays visible — so a progress bar that redraws its line in place collapses to

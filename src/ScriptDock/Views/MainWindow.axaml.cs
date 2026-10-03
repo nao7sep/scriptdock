@@ -329,6 +329,10 @@ public partial class MainWindow : Window
 
             _shutdownSaveInProgress = true;
 
+            // The Records window closes first, so it cannot keep the app running and its placement is in
+            // the view-state save awaited below.
+            Records?.Close();
+
             // Closing does not itself wait for an async handler, so without this the window (and, as
             // the last window, the app) would finish closing while the saves below are still in
             // flight. Cancel this attempt, save, then close again once the saves have landed —
@@ -537,12 +541,21 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnRevealLogsClick(object? sender, RoutedEventArgs e)
+    /// <summary>The Records window this window opens; set by the app before the window is shown.</summary>
+    internal RecordsWindowHost? Records { get; set; }
+
+    private void OnRecordsClick(object? sender, RoutedEventArgs e)
     {
-        if (LogReveal.Reveal())
-            ViewModel?.ResolveShellActionError("reveal-logs");
-        else
-            ViewModel?.ReportShellActionError("reveal-logs", Message.Of("shell.revealLogsFailed"));
+        try
+        {
+            Records?.ShowOrActivate();
+            ViewModel?.ResolveShellActionError("open-records");
+        }
+        catch (Exception ex)
+        {
+            Log.Error("ui: open records failed", ex);
+            ViewModel?.ReportShellActionError("open-records", Message.Of("shell.recordsFailed"));
+        }
     }
 
     private void OnScriptDoubleTapped(object? sender, TappedEventArgs e)

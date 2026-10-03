@@ -1,0 +1,216 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ScriptDock.ViewModels"
+        xmlns:ctl="using:ScriptDock.Controls"
+        xmlns:i18n="using:ScriptDock.I18n"
+        x:Class="ScriptDock.Views.RecordsWindow"
+        x:DataType="vm:RecordsWindowViewModel"
+        i18n:Localized.Title="records.title"
+        Icon="/Assets/icon.png"
+        Width="1000" Height="680"
+        Background="{DynamicResource AppBackgroundBrush}"><!-- MinWidth/MinHeight are derived from the
+        panes in RecordsLayout and assigned in code (window-conventions). -->
+
+    <Window.Styles>
+        <!-- A record's level as a pill of the Recent list's anatomy: red for an error, the new-script
+             orange for a warning, muted for the rest. -->
+        <Style Selector="Border.statePill.warning">
+            <Setter Property="Background" Value="{DynamicResource ScriptNewBrush}"/>
+        </Style>
+        <!-- A record's kind beside it: an outlined pill, quieter than the level. -->
+        <Style Selector="Border.kindPill">
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="7,0"/>
+        </Style>
+        <Style Selector="TextBlock.code, SelectableTextBlock.code">
+            <Setter Property="FontFamily" Value="Menlo,Consolas,monospace"/>
+        </Style>
+        <Style Selector="ListBox#RecordsList ListBoxItem:selected TextBlock.recordMeta">
+            <Setter Property="Foreground" Value="{DynamicResource SelectionSecondaryBrush}"/>
+        </Style>
+    </Window.Styles>
+
+    <!-- The list pane at its saved width beside the detail pane, which takes the rest; the splitter's
+         column sits between them. The list column's bounds are RecordsLayout's. -->
+    <Grid x:Name="Shell" Margin="12">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="380" MinWidth="320" MaxWidth="640"/>
+            <ColumnDefinition Width="6"/>
+            <ColumnDefinition Width="*" MinWidth="420"/>
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0" Classes="card" Padding="0">
+            <DockPanel>
+                <!-- Filters above the list, all off when the window opens and applied on change. -->
+                <Border x:Name="FiltersBand" DockPanel.Dock="Top" Padding="10"
+                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
+                    <StackPanel Spacing="8">
+                        <ctl:ComposingTextBox x:Name="SearchBox" Text="{Binding SearchText}"
+                                              i18n:Localized.PlaceholderText="records.search"
+                                              i18n:Localized.AutomationName="records.search"/>
+                        <ComboBox x:Name="LaunchFilter" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding LaunchOptions}" SelectedItem="{Binding SelectedLaunch}"
+                                  i18n:Localized.AutomationName="records.launch">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:RecordFilterOption">
+                                    <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Grid ColumnDefinitions="*,8,*">
+                            <ComboBox x:Name="KindFilter" Grid.Column="0" HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding KindOptions}" SelectedItem="{Binding SelectedKind}"
+                                      i18n:Localized.AutomationName="records.kind">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:RecordFilterOption">
+                                        <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <ComboBox x:Name="LevelFilter" Grid.Column="2" HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding LevelOptions}" SelectedItem="{Binding SelectedLevel}"
+                                      i18n:Localized.AutomationName="records.level">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:RecordFilterOption">
+                                        <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- A page being read or one that failed is noted at the end of the list. -->
+                <TextBlock DockPanel.Dock="Bottom" Margin="12,0,12,10" TextWrapping="Wrap"
+                           IsVisible="{Binding LoadingMore}" i18n:Localized.Text="records.loading"
+                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                <TextBlock DockPanel.Dock="Bottom" Margin="12,0,12,10" TextWrapping="Wrap"
+                           IsVisible="{Binding MoreFailed}" i18n:Localized.Text="records.loadFailed"
+                           Foreground="{DynamicResource DangerTextBrush}"
+                           AutomationProperties.LiveSetting="Assertive"/>
+
+                <Grid Margin="10">
+                    <!-- One listbox (composite-control-conventions, Listbox): one tab stop, the arrows move
+                         the selection, and the selection follows focus. -->
+                    <ListBox x:Name="RecordsList" ItemsSource="{Binding Rows}"
+                             SelectedItem="{Binding SelectedRecord}"
+                             i18n:Localized.AutomationName="records.title">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:RecordRow">
+                                <StackPanel Spacing="3">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="{Binding TimeText}" Classes="recordMeta" FontSize="11"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        <Border Classes="statePill" Classes.failed="{Binding IsError}"
+                                                Classes.warning="{Binding IsWarning}"
+                                                CornerRadius="10" Padding="7,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding LevelText}" FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource AppBackgroundBrush}"/>
+                                        </Border>
+                                        <Border Classes="kindPill" IsVisible="{Binding ShowKind}" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding KindText}" Classes="recordMeta" FontSize="11"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Title}" Classes.code="{Binding IsCodeTitle}"
+                                               FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Text}" IsVisible="{Binding HasText}" Classes="recordMeta"
+                                               TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <TextBlock IsVisible="{Binding ShowLoadingNote}" i18n:Localized.Text="records.loading"
+                               IsHitTestVisible="False" Margin="12" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBlock IsVisible="{Binding ShowEmptyNote}" i18n:Localized.Text="records.empty"
+                               IsHitTestVisible="False" Margin="12" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBlock IsVisible="{Binding ShowFailedNote}" i18n:Localized.Text="records.loadFailed"
+                               IsHitTestVisible="False" Margin="12" TextWrapping="Wrap"
+                               Foreground="{DynamicResource DangerTextBrush}"
+                               AutomationProperties.LiveSetting="Assertive"/>
+                </Grid>
+            </DockPanel>
+        </Border>
+
+        <GridSplitter x:Name="ListSplitter" Grid.Column="1" Width="6" Background="Transparent"
+                      ResizeDirection="Columns" i18n:Localized.AutomationName="records.resizeList"/>
+
+        <Border Grid.Column="2" Classes="card" Padding="0">
+            <Grid>
+                <DockPanel IsVisible="{Binding HasDetail}">
+                    <Border DockPanel.Dock="Top" Classes="sectionHeader" Padding="12,10">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8"
+                                        Margin="12,0,0,0" VerticalAlignment="Top">
+                                <Border Classes="statePill" Classes.failed="{Binding DetailIsError}"
+                                        Classes.warning="{Binding DetailIsWarning}"
+                                        CornerRadius="10" Padding="9,2" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding DetailLevelText}" FontSize="11" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource AppBackgroundBrush}"/>
+                                </Border>
+                                <Border Classes="kindPill" VerticalAlignment="Center" Padding="9,1">
+                                    <TextBlock Text="{Binding DetailKindText}" FontSize="11"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                </Border>
+                            </StackPanel>
+                            <SelectableTextBlock Text="{Binding DetailTitle}" Classes.code="{Binding DetailIsCodeTitle}"
+                                                 FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                        </DockPanel>
+                    </Border>
+                    <ScrollViewer x:Name="DetailScroll" Focusable="True"
+                                  HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+                                  i18n:Localized.AutomationName="records.details">
+                        <StackPanel Margin="12" Spacing="16">
+                            <ItemsControl ItemsSource="{Binding DetailFields}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:RecordField">
+                                        <StackPanel Width="200" Margin="0,0,16,12" Spacing="2">
+                                            <TextBlock Text="{Binding Label}" FontSize="11"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                            <SelectableTextBlock Text="{Binding Value}" Classes.code="{Binding IsCode}"
+                                                                 TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <ItemsControl ItemsSource="{Binding DetailBlocks}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Spacing="16"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:RecordBlock">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="{Binding Label}" FontSize="11"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                            <Border Classes="well" Padding="10,8">
+                                                <SelectableTextBlock Text="{Binding Text}" Classes="code" FontSize="12"
+                                                                     TextWrapping="Wrap"/>
+                                            </Border>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+                <TextBlock IsVisible="{Binding ShowNoSelection}" i18n:Localized.Text="records.noSelection"
+                           Margin="16" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                <TextBlock IsVisible="{Binding ShowDetailFailed}" i18n:Localized.Text="records.detailFailed"
+                           Margin="16" TextWrapping="Wrap" Foreground="{DynamicResource DangerTextBrush}"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
