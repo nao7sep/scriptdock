@@ -49,9 +49,4 @@ public sealed class AppConfig
 
     /// <summary>Absolute paths the user has hidden from the default list.</summary>
     public List<string> Hidden { get; set; } = [];
-
-    /// <summary>When true, quitting ScriptDock terminates every running script (and its process
-    /// tree). Default false: running scripts are left alive so an accidental quit does not kill
-    /// in-progress work.</summary>
-    public bool KillProcessesOnClose { get; set; }
 }

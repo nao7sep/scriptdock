@@ -134,11 +134,11 @@
             </Grid>
         </StackPanel>
 
-        <!-- Process lifecycle -->
+        <!-- What ScriptDock owns: the scripts it starts, until they exit or it quits. Nothing to set. -->
         <StackPanel Spacing="8">
             <TextBlock i18n:Localized.Text="settings.processes" Classes="cardHeader"/>
-            <CheckBox i18n:Localized.Content="settings.killOnClose"
-                      IsChecked="{Binding KillProcessesOnClose}"/>
+            <TextBlock i18n:Localized.Text="settings.processesHint"
+                       Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
         </StackPanel>
 
         <Grid x:Name="SaveErrorResult" IsVisible="{Binding HasSaveError}"

@@ -461,22 +461,27 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task ShouldConfirmQuit_OnlyWhenKillOnCloseAndSomethingRunning()
+    public async Task ShouldConfirmQuit_WhenSomethingRuns()
     {
-        // Kill-on-close on + a running script → confirm.
-        var killing = new AppConfig { KillProcessesOnClose = true };
-        var (vmKill, _) = BuildVm(config: killing);
-        await vmKill.RunScriptCommand.ExecuteAsync(new ScriptItem("/x/run.command") { DisplayName = "run" });
-        Assert.True(vmKill.ShouldConfirmQuit());
+        // Quitting stops every running script, so a running one warrants a confirm.
+        var (running, _) = BuildVm();
+        await running.RunScriptCommand.ExecuteAsync(new ScriptItem("/x/run.command") { DisplayName = "run" });
+        Assert.True(running.ShouldConfirmQuit());
 
-        // Kill-on-close off + a running script → no confirm (children survive the quit).
-        var leaving = new AppConfig { KillProcessesOnClose = false };
-        var (vmLeave, _) = BuildVm(config: leaving);
-        await vmLeave.RunScriptCommand.ExecuteAsync(new ScriptItem("/x/run.command") { DisplayName = "run" });
-        Assert.False(vmLeave.ShouldConfirmQuit());
+        // Nothing running → nothing to lose.
+        var (idle, _) = BuildVm();
+        Assert.False(idle.ShouldConfirmQuit());
+    }
 
-        // Kill-on-close on but nothing running → nothing to lose.
-        var (vmIdle, _) = BuildVm(config: new AppConfig { KillProcessesOnClose = true });
-        Assert.False(vmIdle.ShouldConfirmQuit());
+    [Fact]
+    public async Task ShutdownAsync_StopsEveryRunningScript()
+    {
+        var (vm, runner) = BuildVm();
+        await vm.RunScriptCommand.ExecuteAsync(new ScriptItem("/x/run.command") { DisplayName = "run" });
+
+        await vm.ShutdownAsync();
+
+        Assert.Equal(1, runner.StopAllCalls);
+        Assert.False(vm.HasOperationalError);
     }
 }

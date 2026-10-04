@@ -28,7 +28,7 @@ public partial class MainWindow : Window
     private IReadOnlyList<ShortcutItem> _shortcuts = [];
     private bool _consolePinnedToBottom = true;
     private bool _scrollConsolePending = true; // follow the console on the next layout after output/selection changes
-    private bool _quitConfirmed; // set once the user confirms a kill-on-close quit, so the re-close proceeds
+    private bool _quitConfirmed; // set once the user confirms quitting with scripts running, so the re-close proceeds
 
     // The user's INTENT for the two fixed panes, in pixels: what they last dragged the Recent column /
     // console row to. The on-screen size is DERIVED from this (clamped to what the current window can
@@ -309,7 +309,7 @@ public partial class MainWindow : Window
 
                 case MainWindowCloseAction.PromptToConfirmQuit:
                 {
-                    // Quitting with Kill-on-close on terminates running work, so confirm it first:
+                    // Quitting stops every running script, so confirm it first:
                     // cancel this close, ask, and only close for real on a yes (mirrors the dialog
                     // discard guard).
                     e.Cancel = true;

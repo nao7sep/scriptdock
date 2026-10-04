@@ -74,7 +74,13 @@ public sealed class FakeProcessRunner : IProcessRunner
         _active.Remove(handle);
     }
 
-    public void ShutdownAll(bool kill) { }
+    public int StopAllCalls { get; private set; }
+
+    public Task StopAllAsync()
+    {
+        StopAllCalls++;
+        return Task.CompletedTask;
+    }
 
     public void ReconcileExited() { }
 

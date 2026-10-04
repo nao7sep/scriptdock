@@ -299,6 +299,100 @@ public sealed class ProcessRunnerTests : IDisposable
         Assert.NotEqual("", ProcessRunner.WorkingDirectoryFor("/proj/scripts/run.command"));
     }
 
+    // A script that starts a long-lived child, writes the child's PID to a file beside it, and waits on it.
+    private string WriteScriptWithChild(string name, out string pidFile)
+    {
+        pidFile = Path.Combine(_dir, name + ".pid");
+        return WriteExecutableScript(name, $"sleep 300 &\necho $! > '{pidFile}'\nwait\n");
+    }
+
+    private static int ReadPid(string pidFile)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(20);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (File.Exists(pidFile) && int.TryParse(File.ReadAllText(pidFile).Trim(), out var pid))
+                return pid;
+            Thread.Sleep(50);
+        }
+        throw new TimeoutException($"no PID in {pidFile}");
+    }
+
+    private static bool IsAlive(int pid)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            return !process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    // A killed process is reaped by launchd shortly after its parent dies; wait for that, within a bound.
+    private static bool GoneWithin(int pid, TimeSpan bound)
+    {
+        var deadline = DateTime.UtcNow + bound;
+        while (IsAlive(pid) && DateTime.UtcNow < deadline)
+            Thread.Sleep(50);
+        return !IsAlive(pid);
+    }
+
+    [MacOnlyFact]
+    public async Task StopAllAsync_StopsEveryRunningScriptAndItsChild_EachEndingOnce()
+    {
+        var first = WriteScriptWithChild("first.command", out var firstPidFile);
+        var second = WriteScriptWithChild("second.command", out var secondPidFile);
+        var runner = new ProcessRunner(_runsDir);
+        var ended = new List<ScriptProcess>();
+        runner.RunEnded += (_, process) => { lock (ended) ended.Add(process); };
+
+        var a = runner.Start(first);
+        var b = runner.Start(second);
+        var children = new[] { ReadPid(firstPidFile), ReadPid(secondPidFile) };
+        try
+        {
+            await runner.StopAllAsync();
+
+            Assert.Equal(RunState.Terminated, a.State);
+            Assert.Equal(RunState.Terminated, b.State);
+            lock (ended)
+                Assert.Equal(new[] { a, b }.OrderBy(p => p.Id), ended.OrderBy(p => p.Id));
+            Assert.All(children, pid => Assert.True(GoneWithin(pid, TimeSpan.FromSeconds(20)), $"child {pid} outlived the quit"));
+        }
+        finally
+        {
+            foreach (var pid in children.Where(IsAlive))
+                Process.GetProcessById(pid).Kill();
+        }
+    }
+
+    [MacOnlyFact]
+    public async Task StopAllAsync_ReturnsWithinTheBound_WhenAKillLeavesTheProcessAlive()
+    {
+        var script = WriteExecutableScript("survivor.command", "echo started\nsleep 60\n");
+        var grace = TimeSpan.FromMilliseconds(300);
+        var runner = new ProcessRunner(_runsDir, grace, _ => { /* a kill that never ends the process */ });
+        var handle = runner.Start(script);
+        try
+        {
+            var watch = Stopwatch.StartNew();
+            await runner.StopAllAsync();
+            watch.Stop();
+
+            // The grace bounds the wait; the slack only absorbs scheduling, never a second grace.
+            Assert.True(watch.Elapsed < grace + TimeSpan.FromSeconds(5), $"took {watch.Elapsed}");
+            Assert.Equal(RunState.Running, handle.State);
+        }
+        finally
+        {
+            handle.Process?.Kill(entireProcessTree: true);
+            handle.WaitForExit(TimeSpan.FromSeconds(20));
+        }
+    }
+
     [MacOnlyFact]
     public void RunEnded_IsRaisedOnceWhenARunEnds()
     {

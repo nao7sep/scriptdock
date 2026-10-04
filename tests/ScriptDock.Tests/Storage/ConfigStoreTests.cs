@@ -59,7 +59,6 @@ public sealed class ConfigStoreTests : IDisposable
         Assert.Equal("system", loaded.Language);
         Assert.Equal(ThemePreference.System, loaded.Theme);
         Assert.Empty(loaded.RootDirs);
-        Assert.False(loaded.KillProcessesOnClose);
     }
 
     [Fact]
@@ -77,13 +76,14 @@ public sealed class ConfigStoreTests : IDisposable
     [Fact]
     public async Task Dialog_WritesEverySetThatDiffersAndDropsUnknownKeys()
     {
-        File.WriteAllText(ConfigPath, """{"hidden":["/hidden"],"extensions":[],"version":1,"unknown":true}""");
+        // Retired process settings are among the keys a save drops.
+        File.WriteAllText(ConfigPath, """{"hidden":["/hidden"],"extensions":[],"version":1,"unknown":true,"killProcessesOnClose":true,"recaptureProcessesOnLaunch":false}""");
         var store = new ConfigStore();
         var config = store.Load();
         var vm = NewViewModel(store, config);
-        var draft = new SettingsDialogViewModel(config) { KillProcessesOnClose = true };
+        var draft = new SettingsDialogViewModel(config) { Theme = ThemePreference.Dark };
         Assert.True(await vm.TryApplySettingsAsync(draft));
-        Assert.Equal(["extensions", "hidden", "killProcessesOnClose"], ReadKeys());
+        Assert.Equal(["extensions", "hidden", "theme"], ReadKeys());
         Assert.Empty(store.Load().Extensions);
         Assert.Equal(["/hidden"], store.Load().Hidden);
     }

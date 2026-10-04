@@ -197,18 +197,22 @@ public sealed class ProcessRunner : IProcessRunner
         }
     }
 
-    /// <summary>On app shutdown: terminate everything still running when <paramref name="kill"/> is
-    /// set; otherwise leave the children running (they detach and can be recaptured next launch).</summary>
-    public void ShutdownAll(bool kill)
+    /// <summary>On quit: terminates every running script's process tree and waits for each to end, all
+    /// concurrently and off the calling thread (the tree kill is synchronous), each within the
+    /// termination grace. A tree still alive after it is logged and the quit proceeds.</summary>
+    public async Task StopAllAsync()
     {
-        if (!kill)
-        {
-            Log.Info("run: leaving children running on close", new { running = Active.Count(p => p.State == RunState.Running) });
+        var running = Active.Where(p => p.State == RunState.Running).ToList();
+        if (running.Count == 0)
             return;
-        }
 
-        foreach (var handle in Active)
-            RequestTermination(handle);
+        var stopped = await Task.WhenAll(running.Select(handle => Task.Run(() => TerminateAsync(handle))))
+            .ConfigureAwait(false);
+        var alive = running.Where((_, index) => !stopped[index]).Select(handle => handle.Id).ToList();
+        if (alive.Count > 0)
+            Log.Warn("run: process trees still alive after the quit bound; quitting anyway", new { ids = alive });
+        else
+            Log.Info("run: stopped every running script on quit", new { count = running.Count });
     }
 
     /// <summary>Backstop for a missed <c>Exited</c> event: finalise any process the OS has ended
@@ -336,23 +340,6 @@ public sealed class ProcessRunner : IProcessRunner
     // mistake a quickly reused PID for the process ScriptDock launched.
     internal static bool StartTimesMatch(DateTimeOffset persisted, DateTimeOffset actual) =>
         persisted.ToUnixTimeMilliseconds() == actual.ToUnixTimeMilliseconds();
-
-    private static void RequestTermination(ScriptProcess handle)
-    {
-        if (!handle.BeginTerminationAttempt())
-            return;
-        try
-        {
-            if (handle.Process is { HasExited: false } process)
-                process.Kill(entireProcessTree: true);
-            handle.ConfirmTerminationAttempt();
-        }
-        catch (Exception ex)
-        {
-            handle.CancelTerminationAttempt();
-            Log.Warn("run: terminate failed during shutdown; retaining ownership", ex, new { id = handle.Id });
-        }
-    }
 
     // The working directory a launched script runs in: its containing folder. A bare
     // filename (no directory) and a filesystem root both yield "" — Process treats an

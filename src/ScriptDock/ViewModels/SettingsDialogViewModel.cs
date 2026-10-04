@@ -70,17 +70,11 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsThemeDark))]
     private ThemePreference _theme;
 
-    // Process-lifecycle settings. NotifyPropertyChangedFor keeps IsDirty live as they toggle.
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsDirty))]
-    private bool _killProcessesOnClose;
-
     public SettingsDialogViewModel(AppConfig config)
     {
         _theme = config.Theme;
         LanguageOptions = LanguageOption.All();
         _language = LanguageOption.For(Languages.NormalizePreference(config.Language), LanguageOptions);
-        _killProcessesOnClose = config.KillProcessesOnClose;          // field, not property: no dirty flip during construction
         _uiFontFamily = config.UiFontFamily;
 
         RootDirs = new ObservableCollection<string>(config.RootDirs);
@@ -99,7 +93,6 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         RootDirs = RootDirs.ToList(),
         Extensions = Extensions.ToList(),
         IgnorePatterns = IgnorePatterns.ToList(),
-        KillProcessesOnClose = KillProcessesOnClose,
         UiFontFamily = TextCleanup.SingleLine(UiFontFamily),
         Theme = Theme,
         Language = Language.Value,

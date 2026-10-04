@@ -231,10 +231,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// unconfirmed.</summary>
     public Func<ConfirmRequest, Task<bool>>? ConfirmHandler { get; set; }
 
-    /// <summary>Whether quitting now would kill running work and so warrants a confirm: only when
-    /// Kill-on-close is enabled and something is still running (otherwise the children survive the
-    /// quit, so there is nothing to lose). The view drives the actual quit confirmation.</summary>
-    public bool ShouldConfirmQuit() => _config.KillProcessesOnClose && RunningCount > 0;
+    /// <summary>Whether quitting now would stop running work and so warrants a confirm: quitting stops
+    /// every running script, so whenever something is running. The view drives the actual quit
+    /// confirmation.</summary>
+    public bool ShouldConfirmQuit() => RunningCount > 0;
 
     /// <summary>Starts the console poll, builds the Recent list, and runs the first scan.</summary>
     public async Task InitializeAsync()
@@ -287,9 +287,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Stops timers and scanning, ends or detaches owned processes per the close policy, and waits,
-    /// within a bound, for the output import in flight — the window only finishes closing, and the
-    /// app only exits, once this completes.
+    /// Stops timers and scanning, stops every running script's process tree, and waits, within a
+    /// bound, for those trees and for the output import in flight — the window only finishes closing,
+    /// and the app only exits, once this completes. The run output files stay for the next launch's import.
     /// </summary>
     public Task ShutdownAsync() => GuardAsync("shutdown", Message.Of("guard.shutdown"), async () =>
     {
@@ -298,7 +298,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _catalogResultTimer?.Stop();
         _scanCts?.Cancel(); // don't let a slow scan keep the closing window's work alive
         _outputImportCts.Cancel();
-        _runner.ShutdownAll(_config.KillProcessesOnClose);
+        await _runner.StopAllAsync();
         await Task.WhenAny(_outputImport, Task.Delay(OutputImportShutdownWait));
     });
 
@@ -350,7 +350,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _config.RootDirs = candidate.RootDirs;
         _config.Extensions = candidate.Extensions;
         _config.IgnorePatterns = candidate.IgnorePatterns;
-        _config.KillProcessesOnClose = candidate.KillProcessesOnClose;
         _config.UiFontFamily = candidate.UiFontFamily;
         var themeChanged = _config.Theme != candidate.Theme;
         _config.Theme = candidate.Theme;

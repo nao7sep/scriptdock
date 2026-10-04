@@ -17,9 +17,9 @@ Prebuilt builds for **macOS (Apple Silicon)** and **Windows (x64)** are on the [
 
 - **macOS** (Apple Silicon) or **Windows (x64)** to run a prebuilt download.
 - **.NET 10 SDK** only if you build from source; the prebuilt downloads need nothing installed.
-- The scripts ScriptDock launches run as **child processes it owns**. By default, quitting ScriptDock **leaves running scripts alive**, so an accidental quit won't kill your in-progress work; you can configure it to terminate everything on quit instead (when that's on, quitting with scripts still running asks for confirmation first). Either way, a restart-while-running cleanly kills the whole process tree so dev servers free their ports.
+- ScriptDock **owns the scripts it starts**, each as a child process. A run ends when its script exits; whatever a script hands to the system, such as an app opened with `open -n`, runs on its own. Quitting ScriptDock **stops every running script** after asking, and a restart-while-running kills the whole process tree, so dev servers free their ports.
 
-ScriptDock supervises the shell process tree it launches while that tree remains attached. A script that deliberately daemonizes, double-forks, or otherwise escapes that tree is outside ScriptDock's supervision boundary; manage such a background service with its own service manager. Leaving a script alive on quit preserves its OS process, but ScriptDock's owned redirected stdin pipe still closes with the app; a script waiting for console input may observe EOF and exit.
+ScriptDock supervises the shell process tree it launches while that tree remains attached. A script that deliberately daemonizes, double-forks, or otherwise escapes that tree is outside ScriptDock's supervision boundary; manage such a background service with its own service manager.
 
 ## Run from source
 
