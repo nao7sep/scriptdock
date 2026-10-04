@@ -112,6 +112,7 @@
   "records.loading": "Protokoll wird geladen …",
   "records.noSelection": "Wählen Sie einen Eintrag aus, um alles zu sehen, was er enthält.",
   "records.output": "Ausgabe",
+  "records.outputMore": "Hier wird nur das erste MB angezeigt. Weitere {more} MB sind gespeichert, und die Suche umfasst die gesamte Ausgabe.",
   "records.outputFile": "Ausgabedatei",
   "records.processId": "Prozess-ID",
   "records.processStarted": "Prozessstart",

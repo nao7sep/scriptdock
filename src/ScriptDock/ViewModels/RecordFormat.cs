@@ -33,14 +33,26 @@ public static class RecordFormat
     /// the pane shows above them; null when none remain.</summary>
     public static string? LogDetails(string line) => Pretty(line, LogEnvelope);
 
-    /// <summary>A run's stored output as its console shows it (<see cref="RunLog.Lines"/>); null when there
-    /// is none or it is only whitespace.</summary>
-    public static string? OutputText(byte[]? output)
+    /// <summary>The most of a run's stored output the detail pane renders, so a very large output does not
+    /// stall it. The stored output is never cut, and search reads all of it.</summary>
+    public const int OutputShownBytes = 1024 * 1024;
+
+    /// <summary>A run's stored output as its console shows it (<see cref="RunLog.Lines"/>), at most its first
+    /// <paramref name="limit"/> bytes, cut at a character boundary, with how many stored bytes it leaves
+    /// out; null when there is none or all of it is only whitespace.</summary>
+    public static OutputPreview? Output(byte[]? output, int limit = OutputShownBytes)
     {
         if (output is null)
             return null;
-        var text = string.Join("\n", RunLog.Lines(Encoding.UTF8.GetString(output))).TrimEnd('\n');
-        return string.IsNullOrWhiteSpace(text) ? null : text;
+
+        var cut = Math.Min(output.Length, limit);
+        // Back off to the start of a UTF-8 sequence, so the cut never splits a character.
+        while (cut > 0 && cut < output.Length && (output[cut] & 0xC0) == 0x80)
+            cut--;
+
+        var text = string.Join("\n", RunLog.Lines(Encoding.UTF8.GetString(output, 0, cut))).TrimEnd('\n');
+        var more = output.Length - cut;
+        return string.IsNullOrWhiteSpace(text) && more == 0 ? null : new OutputPreview(text, more);
     }
 
     private static string? Pretty(string? text, string[] omit)
@@ -130,3 +142,6 @@ public static class RecordFormat
     /// <summary>A scan report has no title of its own; it is named by what it found.</summary>
     public static string ScanTitle(int? found) => Localizer.T("records.scanFound", ("count", found ?? 0));
 }
+
+/// <summary>The part of a run's output the detail pane shows, and how many stored bytes follow it.</summary>
+public sealed record OutputPreview(string Text, long MoreBytes);

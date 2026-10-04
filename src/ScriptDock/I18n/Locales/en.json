@@ -112,6 +112,7 @@
   "records.loading": "Loading records…",
   "records.noSelection": "Select a record to see everything it holds.",
   "records.output": "Output",
+  "records.outputMore": "Only the first 1 MB is shown here. {more} MB more is stored, and search covers all of it.",
   "records.outputFile": "Output file",
   "records.processId": "Process ID",
   "records.processStarted": "Process started",

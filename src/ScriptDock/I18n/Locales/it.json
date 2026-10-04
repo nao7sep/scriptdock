@@ -114,6 +114,7 @@
   "records.loading": "Caricamento del log…",
   "records.noSelection": "Seleziona una voce per vedere tutto ciò che contiene.",
   "records.output": "Output",
+  "records.outputMore": "Qui viene mostrato solo il primo MB. Gli altri {more} MB sono salvati e la ricerca copre l’intero output.",
   "records.outputFile": "File di output",
   "records.processId": "ID processo",
   "records.processStarted": "Avvio del processo",

@@ -201,6 +201,9 @@
                                                 <SelectableTextBlock Text="{Binding Text}" Classes="code" FontSize="12"
                                                                      TextWrapping="Wrap"/>
                                             </Border>
+                                            <TextBlock Text="{Binding Note}" FontSize="11" TextWrapping="Wrap"
+                                                       IsVisible="{Binding Note, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
                                         </StackPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>

@@ -110,6 +110,7 @@
   "records.loading": "ログを読み込み中…",
   "records.noSelection": "項目を選択すると、その内容がすべて表示されます。",
   "records.output": "出力",
+  "records.outputMore": "ここには最初の 1 MB だけを表示しています。残りの {more} MB も保存されており、検索の対象になります。",
   "records.outputFile": "出力ファイル",
   "records.processId": "プロセス ID",
   "records.processStarted": "プロセス開始",

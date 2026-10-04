@@ -176,6 +176,22 @@ public sealed class RecordsWindowViewModelTests
         var output = Assert.Single(vm.DetailBlocks);
         Assert.Equal(English.Of("records.output"), output.Label);
         Assert.Equal("boom\nprogress 9", output.Text);
+        Assert.Null(output.Note);
+    }
+
+    [AvaloniaFact]
+    public void A_very_large_output_shows_its_first_megabyte_and_says_how_much_more_is_stored()
+    {
+        // 1 MB and a half: the pane shows the first megabyte and notes the 0.5 MB left out.
+        var stored = new string('x', RecordFormat.OutputShownBytes + RecordFormat.OutputShownBytes / 2);
+        _reader.Detail = (_, _) => Task.FromResult<RecordDetail?>(RunDetail(output: stored));
+        var vm = Started();
+        vm.SelectedRecord = vm.Rows[0];
+        Pump();
+
+        var output = Assert.Single(vm.DetailBlocks);
+        Assert.Equal(RecordFormat.OutputShownBytes, output.Text.Length);
+        Assert.Equal(English.Of("records.outputMore", ("more", 0.5)), output.Note);
     }
 
     [AvaloniaFact]

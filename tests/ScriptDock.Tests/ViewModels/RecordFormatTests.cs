@@ -62,9 +62,41 @@ public sealed class RecordFormatTests
     [Fact]
     public void Output_that_is_missing_or_only_whitespace_has_no_block()
     {
-        Assert.Null(RecordFormat.OutputText(null));
-        Assert.Null(RecordFormat.OutputText([]));
-        Assert.Null(RecordFormat.OutputText(Encoding.UTF8.GetBytes(" \r\n\t\n")));
-        Assert.Equal("done", RecordFormat.OutputText(Encoding.UTF8.GetBytes("done\n")));
+        Assert.Null(RecordFormat.Output(null));
+        Assert.Null(RecordFormat.Output([]));
+        Assert.Null(RecordFormat.Output(Encoding.UTF8.GetBytes(" \r\n\t\n")));
+        Assert.Equal(new OutputPreview("done", 0), RecordFormat.Output(Encoding.UTF8.GetBytes("done\n")));
+    }
+
+    [Fact]
+    public void Output_past_the_limit_shows_its_start_and_counts_what_it_leaves_out()
+    {
+        var stored = Encoding.UTF8.GetBytes("first\nsecond\nthird\n");
+
+        var preview = RecordFormat.Output(stored, limit: 7);
+
+        Assert.Equal(new OutputPreview("first\ns", stored.Length - 7), preview);
+    }
+
+    [Fact]
+    public void The_cut_never_splits_a_character()
+    {
+        // "aé" is a, then é in two bytes; a limit of 2 falls inside é, so the cut backs off before it.
+        var stored = Encoding.UTF8.GetBytes("aé");
+
+        var preview = RecordFormat.Output(stored, limit: 2);
+
+        Assert.Equal(new OutputPreview("a", 2), preview);
+    }
+
+    [Fact]
+    public void The_default_limit_is_one_megabyte()
+    {
+        var stored = Encoding.UTF8.GetBytes(new string('x', RecordFormat.OutputShownBytes + 10));
+
+        var preview = RecordFormat.Output(stored)!;
+
+        Assert.Equal(RecordFormat.OutputShownBytes, preview.Text.Length);
+        Assert.Equal(10, preview.MoreBytes);
     }
 }

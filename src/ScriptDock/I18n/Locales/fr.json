@@ -114,6 +114,7 @@
   "records.loading": "Chargement du journal…",
   "records.noSelection": "Sélectionnez une entrée pour voir tout ce qu’elle contient.",
   "records.output": "Sortie",
+  "records.outputMore": "Seul le premier Mo est affiché ici. Le reste ({more} Mo) est enregistré, et la recherche porte sur toute la sortie.",
   "records.outputFile": "Fichier de sortie",
   "records.processId": "ID du processus",
   "records.processStarted": "Démarrage du processus",

@@ -110,6 +110,7 @@
   "records.loading": "正在加载日志…",
   "records.noSelection": "选择一个条目即可查看其全部内容。",
   "records.output": "输出",
+  "records.outputMore": "此处仅显示前 1 MB。其余 {more} MB 也已保存，搜索会涵盖全部输出。",
   "records.outputFile": "输出文件",
   "records.processId": "进程 ID",
   "records.processStarted": "进程启动时间",

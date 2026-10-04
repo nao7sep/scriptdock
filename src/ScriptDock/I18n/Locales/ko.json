@@ -110,6 +110,7 @@
   "records.loading": "로그를 불러오는 중…",
   "records.noSelection": "항목을 선택하면 담긴 내용을 모두 볼 수 있습니다.",
   "records.output": "출력",
+  "records.outputMore": "여기에는 처음 1MB만 표시됩니다. 나머지 {more}MB도 저장되어 있으며, 검색은 전체 출력을 대상으로 합니다.",
   "records.outputFile": "출력 파일",
   "records.processId": "프로세스 ID",
   "records.processStarted": "프로세스 시작",

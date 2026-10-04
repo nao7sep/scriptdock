@@ -116,6 +116,7 @@
   "records.loading": "Загрузка журнала…",
   "records.noSelection": "Выберите элемент, чтобы увидеть всё, что он содержит.",
   "records.output": "Вывод",
+  "records.outputMore": "Здесь показан только первый мегабайт. Остальные {more} МБ сохранены, и поиск охватывает весь вывод.",
   "records.outputFile": "Файл вывода",
   "records.processId": "ID процесса",
   "records.processStarted": "Запуск процесса",

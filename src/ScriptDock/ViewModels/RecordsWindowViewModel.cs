@@ -508,7 +508,11 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
                 Add("records.outputFile", run.OutputPath, code: true);
                 Add("records.imported", run.ImportedAt is null ? null : RecordFormat.Time(run.ImportedAt, milliseconds: true));
                 Add("records.launch", RecordFormat.Launch(run.Session, _reader.Session));
-                AddBlock("records.output", RecordFormat.OutputText(run.Output));
+                if (RecordFormat.Output(run.Output) is { } output)
+                    DetailBlocks.Add(new RecordBlock(
+                        Localizer.T("records.output"),
+                        output.Text,
+                        output.MoreBytes == 0 ? null : Localizer.T("records.outputMore", ("more", Megabytes(output.MoreBytes)))));
                 break;
 
             case ScanReportRecordDetail scan:
@@ -518,6 +522,9 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
                 break;
         }
     }
+
+    // Rounded up to a tenth, so a few bytes left out never read as none.
+    private static double Megabytes(long bytes) => Math.Ceiling(bytes / (1024.0 * 1024.0) * 10) / 10;
 
     // A selected run that has not settled is read again as records arrive, and shown again only when its
     // end or its output has arrived, so the pane is not rebuilt under the reader for nothing.

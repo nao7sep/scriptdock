@@ -114,6 +114,7 @@
   "records.loading": "Carregando registros…",
   "records.noSelection": "Selecione um registro para ver tudo o que ele contém.",
   "records.output": "Saída",
+  "records.outputMore": "Aqui é exibido apenas o primeiro MB. O restante ({more} MB) está salvo, e a pesquisa abrange toda a saída.",
   "records.outputFile": "Arquivo de saída",
   "records.processId": "ID do processo",
   "records.processStarted": "Início do processo",

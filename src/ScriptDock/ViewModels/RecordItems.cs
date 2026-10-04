@@ -56,5 +56,6 @@ public sealed class RecordFilterOption : ObservableObject
 /// <summary>One stored field of the selected record, under its label.</summary>
 public sealed record RecordField(string Label, string Value, bool IsCode);
 
-/// <summary>One stored body of the selected record — a whole event, an output, a report — under its label.</summary>
-public sealed record RecordBlock(string Label, string Text);
+/// <summary>One stored body of the selected record — a whole event, an output, a report — under its label,
+/// with a note beneath it when only part of it is shown.</summary>
+public sealed record RecordBlock(string Label, string Text, string? Note = null);
