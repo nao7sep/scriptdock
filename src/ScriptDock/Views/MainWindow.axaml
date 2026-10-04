@@ -17,9 +17,9 @@
         layout in WindowMetrics and assigned in OnLoaded. -->
 
     <Window.Resources>
-        <!-- Content-sized script chip: slightly raised from the list well. A newly-found script is
-             flagged by an orange dot;
-             removed → red text, hidden → gray text; green dot when running. The 1px border is transparent
+        <!-- Content-sized script chip: slightly raised from the list well. At most one dot: green
+             while the script runs, otherwise orange while it is new;
+             removed → red text, hidden → gray text. The 1px border is transparent
              by default (the selected-chip style colours it, so selection never shifts the layout). -->
         <DataTemplate x:Key="ScriptTile" x:DataType="models:ScriptItem">
             <Border Classes="chip"
@@ -27,7 +27,7 @@
                     BorderThickness="1"
                     CornerRadius="{StaticResource CompactRadius}" Padding="12,7" Margin="3">
                 <StackPanel Orientation="Horizontal" Spacing="6">
-                    <Ellipse Width="7" Height="7" Fill="{DynamicResource ScriptNewBrush}" VerticalAlignment="Center" IsVisible="{Binding IsNew}"/>
+                    <Ellipse Width="7" Height="7" Fill="{DynamicResource ScriptNewBrush}" VerticalAlignment="Center" IsVisible="{Binding ShowsNewDot}"/>
                     <Ellipse Width="7" Height="7" Fill="{DynamicResource RunningBrush}" VerticalAlignment="Center" IsVisible="{Binding IsRunning}"/>
                     <!-- The name's colour follows the script's state through the scriptName styles, so it
                          repaints with the theme: removed wins over hidden. -->

@@ -16,8 +16,12 @@ public sealed class ScriptItem
     public bool IsRunning { get; init; }
     public ScriptFlag Flag { get; init; }
 
-    /// <summary>True when the script was newly found in the latest scan — flagged by an accent dot.</summary>
+    /// <summary>True when the script was newly found in the latest scan.</summary>
     public bool IsNew => Flag == ScriptFlag.New;
+
+    /// <summary>Whether the tile shows the orange new dot: a tile shows at most one dot, and the green
+    /// running dot wins, so a new script shows orange only while it is not running.</summary>
+    public bool ShowsNewDot => IsNew && !IsRunning;
 
     public bool IsRemoved => Flag == ScriptFlag.Removed;
 }

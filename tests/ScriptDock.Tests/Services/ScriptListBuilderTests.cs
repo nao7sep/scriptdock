@@ -66,4 +66,29 @@ public sealed class ScriptListBuilderTests
         Assert.Single(scripts);
         Assert.Equal(ScriptFlag.Removed, scripts[0].Flag);
     }
+
+    [Fact]
+    public void BuildScripts_ShowsOneDot_RunningWinsOverNew()
+    {
+        var runningNew = "/code/a/scripts/run-dev.command";
+        var idleNew = "/code/b/scripts/run-dev.command";
+
+        var scripts = ScriptListBuilder.BuildScripts(
+            found: [runningNew, idleNew],
+            removed: [],
+            hidden: Set(),
+            newPaths: Set(runningNew, idleNew),
+            runningPaths: Set(runningNew),
+            labels: Labels((runningNew, "a/run-dev.command"), (idleNew, "b/run-dev.command")),
+            showHidden: false);
+
+        // New and running: only the running dot, while the flag itself stays New.
+        Assert.Equal(ScriptFlag.New, scripts[0].Flag);
+        Assert.True(scripts[0].IsRunning);
+        Assert.False(scripts[0].ShowsNewDot);
+
+        // New and idle: only the new dot.
+        Assert.False(scripts[1].IsRunning);
+        Assert.True(scripts[1].ShowsNewDot);
+    }
 }

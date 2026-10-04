@@ -5,7 +5,7 @@ public enum ScriptFlag
 {
     None,
 
-    /// <summary>Newly found by the most recent scan (shown yellow until the next scan).</summary>
+    /// <summary>Newly found by the most recent scan (shown orange until the next scan).</summary>
     New,
 
     /// <summary>Was known but has since disappeared (shown red until the next scan).</summary>
