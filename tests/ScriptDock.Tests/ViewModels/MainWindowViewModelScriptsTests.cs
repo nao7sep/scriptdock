@@ -226,4 +226,34 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         Assert.True(selected.IsHidden);
         Assert.Equal("Show", vm.ToggleHiddenLabel); // the one button now offers to Show it
     }
+
+    [Fact]
+    public async Task RunScript_ClearsItsNewFlag_AndLeavesTheOthersNew()
+    {
+        Touch("a.command");
+        Touch("b.command");
+        var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
+        var state = new AppState();
+        var vm = new MainWindowViewModel(
+            new FakeConfigStore { Value = config },
+            new FakeJsonStore<AppState> { Value = state },
+            new FakeJsonStore<KnownPaths>(),
+            new FakeRecordStore(),
+            config, state, new KnownPaths { Paths = [] }, new ScriptScanner(), new FakeProcessRunner());
+        await vm.RescanCommand.ExecuteAsync(null);
+        Assert.All(vm.Scripts, s => Assert.True(s.IsNew));
+
+        await vm.RunScriptCommand.ExecuteAsync(vm.Scripts.Single(s => Name(s) == "a.command"));
+
+        Assert.False(vm.Scripts.Single(s => Name(s) == "a.command").IsNew);
+        Assert.True(vm.Scripts.Single(s => Name(s) == "b.command").IsNew);
+
+        // Show hidden rebuilds the list from the same scan and changes neither flag.
+        vm.ShowHidden = true;
+        Assert.False(vm.Scripts.Single(s => Name(s) == "a.command").IsNew);
+        Assert.True(vm.Scripts.Single(s => Name(s) == "b.command").IsNew);
+        vm.ShowHidden = false;
+        Assert.False(vm.Scripts.Single(s => Name(s) == "a.command").IsNew);
+        Assert.True(vm.Scripts.Single(s => Name(s) == "b.command").IsNew);
+    }
 }

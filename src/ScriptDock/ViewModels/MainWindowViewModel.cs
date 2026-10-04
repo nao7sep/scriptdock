@@ -37,7 +37,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly IProcessRunner _runner;
 
     // The most recent scan's outcome, kept so a hidden/show toggle preserves the new/removed
-    // flags until the next scan replaces them.
+    // flags until the next scan replaces them; running a script takes it out of the new set.
     private IReadOnlyList<string> _lastFound = [];
     private ISet<string> _newPaths = new HashSet<string>(StringComparer.Ordinal);
     private IReadOnlyList<string> _removed = [];
@@ -644,6 +644,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             ReportProcessActionError(path, "run", Message.Of("process.runFailed"));
             return;
         }
+
+        // Running a script ends its "new" flag at once; otherwise the flag lasts until the next scan.
+        if (_newPaths.Remove(PathIdentity.Key(path)))
+            RebuildScripts();
 
         _recent = RecentRuns.Add(_recent, path, started.StartedAt);
         _recentVersion++;
