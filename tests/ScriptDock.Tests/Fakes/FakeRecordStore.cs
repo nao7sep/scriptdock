@@ -36,7 +36,16 @@ public sealed class FakeRecordStore : IRecordStore
 
     public Task<IReadOnlyList<RecentRun>> ReadRecentAsync() =>
         Task.FromResult<IReadOnlyList<RecentRun>>(RecentRuns.From(
-            Runs.Select(run => (run.ScriptPath, run.StartedAt)), _dismissedAt));
+            Runs.Select(run => new RecentRun
+            {
+                Path = run.ScriptPath,
+                RanAt = run.StartedAt,
+                End = RunEnds
+                    .Where(end => end.RunSession == run.Session && end.Run == run.Run)
+                    .Select(end => new RecordedEnd(end.State, end.ExitCode))
+                    .FirstOrDefault(),
+            }),
+            _dismissedAt));
 
     public void AddScanReport(ScanReport report) => ScanReports.Add(report);
 

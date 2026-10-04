@@ -184,7 +184,7 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
     public Task<IReadOnlyList<RecentRun>> ReadRecentAsync() =>
         Read<IReadOnlyList<RecentRun>>(connection =>
             RecentRuns.From(
-                LatestByScript(connection, "SELECT script, MAX(time) FROM runs GROUP BY script"),
+                LatestRuns(connection),
                 LatestByScript(connection, "SELECT script, MAX(time) FROM dismissals GROUP BY script")));
 
     public void AddScanReport(ScanReport report)
@@ -394,6 +394,32 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
             ["message"] = message,
             ["error"] = SessionLogger.BuildErrorNode(failure),
         }.ToJsonString(LineOptions);
+
+    // Each script's latest run with its recorded end, if any. SQLite takes the bare session and run from the
+    // row holding MAX(time), so the end joined is that latest run's.
+    private static List<RecentRun> LatestRuns(SqliteConnection connection)
+    {
+        var latest = new List<RecentRun>();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT latest.script, latest.time, run_ends.state, run_ends.exit_code
+            FROM (SELECT script, MAX(time) AS time, session, run FROM runs GROUP BY script) AS latest
+            LEFT JOIN run_ends ON run_ends.run_session = latest.session AND run_ends.run = latest.run
+            """;
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            latest.Add(new RecentRun
+            {
+                Path = reader.GetString(0),
+                RanAt = ParseTime(reader.GetString(1)),
+                End = reader.IsDBNull(2)
+                    ? null
+                    : new RecordedEnd(reader.GetString(2), reader.IsDBNull(3) ? null : reader.GetInt32(3)),
+            });
+        }
+        return latest;
+    }
 
     private static List<(string Path, DateTimeOffset At)> LatestByScript(SqliteConnection connection, string sql)
     {

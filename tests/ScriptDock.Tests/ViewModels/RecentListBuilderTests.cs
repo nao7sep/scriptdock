@@ -94,4 +94,14 @@ public sealed class RecentListBuilderTests
         var entry = Assert.Single(entries);
         Assert.Same(running, entry.Process);
     }
+
+    [Fact]
+    public void Build_PassesEachRecentsRecordedEndToItsEntry()
+    {
+        var ended = new RecentRun { Path = "/a", RanAt = DateTimeOffset.UnixEpoch, End = new RecordedEnd("exited", 0) };
+
+        var entry = Assert.Single(RecentListBuilder.Build([ended], [], NoLabels));
+
+        Assert.Equal(new RecordedEnd("exited", 0), entry.LastEnd);
+    }
 }

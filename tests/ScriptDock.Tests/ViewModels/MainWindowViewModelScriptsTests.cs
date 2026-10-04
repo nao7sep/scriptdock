@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ScriptDock;
+using ScriptDock.I18n;
 using ScriptDock.Models;
 using ScriptDock.Services;
 using ScriptDock.Storage;
@@ -92,6 +93,7 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         var entry = Assert.Single(vm.Recent);
         Assert.Equal(path, entry.Path);
         Assert.False(entry.IsRunning);
+        Assert.Equal(Localizer.T("recent.stateUnknown"), entry.StatePillText);
         Assert.Equal(0, vm.RunningCount);
     }
 

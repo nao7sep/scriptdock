@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ScriptDock.I18n;
 using ScriptDock.Models;
 using ScriptDock.Services;
 using ScriptDock.Tests.Fakes;
@@ -483,5 +484,20 @@ public sealed class MainWindowViewModelTests
 
         Assert.Equal(1, runner.StopAllCalls);
         Assert.False(vm.HasOperationalError);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_ShowsEachRecentRowsRecordedEnd()
+    {
+        // An earlier session's run that exited 0, as a launcher whose shell hands its app to the system does.
+        var records = RecordsWithRuns("/x/rebuild.command");
+        records.RunEnds.Add(new RunEnd("2025-12-31T00:00:00.000Z", 1, DateTimeOffset.UtcNow, "exited", 0));
+        var (vm, _) = BuildVm(records: records);
+
+        await vm.InitializeAsync();
+
+        var entry = Assert.Single(vm.Recent);
+        Assert.Null(entry.Process);
+        Assert.Equal(Localizer.T("recent.stateExited"), entry.StatePillText);
     }
 }

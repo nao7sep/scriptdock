@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using ScriptDock;
@@ -104,6 +105,25 @@ public sealed class RecordStoreTests : IDisposable
         Assert.Equal("/x/a.command", only.Path);
         Assert.Equal(past.AddMinutes(2), only.RanAt);
         Assert.Equal(1L, Scalar("SELECT COUNT(*) FROM dismissals"));
+    }
+
+    [Fact]
+    public async Task Recent_carries_each_scripts_latest_run_end_or_null_without_one()
+    {
+        using var records = new RecordStore(_dir, SessionStart);
+        var past = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        // a: an earlier run stopped, the latest exited 3. b: its only run has no recorded end.
+        await records.AddRunAsync(Run(1, "/runs/1.log") with { ScriptPath = "/x/a.command", StartedAt = past });
+        await records.AddRunEndAsync(new RunEnd(Session, 1, past.AddSeconds(5), "terminated", null));
+        await records.AddRunAsync(Run(2, "/runs/2.log") with { ScriptPath = "/x/a.command", StartedAt = past.AddMinutes(1) });
+        await records.AddRunEndAsync(new RunEnd(Session, 2, past.AddMinutes(2), "exited", 3));
+        await records.AddRunAsync(Run(3, "/runs/3.log") with { ScriptPath = "/x/b.command", StartedAt = past.AddMinutes(3) });
+
+        var recent = await records.ReadRecentAsync();
+
+        Assert.Equal(["/x/b.command", "/x/a.command"], recent.Select(run => run.Path));
+        Assert.Null(recent[0].End);
+        Assert.Equal(new RecordedEnd("exited", 3), recent[1].End);
     }
 
     [Fact]

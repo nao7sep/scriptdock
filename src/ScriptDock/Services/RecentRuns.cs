@@ -16,9 +16,9 @@ public static class RecentRuns
     // user's auto-favorites, kept until explicitly dismissed).
     public const int DefaultMax = 500;
 
-    /// <summary>Each script's latest run, unless a dismissal came at or after it.</summary>
+    /// <summary>Each script's latest run, with its recorded end, unless a dismissal came at or after it.</summary>
     public static List<RecentRun> From(
-        IEnumerable<(string Path, DateTimeOffset At)> runs,
+        IEnumerable<RecentRun> runs,
         IEnumerable<(string Path, DateTimeOffset At)> dismissals,
         int max = DefaultMax)
     {
@@ -31,11 +31,11 @@ public static class RecentRuns
         }
 
         var latestRun = new Dictionary<string, RecentRun>(PathIdentity.Comparer);
-        foreach (var (path, at) in runs)
+        foreach (var run in runs)
         {
-            var key = PathIdentity.Key(path);
-            if (!latestRun.TryGetValue(key, out var run) || at > run.RanAt)
-                latestRun[key] = new RecentRun { Path = path, RanAt = at };
+            var key = PathIdentity.Key(run.Path);
+            if (!latestRun.TryGetValue(key, out var latest) || run.RanAt > latest.RanAt)
+                latestRun[key] = run;
         }
 
         return latestRun
