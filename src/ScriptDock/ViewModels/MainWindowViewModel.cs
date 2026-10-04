@@ -36,8 +36,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly ScriptScanner _scanner;
     private readonly IProcessRunner _runner;
 
-    // The most recent scan's outcome, kept so a hidden/show toggle preserves the new/removed
-    // flags until the next scan replaces them; running a script takes it out of the new set.
+    // The most recent scan's outcome, kept so a hidden/show toggle preserves the new/removed flags. A
+    // full scan replaces them and a background scan adds to them (ScanFlags); running a script or a
+    // scan-settings change takes it out of the new set.
     private IReadOnlyList<string> _lastFound = [];
     private ISet<string> _newPaths = new HashSet<string>(StringComparer.Ordinal);
     private IReadOnlyList<string> _removed = [];
@@ -71,6 +72,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private bool _activationRescans;
     private ITimer? _activationRescanTimer;
     private int _activationRescanVersion;
+
+    /// <summary>The latest activation rescan, for tests to await.</summary>
+    internal Task ActivationScan { get; private set; } = Task.CompletedTask;
 
     public ObservableCollection<ScriptItem> Scripts { get; } = [];
     public ObservableCollection<RecentEntry> Recent { get; } = [];
@@ -259,13 +263,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         StartOutputImport();
         await LoadRecentAsync();
         RebuildRecent();
-        await RescanAsync();
+        await ScanAsync(background: false);
         _activationRescans = true;
     }
 
     /// <summary>
     /// The main window came back to the front: rescan the Scripts pane once activations settle, unless a
-    /// scan is running or a dialog is open by then. The rescan keeps the selection, as every rebuild does.
+    /// scan is running or a dialog is open by then. The rescan is a quiet background scan: it keeps the
+    /// flags already shown (ScanFlags) and the selection, and speaks only when it found a change.
     /// </summary>
     public void OnWindowActivated()
     {
@@ -286,8 +291,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _activationRescanTimer?.Dispose();
         _activationRescanTimer = null;
 
-        if (!IsScanning && !IsDialogOpen() && RescanCommand.CanExecute(null))
-            RescanCommand.Execute(null);
+        // Run beside the Rescan command rather than through it, so Rescan and Cmd+R stay available and a
+        // press supersedes this scan with a full one.
+        if (!IsScanning && !IsDialogOpen())
+            ActivationScan = ScanAsync(background: true);
     }
 
     internal async Task LoadRecentAsync()
@@ -393,6 +400,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
 
         var fontChanged = !string.Equals(_config.UiFontFamily, candidate.UiFontFamily, StringComparison.Ordinal);
+        var scanChanged = !_config.RootDirs.SequenceEqual(candidate.RootDirs, StringComparer.Ordinal)
+            || !_config.Extensions.SequenceEqual(candidate.Extensions, StringComparer.Ordinal)
+            || !_config.IgnorePatterns.SequenceEqual(candidate.IgnorePatterns, StringComparer.Ordinal);
         _config.RootDirs = candidate.RootDirs;
         _config.Extensions = candidate.Extensions;
         _config.IgnorePatterns = candidate.IgnorePatterns;
@@ -409,6 +419,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         ApplyUiFont();
         if (fontChanged)
             UiFontChanged?.Invoke(this, EventArgs.Empty);
+        if (scanChanged && _newPaths.Count > 0)
+        {
+            // Changing what is scanned ends every "new" flag; the next scan flags against the new scope.
+            _newPaths.Clear();
+            RebuildScripts();
+        }
         ShowCatalogResult(Message.Of("scan.configChanged"));
         return true;
     }
@@ -438,7 +454,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task RescanAsync()
+    private Task RescanAsync() => ScanAsync(background: false);
+
+    // A full scan (launch, Rescan) says it is scanning, then how it ended, and replaces the flags. A
+    // background scan (the window came back to the front) adds to the flags and says only what changed.
+    private async Task ScanAsync(bool background)
     {
         // Supersede any in-flight scan rather than refusing to start: a previous scan stuck on a
         // slow/unresponsive root must not disable Rescan forever. The latest scan owns IsScanning.
@@ -447,7 +467,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _scanCts = cts;
 
         IsScanning = true;
-        ShowCatalogResult(Message.Of("scan.running"));
+        if (!background)
+            ShowCatalogResult(Message.Of("scan.running"));
         try
         {
             var roots = _config.RootDirs.ToList();
@@ -459,9 +480,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             ScanReportLog.Write(_records, report);
 
             var diff = ScanDiff.Compute(report.Found, _knownPaths.Paths);
+            var flags = background
+                ? ScanFlags.Background(diff, report.Found, _newPaths, _removed)
+                : ScanFlags.Full(diff);
             _lastFound = report.Found;
-            _newPaths = new HashSet<string>(diff.Added.Select(PathIdentity.Key), PathIdentity.Comparer);
-            _removed = diff.Removed;
+            _newPaths = flags.NewKeys;
+            _removed = flags.Removed;
 
             RebuildScripts();
 
@@ -469,7 +493,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             await _knownPathsStore.SaveAsync(_knownPaths);
 
             ResolveOperationalError("scan");
-            ShowCatalogResult(ScanResultMessage(diff), transient: true);
+            if (!background || diff.Added.Count > 0 || diff.Removed.Count > 0)
+                ShowCatalogResult(ScanResultMessage(diff), transient: true);
         }
         catch (OperationCanceledException)
         {
@@ -478,7 +503,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             Log.Error("ui: rescan failed", ex);
-            ClearCatalogResult();
+            if (!background)
+                ClearCatalogResult(); // the "Scanning…" line
             ReportOperationalError("scan", Message.Of("scan.failed"));
         }
         finally
@@ -671,7 +697,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        // Running a script ends its "new" flag at once; otherwise the flag lasts until the next scan.
+        // Running a script ends its "new" flag at once; otherwise the flag lasts until the next full scan.
         if (_newPaths.Remove(PathIdentity.Key(path)))
             RebuildScripts();
 

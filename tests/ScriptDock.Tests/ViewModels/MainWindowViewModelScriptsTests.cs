@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -259,7 +260,7 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         Assert.All(vm.Scripts, s => Assert.True(s.IsNew));
     }
 
-    private (MainWindowViewModel Vm, FakeRecordStore Records, FakeTimeProvider Clock) ActivatableVm()
+    private (MainWindowViewModel Vm, FakeRecordStore Records, FakeTimeProvider Clock) ActivatableVm(KnownPaths? known = null)
     {
         var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
         var state = new AppState();
@@ -270,7 +271,7 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
             new FakeJsonStore<AppState> { Value = state },
             new FakeJsonStore<KnownPaths>(),
             records,
-            config, state, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner()) { Time = clock };
+            config, state, known ?? new KnownPaths(), new ScriptScanner(), new FakeProcessRunner()) { Time = clock };
         return (vm, records, clock);
     }
 
@@ -279,8 +280,98 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
     {
         clock.Advance(MainWindowViewModel.ActivationRescanDelay);
         Dispatcher.UIThread.RunJobs();
-        if (vm.RescanCommand.ExecutionTask is { } scan)
-            await scan;
+        await vm.ActivationScan;
+    }
+
+    private ScriptFlag FlagOf(MainWindowViewModel vm, string name) => vm.Scripts.Single(s => Name(s) == name).Flag;
+
+    // The keys of every line the Scripts pane's result shows, in order, from now on.
+    private static List<string?> WatchCatalogResult(MainWindowViewModel vm)
+    {
+        var shown = new List<string?>();
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainWindowViewModel.CatalogResultMessage))
+                shown.Add(vm.CatalogResultMessage?.Key);
+        };
+        return shown;
+    }
+
+    [AvaloniaFact]
+    public async Task Activation_KeepsNewFlags_FlagsWhatChanged_AndSpeaksOnlyWhenSomethingDid()
+    {
+        Touch("a.command");
+        Touch("b.command");
+        var (vm, _, clock) = ActivatableVm(new KnownPaths { Paths = [] });
+        await vm.InitializeAsync();
+        Assert.Equal(ScriptFlag.New, FlagOf(vm, "a.command"));
+        var shown = WatchCatalogResult(vm);
+
+        // Nothing changed: the flags stay and the pane says nothing, not even that it is scanning.
+        vm.OnWindowActivated();
+        await SettleActivation(vm, clock);
+        Assert.Empty(shown);
+        Assert.Equal(ScriptFlag.New, FlagOf(vm, "a.command"));
+        Assert.Equal(ScriptFlag.New, FlagOf(vm, "b.command"));
+
+        // One added, one removed: the earlier flag stays, the change is flagged, and only its result shows.
+        Touch("c.command");
+        File.Delete(Path.Combine(_root, "b.command"));
+        vm.OnWindowActivated();
+        await SettleActivation(vm, clock);
+        Assert.Equal(["scan.addedAndRemoved"], shown);
+        Assert.Equal(ScriptFlag.New, FlagOf(vm, "a.command"));
+        Assert.Equal(ScriptFlag.Removed, FlagOf(vm, "b.command"));
+        Assert.Equal(ScriptFlag.New, FlagOf(vm, "c.command"));
+
+        // Rescan still says it is scanning, then how it ended, and ends every flag.
+        shown.Clear();
+        await vm.RescanCommand.ExecuteAsync(null);
+        Assert.Equal(["scan.running", "scan.upToDate"], shown);
+        Assert.Equal(["a.command", "c.command"], vm.Scripts.Select(Name));
+        Assert.All(vm.Scripts, s => Assert.Equal(ScriptFlag.None, s.Flag));
+        await vm.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task Rescan_DuringAnActivationScan_StaysAvailable()
+    {
+        Touch("a.command");
+        var (vm, _, clock) = ActivatableVm();
+        await vm.InitializeAsync();
+
+        vm.OnWindowActivated();
+        clock.Advance(MainWindowViewModel.ActivationRescanDelay);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(vm.RescanCommand.CanExecute(null));
+        await vm.ActivationScan;
+        await vm.ShutdownAsync();
+    }
+
+    [Fact]
+    public async Task TryApplySettings_ThatChangesTheScan_EndsTheNewFlags_AndOneThatDoesNot_KeepsThem()
+    {
+        Touch("a.command");
+        var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
+        var state = new AppState();
+        var vm = new MainWindowViewModel(
+            new FakeConfigStore { Value = config },
+            new FakeJsonStore<AppState> { Value = state },
+            new FakeJsonStore<KnownPaths>(),
+            new FakeRecordStore(),
+            config, state, new KnownPaths { Paths = [] }, new ScriptScanner(), new FakeProcessRunner());
+        await vm.RescanCommand.ExecuteAsync(null);
+
+        var font = vm.CreateSettingsDraft();
+        font.UiFontFamily = "Helvetica";
+        Assert.True(await vm.TryApplySettingsAsync(font));
+        Assert.Equal(ScriptFlag.New, FlagOf(vm, "a.command"));
+
+        var scan = vm.CreateSettingsDraft();
+        scan.IgnorePatterns.Add("*.tmp");
+        Assert.True(await vm.TryApplySettingsAsync(scan));
+        Assert.Equal(ScriptFlag.None, FlagOf(vm, "a.command"));
     }
 
     [AvaloniaFact]
