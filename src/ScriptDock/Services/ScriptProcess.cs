@@ -43,16 +43,9 @@ public sealed class ScriptProcess : IDisposable
     /// <summary>Path of the file the child shell writes stdout+stderr to; null if the run never started.</summary>
     public string? LogFilePath { get; internal set; }
 
-    /// <summary>The recorded run a relaunch found still running and re-attached this handle to; null for a
-    /// run this session started.</summary>
-    public RunRecord? Recaptured { get; init; }
-
-    /// <summary>Whether this run accepts stdin input from the app. True only for runs this session
-    /// started (which own a redirected stdin pipe); a recaptured run has no input channel.</summary>
-    public bool AcceptsInput { get; internal set; }
-
     /// <summary>OS process id while running, or null if it never started or is already gone.
-    /// Recorded with <see cref="OsStartedAt"/> so a relaunch can recapture this exact run.</summary>
+    /// Recorded with <see cref="OsStartedAt"/> so a later output import can tell whether this exact
+    /// run is still alive.</summary>
     public int? Pid
     {
         get { try { return Process?.Id; } catch { return null; } }
@@ -113,14 +106,14 @@ public sealed class ScriptProcess : IDisposable
         return _outputCache;
     }
 
-    /// <summary>Sends a line to the running script's stdin. No-op unless this run accepts input
-    /// (see <see cref="AcceptsInput"/>) and is still alive. Never throws.</summary>
+    /// <summary>Sends a line to the running script's stdin, the pipe ScriptDock owns for every run it
+    /// starts. No-op unless the run started and is still alive. Never throws.</summary>
     public Task<bool> SendInputAsync(string line) => SendInputAsync(line, InputTimeout);
 
     internal async Task<bool> SendInputAsync(string line, TimeSpan timeout)
     {
         var process = Process;
-        if (process is null || !AcceptsInput)
+        if (process is null)
             return false;
 
         using var timeoutCts = new CancellationTokenSource(timeout);

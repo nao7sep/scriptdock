@@ -78,7 +78,6 @@
     "other": "{count} scripts en cours d’exécution seront arrêtés à la fermeture de ScriptDock. Quitter quand même\u00a0?"
   },
   "quit.title": "Quitter ScriptDock",
-  "recapture.failed": "Les scripts précédemment en cours d’exécution n’ont pas pu être rétablis. Consultez le journal, puis relancez-les si nécessaire.",
   "recent.dismiss": "Retirer",
   "recent.empty": "Aucune exécution récente. Double-cliquez sur un script pour l’exécuter.",
   "recent.run": "Exécuter",
@@ -174,7 +173,6 @@
   "settings.patternMultiline": "Un motif doit tenir sur une seule ligne.",
   "settings.pickRootTitle": "Ajouter un répertoire racine",
   "settings.processes": "Processus",
-  "settings.recaptureOnLaunch": "Au prochain démarrage de ScriptDock, se rattacher aux scripts restés en cours",
   "settings.resetExtensions": "Réinitialiser les extensions",
   "settings.resetIgnorePatterns": "Réinitialiser les motifs d’exclusion",
   "settings.roots": "Répertoires racines",

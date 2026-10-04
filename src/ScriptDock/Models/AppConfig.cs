@@ -52,11 +52,6 @@ public sealed class AppConfig
 
     /// <summary>When true, quitting ScriptDock terminates every running script (and its process
     /// tree). Default false: running scripts are left alive so an accidental quit does not kill
-    /// in-progress work — they are recaptured next launch when <see cref="RecaptureProcessesOnLaunch"/>
-    /// is on.</summary>
+    /// in-progress work.</summary>
     public bool KillProcessesOnClose { get; set; }
-
-    /// <summary>When true (default), a relaunch re-attaches to scripts left running by a previous
-    /// session, matched by PID and OS start-time; otherwise those are treated as no longer running.</summary>
-    public bool RecaptureProcessesOnLaunch { get; set; } = true;
 }

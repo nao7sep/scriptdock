@@ -66,44 +66,16 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
     }
 
     [Fact]
-    public async Task InitializeAsync_RecapturedRunningProcess_AppearsOnceInRecent()
+    public async Task InitializeAsync_WithUnendedRunsInTheRecords_StartsNoProcessAndShowsNoError()
     {
-        var path = Path.Combine(_root, "live.command");
-        // A previous session's run has no recorded end, so it may still be running; it is also in the recent list.
+        var path = Path.Combine(_root, "left.command");
+        Touch("left.command");
+        // A previous session's run with a process id and no recorded end: ScriptDock no longer owns it.
         var records = new FakeRecordStore();
         records.Runs.Add(new RunRecord("2025-12-31T00:00:00.000Z", 1, DateTimeOffset.UtcNow, path, 4242, DateTimeOffset.UtcNow, null));
-        var state = new AppState();
-        var config = new AppConfig { RootDirs = [_root], Extensions = [".command"], RecaptureProcessesOnLaunch = true };
-        var vm = new MainWindowViewModel(
-            new FakeConfigStore { Value = config },
-            new FakeJsonStore<AppState> { Value = state },
-            new FakeJsonStore<KnownPaths>(),
-            records,
-            config, state, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
-
-        await vm.InitializeAsync(); // recapture → read Recent → RebuildRecent → scan
-
-        // The recaptured run and its recent entry share a path → exactly one row, shown running.
-        var entry = Assert.Single(vm.Recent, e => e.Path == path);
-        Assert.True(entry.IsRunning);
-        Assert.Equal(1, vm.RunningCount);
-    }
-
-    [Fact]
-    public async Task InitializeAsync_RecapturesOnlyUnendedRuns_AndRecordsTheGoneOnesEnd()
-    {
-        var live = Path.Combine(_root, "live.command");
-        var ended = Path.Combine(_root, "ended.command");
-        var gone = Path.Combine(_root, "gone.command");
-        var records = new FakeRecordStore();
-        records.Runs.Add(new RunRecord("2025-12-31T00:00:00.000Z", 1, DateTimeOffset.UtcNow, live, 11, DateTimeOffset.UtcNow, null));
-        records.Runs.Add(new RunRecord("2025-12-31T00:00:00.000Z", 2, DateTimeOffset.UtcNow, ended, 12, DateTimeOffset.UtcNow, null));
-        records.Runs.Add(new RunRecord("2025-12-31T00:00:00.000Z", 3, DateTimeOffset.UtcNow, gone, 13, DateTimeOffset.UtcNow, null));
-        records.RunEnds.Add(new RunEnd("2025-12-31T00:00:00.000Z", 2, DateTimeOffset.UtcNow, "exited", 0));
         var runner = new FakeProcessRunner();
-        runner.GoneScripts.Add(gone);
         var state = new AppState();
-        var config = new AppConfig { RootDirs = [_root], Extensions = [".command"], RecaptureProcessesOnLaunch = true };
+        var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
@@ -113,45 +85,14 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
 
         await vm.InitializeAsync();
 
-        Assert.Equal([live, gone], runner.RecaptureCalls.Select(run => run.ScriptPath));
-        var goneEnd = Assert.Single(records.RunEnds, end => end.Run == 3);
-        Assert.Equal(RunEnd.Gone, goneEnd.State);
-        Assert.Null(goneEnd.ExitCode);
-
-        // The recaptured run's end names the run it was recorded as, not this session's handle.
-        var recaptured = Assert.Single(runner.Active);
-        recaptured.Complete();
-        var liveEnd = Assert.Single(records.RunEnds, end => end.Run == 1);
-        Assert.Equal("2025-12-31T00:00:00.000Z", liveEnd.RunSession);
-        Assert.Equal("exited", liveEnd.State);
-    }
-
-    [Fact]
-    public async Task InitializeAsync_RecaptureFailureIsRetainedWithoutRawDiagnosticsAndScanContinues()
-    {
-        var hostile = "EACCES IPC /private/tmp/SCRIPTDOCK-RECAPTURE-SENTINEL";
-        var runner = new FakeProcessRunner { RecaptureException = new IOException(hostile) };
-        var config = new AppConfig
-        {
-            RootDirs = [_root],
-            Extensions = [".command"],
-            RecaptureProcessesOnLaunch = true,
-        };
-        Touch("still-scanned.command");
-        var state = new AppState();
-        var vm = new MainWindowViewModel(
-            new FakeConfigStore { Value = config },
-            new FakeJsonStore<AppState> { Value = state },
-            new FakeJsonStore<KnownPaths>(),
-            new FakeRecordStore(),
-            config, state, new KnownPaths(), new ScriptScanner(), runner);
-
-        await vm.InitializeAsync();
-
-        Assert.True(vm.HasOperationalError);
-        Assert.Contains("could not be restored", vm.OperationalError, StringComparison.Ordinal);
-        Assert.DoesNotContain(hostile, vm.OperationalError, StringComparison.Ordinal);
-        Assert.Single(vm.Scripts);
+        Assert.Empty(runner.StartCalls);
+        Assert.Empty(runner.Active);
+        Assert.False(vm.HasOperationalError);
+        Assert.Empty(records.RunEnds);
+        var entry = Assert.Single(vm.Recent);
+        Assert.Equal(path, entry.Path);
+        Assert.False(entry.IsRunning);
+        Assert.Equal(0, vm.RunningCount);
     }
 
     [Fact]

@@ -76,7 +76,6 @@
     "other": "Beim Beenden von ScriptDock werden {count} laufende Skripte gestoppt. Trotzdem beenden?"
   },
   "quit.title": "ScriptDock beenden",
-  "recapture.failed": "Zuvor laufende Skripte konnten nicht wiederhergestellt werden. Prüfen Sie das Protokoll und führen Sie sie bei Bedarf erneut aus.",
   "recent.dismiss": "Entfernen",
   "recent.empty": "Keine Ausführungen im Verlauf. Doppelklicken Sie auf ein Skript, um es auszuführen.",
   "recent.run": "Ausführen",
@@ -169,7 +168,6 @@
   "settings.patternMultiline": "Ein Muster muss aus einer einzigen Zeile bestehen.",
   "settings.pickRootTitle": "Stammverzeichnis hinzufügen",
   "settings.processes": "Prozesse",
-  "settings.recaptureOnLaunch": "Beim nächsten Start von ScriptDock erneut mit noch laufenden Skripten verbinden",
   "settings.resetExtensions": "Dateiendungen zurücksetzen",
   "settings.resetIgnorePatterns": "Ignoriermuster zurücksetzen",
   "settings.roots": "Stammverzeichnisse",

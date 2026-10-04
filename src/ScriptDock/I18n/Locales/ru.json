@@ -80,7 +80,6 @@
     "other": "{count} выполняющегося скрипта будет остановлено при выходе из ScriptDock. Всё равно выйти?"
   },
   "quit.title": "Выход из ScriptDock",
-  "recapture.failed": "Не удалось восстановить ранее выполнявшиеся скрипты. Проверьте журнал и при необходимости запустите их снова.",
   "recent.dismiss": "Убрать",
   "recent.empty": "Недавних запусков нет. Дважды щёлкните скрипт, чтобы запустить его.",
   "recent.run": "Запустить",
@@ -179,7 +178,6 @@
   "settings.patternMultiline": "Шаблон должен быть в одну строку.",
   "settings.pickRootTitle": "Добавить корневой каталог",
   "settings.processes": "Процессы",
-  "settings.recaptureOnLaunch": "При следующем запуске ScriptDock снова подключаться к скриптам, которые продолжают выполняться",
   "settings.resetExtensions": "Сбросить расширения",
   "settings.resetIgnorePatterns": "Сбросить шаблоны исключения",
   "settings.roots": "Корневые каталоги",

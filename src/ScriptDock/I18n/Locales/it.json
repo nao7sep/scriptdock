@@ -78,7 +78,6 @@
     "other": "{count} script in esecuzione verranno arrestati quando esci da ScriptDock. Vuoi uscire comunque?"
   },
   "quit.title": "Esci da ScriptDock",
-  "recapture.failed": "Impossibile ripristinare gli script che erano in esecuzione. Controlla il log, poi eseguili di nuovo se necessario.",
   "recent.dismiss": "Rimuovi",
   "recent.empty": "Nessuna esecuzione recente. Fai doppio clic su uno script per eseguirlo.",
   "recent.run": "Esegui",
@@ -174,7 +173,6 @@
   "settings.patternMultiline": "Un pattern deve stare su una sola riga.",
   "settings.pickRootTitle": "Aggiungi directory radice",
   "settings.processes": "Processi",
-  "settings.recaptureOnLaunch": "Al prossimo avvio di ScriptDock, ricollegati agli script rimasti in esecuzione",
   "settings.resetExtensions": "Reimposta estensioni",
   "settings.resetIgnorePatterns": "Reimposta pattern da ignorare",
   "settings.roots": "Directory radice",

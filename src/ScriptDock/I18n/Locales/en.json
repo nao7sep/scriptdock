@@ -76,7 +76,6 @@
     "other": "{count} running scripts will be stopped when ScriptDock quits. Quit anyway?"
   },
   "quit.title": "Quit ScriptDock",
-  "recapture.failed": "Previously running scripts could not be restored. Check the log, then run them again if needed.",
   "recent.dismiss": "Dismiss",
   "recent.empty": "No recent runs. Double-click a script to run it.",
   "recent.run": "Run",
@@ -169,7 +168,6 @@
   "settings.patternMultiline": "A pattern must be a single line.",
   "settings.pickRootTitle": "Add root directory",
   "settings.processes": "Processes",
-  "settings.recaptureOnLaunch": "The next time ScriptDock starts, reattach to scripts left running",
   "settings.resetExtensions": "Reset extensions",
   "settings.resetIgnorePatterns": "Reset ignore patterns",
   "settings.roots": "Root directories",

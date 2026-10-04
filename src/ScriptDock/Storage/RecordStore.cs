@@ -170,20 +170,6 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
                 ("$runSession", end.RunSession), ("$run", end.Run), ("$state", end.State), ("$exitCode", end.ExitCode));
         }, () => RecordLine("runEnd", end));
 
-    public Task<IReadOnlyList<RunRecord>> ReadUnendedRunsAsync() =>
-        Read<IReadOnlyList<RunRecord>>(connection =>
-        {
-            var runs = new List<RunRecord>();
-            using var command = connection.CreateCommand();
-            command.CommandText =
-                $"SELECT {RunColumns} FROM runs WHERE pid IS NOT NULL AND os_started_at IS NOT NULL " +
-                "AND NOT EXISTS (SELECT 1 FROM run_ends WHERE run_ends.run_session = runs.session AND run_ends.run = runs.run)";
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
-                runs.Add(ReadRun(reader));
-            return runs;
-        });
-
     public Task AddDismissalAsync(string scriptPath)
     {
         var time = TimestampConventions.IsoMillis(DateTimeOffset.UtcNow);

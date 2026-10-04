@@ -71,13 +71,13 @@ public sealed class RecentListBuilderTests
     [Fact]
     public void Build_SurfacesLiveProcess_AbsentFromTheRecentList()
     {
-        // A recaptured run whose recent entry was evicted: present in active, absent from recents.
-        var orphan = Running("/recaptured");
+        // A live run whose recent entry the cap evicted: present in active, absent from recents.
+        var orphan = Running("/evicted");
 
         var entries = RecentListBuilder.Build([Run("/a", 5)], [orphan], NoLabels);
 
         // The recent entry comes first; the un-listed live run is still surfaced and controllable.
-        Assert.Equal(["/a", "/recaptured"], entries.Select(e => e.Path));
+        Assert.Equal(["/a", "/evicted"], entries.Select(e => e.Path));
         var surfaced = entries[1];
         Assert.Same(orphan, surfaced.Process);
         Assert.True(surfaced.IsRunning);

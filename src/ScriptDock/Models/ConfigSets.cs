@@ -30,7 +30,6 @@ public static class ConfigSets
         ["ignorePatterns"] = new(c => c.IgnorePatterns, (c, v) => c.IgnorePatterns = Texts(v)),
         ["hidden"] = new(c => c.Hidden, (c, v) => c.Hidden = Strings(v)),
         ["killProcessesOnClose"] = new(c => c.KillProcessesOnClose, (c, v) => c.KillProcessesOnClose = v.GetBoolean()),
-        ["recaptureProcessesOnLaunch"] = new(c => c.RecaptureProcessesOnLaunch, (c, v) => c.RecaptureProcessesOnLaunch = v.GetBoolean()),
     };
 
     public static bool IsKnown(string key) => Sets.ContainsKey(key);

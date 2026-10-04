@@ -11,7 +11,7 @@ namespace ScriptDock.ViewModels;
 /// one <see cref="RecentEntry"/> per script path, newest first. A path's live process (a running
 /// one preferred, else the newest) is attached so the entry shows running state and output; a
 /// recent with no live process shows idle. A live run whose path is <em>not</em> in the recent
-/// list (e.g. a recaptured process whose recent entry was evicted) is still surfaced, so a running
+/// list (e.g. a run whose recent entry the cap evicted) is still surfaced, so a running
 /// script is never invisible or uncontrollable. Display names come from the caller-supplied label
 /// map so a script reads the same here and in the Scripts list. Pure — no I/O, no UI.
 /// </summary>
@@ -40,8 +40,8 @@ public static class RecentListBuilder
             entries.Add(new RecentEntry(run.Path, ScriptLabels.LabelFor(labels, run.Path), run.RanAt, process));
         }
 
-        // Append any live process the recent list didn't account for, newest run first, so a
-        // recaptured (or otherwise un-listed) running script is still shown and controllable.
+        // Append any live process the recent list didn't account for, newest run first, so an
+        // un-listed running script is still shown and controllable.
         foreach (var process in byPath.Values
                      .Where(p => !seen.Contains(PathIdentity.Key(p.ScriptPath)))
                      .OrderByDescending(p => p.StartedAt))

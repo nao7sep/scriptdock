@@ -195,9 +195,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public bool NoScripts => Scripts.Count == 0;
     public bool NoRecent => Recent.Count == 0;
 
-    /// <summary>Whether the console input field can send: the selected run is running and accepts input
-    /// (a recaptured run does not). Re-evaluated whenever the selected entry changes.</summary>
-    public bool CanSendInput => SelectedRecentEntry?.Process is { State: RunState.Running, AcceptsInput: true };
+    /// <summary>Whether the console input field can send: the selected run is running. Re-evaluated
+    /// whenever the selected entry changes.</summary>
+    public bool CanSendInput => SelectedRecentEntry?.Process is { State: RunState.Running };
 
     /// <summary>Whether a Recent entry is selected — drives the Output header's script-name pill.</summary>
     public bool HasSelection => SelectedRecentEntry is not null;
@@ -239,24 +239,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// <summary>Starts the console poll, builds the Recent list, and runs the first scan.</summary>
     public async Task InitializeAsync()
     {
-        if (_config.RecaptureProcessesOnLaunch)
-        {
-            try
-            {
-                var gone = _runner.Recapture(await _records.ReadUnendedRunsAsync());
-                foreach (var run in gone)
-                    _ = RecordRunEndAsync(RunEnd.GoneOf(run));
-                ResolveOperationalError("recapture");
-            }
-            catch (Exception ex)
-            {
-                Log.Error("ui: process recapture failed", ex);
-                ReportOperationalError(
-                    "recapture",
-                    Message.Of("recapture.failed"));
-            }
-        }
-
         StartOutputTimer();
         StartOutputImport();
         await LoadRecentAsync();
@@ -369,7 +351,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _config.Extensions = candidate.Extensions;
         _config.IgnorePatterns = candidate.IgnorePatterns;
         _config.KillProcessesOnClose = candidate.KillProcessesOnClose;
-        _config.RecaptureProcessesOnLaunch = candidate.RecaptureProcessesOnLaunch;
         _config.UiFontFamily = candidate.UiFontFamily;
         var themeChanged = _config.Theme != candidate.Theme;
         _config.Theme = candidate.Theme;

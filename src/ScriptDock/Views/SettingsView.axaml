@@ -139,8 +139,6 @@
             <TextBlock i18n:Localized.Text="settings.processes" Classes="cardHeader"/>
             <CheckBox i18n:Localized.Content="settings.killOnClose"
                       IsChecked="{Binding KillProcessesOnClose}"/>
-            <CheckBox i18n:Localized.Content="settings.recaptureOnLaunch"
-                      IsChecked="{Binding RecaptureProcessesOnLaunch}"/>
         </StackPanel>
 
         <Grid x:Name="SaveErrorResult" IsVisible="{Binding HasSaveError}"

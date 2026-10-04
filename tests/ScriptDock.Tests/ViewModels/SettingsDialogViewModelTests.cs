@@ -197,12 +197,10 @@ public sealed class SettingsDialogViewModelTests
     {
         var config = Seed();
         config.KillProcessesOnClose = false;
-        config.RecaptureProcessesOnLaunch = true;
         var vm = new SettingsDialogViewModel(config);
 
         // Seeded from config; an unchanged draft is not dirty.
         Assert.False(vm.KillProcessesOnClose);
-        Assert.True(vm.RecaptureProcessesOnLaunch);
         Assert.False(vm.IsDirty);
 
         // Toggling a process setting dirties the draft (so Save enables).

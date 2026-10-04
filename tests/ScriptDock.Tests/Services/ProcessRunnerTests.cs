@@ -107,7 +107,6 @@ public sealed class ProcessRunnerTests : IDisposable
         var handle = runner.Start(script);
         try
         {
-            Assert.True(handle.AcceptsInput);
             Assert.True(await handle.SendInputAsync("hello-stdin"));
 
             Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
@@ -190,7 +189,6 @@ public sealed class ProcessRunnerTests : IDisposable
         var handle = runner.Start(script);
 
         Assert.False(await runner.TerminateAsync(handle));
-        Assert.True(handle.AcceptsInput);
         Assert.True(await handle.SendInputAsync("still-owned"));
         Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
         Assert.Equal(RunState.Exited, handle.State);
@@ -299,45 +297,6 @@ public sealed class ProcessRunnerTests : IDisposable
         Assert.Equal("", ProcessRunner.WorkingDirectoryFor("/"));
         // A path with a containing folder yields that folder (non-empty).
         Assert.NotEqual("", ProcessRunner.WorkingDirectoryFor("/proj/scripts/run.command"));
-    }
-
-    [MacOnlyFact]
-    public async Task Recapture_ReattachesRunningProcess_ByPidAndStartTime()
-    {
-        var script = WriteExecutableScript("sleeper.command", "echo started\nsleep 60\n");
-        var runner = new ProcessRunner(_runsDir);
-        var handle = runner.Start(script);
-
-        try
-        {
-            // Wait until it is genuinely running with a known PID + start-time.
-            var deadline = DateTime.UtcNow.AddSeconds(20);
-            while ((handle.Pid is null || handle.OsStartedAt is null) && DateTime.UtcNow < deadline)
-                Thread.Sleep(50);
-            Assert.NotNull(handle.Pid);
-            Assert.NotNull(handle.OsStartedAt);
-
-            var run = RunRecord.For("2026-01-01T00:00:00.000Z", handle);
-
-            // A fresh runner — as if the app restarted — re-attaches by PID + start-time.
-            var relaunched = new ProcessRunner(_runsDir);
-            Assert.Empty(relaunched.Recapture([run]));
-
-            var recaptured = Assert.Single(relaunched.Active);
-            Assert.Equal(RunState.Running, recaptured.State);
-            Assert.Equal(script, recaptured.ScriptPath);
-            Assert.Equal(run, recaptured.Recaptured);
-
-            // Reused-PID guard: same PID but a different start-time must NOT re-attach, and is reported gone.
-            var mismatched = run with { OsStartedAt = run.OsStartedAt!.Value.AddMinutes(5) };
-            var picky = new ProcessRunner(_runsDir);
-            Assert.Equal([mismatched], picky.Recapture([mismatched]));
-            Assert.Empty(picky.Active);
-        }
-        finally
-        {
-            await runner.TerminateAsync(handle);
-        }
     }
 
     [MacOnlyFact]

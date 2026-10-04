@@ -60,7 +60,6 @@ public sealed class ConfigStoreTests : IDisposable
         Assert.Equal(ThemePreference.System, loaded.Theme);
         Assert.Empty(loaded.RootDirs);
         Assert.False(loaded.KillProcessesOnClose);
-        Assert.True(loaded.RecaptureProcessesOnLaunch);
     }
 
     [Fact]

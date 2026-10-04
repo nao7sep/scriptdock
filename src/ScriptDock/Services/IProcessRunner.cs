@@ -28,7 +28,6 @@ public interface IProcessRunner
     Task<ScriptProcess?> RestartAsync(ScriptProcess handle);
     void Dismiss(ScriptProcess handle);
     void ShutdownAll(bool kill);
-    IReadOnlyList<RunRecord> Recapture(IReadOnlyList<RunRecord> runs);
     void ReconcileExited();
     Task ImportFinishedOutputAsync(IRecordStore records, CancellationToken cancellationToken);
 }

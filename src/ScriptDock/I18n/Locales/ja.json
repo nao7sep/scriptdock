@@ -74,7 +74,6 @@
     "other": "ScriptDock を終了すると、実行中のスクリプト {count} 件が停止されます。このまま終了しますか？"
   },
   "quit.title": "ScriptDock を終了",
-  "recapture.failed": "実行中だったスクリプトを復元できませんでした。ログを確認し、必要であればもう一度実行してください。",
   "recent.dismiss": "消去",
   "recent.empty": "最近の実行はありません。スクリプトをダブルクリックすると実行されます。",
   "recent.run": "実行",
@@ -164,7 +163,6 @@
   "settings.patternMultiline": "パターンは 1 行で入力してください。",
   "settings.pickRootTitle": "ルートディレクトリを追加",
   "settings.processes": "プロセス",
-  "settings.recaptureOnLaunch": "次回 ScriptDock を起動したときに、実行中のままのスクリプトへ再接続する",
   "settings.resetExtensions": "拡張子をリセット",
   "settings.resetIgnorePatterns": "除外パターンをリセット",
   "settings.roots": "ルートディレクトリ",

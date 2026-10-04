@@ -74,7 +74,6 @@
     "other": "退出 ScriptDock 时，将停止 {count} 个正在运行的脚本。仍要退出吗？"
   },
   "quit.title": "退出 ScriptDock",
-  "recapture.failed": "无法恢复之前正在运行的脚本。请查看日志，需要时再次运行它们。",
   "recent.dismiss": "移除",
   "recent.empty": "暂无最近的运行记录。双击脚本即可运行。",
   "recent.run": "运行",
@@ -164,7 +163,6 @@
   "settings.patternMultiline": "模式必须写在一行内。",
   "settings.pickRootTitle": "添加根目录",
   "settings.processes": "进程",
-  "settings.recaptureOnLaunch": "ScriptDock 下次启动时，重新接管仍在运行的脚本",
   "settings.resetExtensions": "重置扩展名",
   "settings.resetIgnorePatterns": "重置忽略模式",
   "settings.roots": "根目录",

@@ -75,17 +75,12 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsDirty))]
     private bool _killProcessesOnClose;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsDirty))]
-    private bool _recaptureProcessesOnLaunch;
-
     public SettingsDialogViewModel(AppConfig config)
     {
         _theme = config.Theme;
         LanguageOptions = LanguageOption.All();
         _language = LanguageOption.For(Languages.NormalizePreference(config.Language), LanguageOptions);
         _killProcessesOnClose = config.KillProcessesOnClose;          // field, not property: no dirty flip during construction
-        _recaptureProcessesOnLaunch = config.RecaptureProcessesOnLaunch;
         _uiFontFamily = config.UiFontFamily;
 
         RootDirs = new ObservableCollection<string>(config.RootDirs);
@@ -105,7 +100,6 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         Extensions = Extensions.ToList(),
         IgnorePatterns = IgnorePatterns.ToList(),
         KillProcessesOnClose = KillProcessesOnClose,
-        RecaptureProcessesOnLaunch = RecaptureProcessesOnLaunch,
         UiFontFamily = TextCleanup.SingleLine(UiFontFamily),
         Theme = Theme,
         Language = Language.Value,

@@ -23,10 +23,8 @@ public sealed class FakeProcessRunner : IProcessRunner
     public List<ScriptProcess> TerminateCalls { get; } = new();
     public List<ScriptProcess> RestartCalls { get; } = new();
     public List<ScriptProcess> DismissCalls { get; } = new();
-    public List<RunRecord> RecaptureCalls { get; } = new();
     public bool TerminateResult { get; set; } = true;
     public bool RestartResult { get; set; } = true;
-    public Exception? RecaptureException { get; set; }
 
     /// <summary>When set, <see cref="RestartAsync"/> awaits it before completing — lets a test hold a
     /// restart "in flight" long enough to exercise a re-entrancy guard, the way the real 10-second
@@ -39,12 +37,10 @@ public sealed class FakeProcessRunner : IProcessRunner
 
     public IReadOnlyList<ScriptProcess> Active => _active;
 
-    /// <summary>Arrange a running process for a path directly (a ScriptProcess is Running on creation).
-    /// <paramref name="acceptsInput"/> mirrors the real runner: a run this session started owns a
-    /// stdin pipe (true); a recaptured run does not (false, the default for this arrange helper).</summary>
-    public ScriptProcess AddRunning(string scriptPath, bool acceptsInput = false)
+    /// <summary>Arrange a running process for a path directly (a ScriptProcess is Running on creation).</summary>
+    public ScriptProcess AddRunning(string scriptPath)
     {
-        var process = new ScriptProcess(_nextId++, scriptPath, DateTimeOffset.UtcNow) { AcceptsInput = acceptsInput };
+        var process = new ScriptProcess(_nextId++, scriptPath, DateTimeOffset.UtcNow);
         Add(process);
         return process;
     }
@@ -52,7 +48,7 @@ public sealed class FakeProcessRunner : IProcessRunner
     public ScriptProcess Start(string scriptPath)
     {
         StartCalls.Add(scriptPath);
-        return AddRunning(scriptPath, acceptsInput: true); // the real Start owns the run's stdin pipe
+        return AddRunning(scriptPath);
     }
 
     public Task<bool> TerminateAsync(ScriptProcess handle)
@@ -69,7 +65,7 @@ public sealed class FakeProcessRunner : IProcessRunner
         if (!RestartResult)
             return null;
         _active.Remove(handle);
-        return AddRunning(handle.ScriptPath, acceptsInput: true);
+        return AddRunning(handle.ScriptPath);
     }
 
     public void Dismiss(ScriptProcess handle)
@@ -79,29 +75,6 @@ public sealed class FakeProcessRunner : IProcessRunner
     }
 
     public void ShutdownAll(bool kill) { }
-
-    /// <summary>The scripts whose recorded runs <see cref="Recapture"/> reports gone instead of re-attaching.</summary>
-    public HashSet<string> GoneScripts { get; } = new();
-
-    /// <summary>Re-attaches each recorded run as a Running process, mirroring the real runner so
-    /// the view model's recapture→Recent wiring is exercisable, except the runs of <see cref="GoneScripts"/>,
-    /// which it returns. A recaptured run owns no stdin pipe, so AcceptsInput stays false; it has no live
-    /// OS Process, so Pid/OsStartedAt read null.</summary>
-    public IReadOnlyList<RunRecord> Recapture(IReadOnlyList<RunRecord> runs)
-    {
-        if (RecaptureException is not null)
-            throw RecaptureException;
-        RecaptureCalls.AddRange(runs);
-        var gone = new List<RunRecord>();
-        foreach (var run in runs)
-        {
-            if (GoneScripts.Contains(run.ScriptPath))
-                gone.Add(run);
-            else
-                Add(new ScriptProcess(_nextId++, run.ScriptPath, run.StartedAt) { LogFilePath = run.OutputPath, Recaptured = run });
-        }
-        return gone;
-    }
 
     public void ReconcileExited() { }
 

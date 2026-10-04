@@ -78,7 +78,6 @@
     "other": "{count} scripts em execução serão parados quando o ScriptDock for encerrado. Encerrar mesmo assim?"
   },
   "quit.title": "Encerrar o ScriptDock",
-  "recapture.failed": "Não foi possível restaurar os scripts que estavam em execução. Verifique o log e, se precisar, execute-os novamente.",
   "recent.dismiss": "Descartar",
   "recent.empty": "Nenhuma execução recente. Clique duas vezes em um script para executá-lo.",
   "recent.run": "Executar",
@@ -174,7 +173,6 @@
   "settings.patternMultiline": "Um padrão deve ter uma única linha.",
   "settings.pickRootTitle": "Adicionar diretório raiz",
   "settings.processes": "Processos",
-  "settings.recaptureOnLaunch": "Na próxima vez que o ScriptDock iniciar, reconectar aos scripts deixados em execução",
   "settings.resetExtensions": "Redefinir extensões",
   "settings.resetIgnorePatterns": "Redefinir padrões a ignorar",
   "settings.roots": "Diretórios raiz",

@@ -28,12 +28,6 @@ public sealed class FakeRecordStore : IRecordStore
 
     public Task AddRunEndAsync(RunEnd end) => Write(() => RunEnds.Add(end));
 
-    public Task<IReadOnlyList<RunRecord>> ReadUnendedRunsAsync() =>
-        Task.FromResult<IReadOnlyList<RunRecord>>(Runs
-            .Where(run => run.Pid is not null && run.OsStartedAt is not null)
-            .Where(run => !RunEnds.Any(end => end.RunSession == run.Session && end.Run == run.Run))
-            .ToList());
-
     public Task AddDismissalAsync(string scriptPath) => Write(() =>
     {
         Dismissals.Add(scriptPath);
