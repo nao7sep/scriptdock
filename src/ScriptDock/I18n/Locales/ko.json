@@ -98,7 +98,7 @@
   "records.imported": "가져온 시각",
   "records.kind": "종류",
   "records.kindLog": "로그 줄",
-  "records.kindRunOutput": "실행 출력",
+  "records.kindRun": "실행",
   "records.kindScanReport": "검사 보고서",
   "records.launch": "세션",
   "records.level": "수준",

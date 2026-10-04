@@ -100,7 +100,7 @@
   "records.imported": "Importiert",
   "records.kind": "Art",
   "records.kindLog": "Protokollzeile",
-  "records.kindRunOutput": "Skriptausgabe",
+  "records.kindRun": "Ausführung",
   "records.kindScanReport": "Scanbericht",
   "records.launch": "Sitzung",
   "records.level": "Stufe",

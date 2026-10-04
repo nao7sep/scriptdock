@@ -102,7 +102,7 @@
   "records.imported": "Importé",
   "records.kind": "Type",
   "records.kindLog": "Ligne de journal",
-  "records.kindRunOutput": "Sortie d’exécution",
+  "records.kindRun": "Exécution",
   "records.kindScanReport": "Rapport d’analyse",
   "records.launch": "Lancement",
   "records.level": "Niveau",

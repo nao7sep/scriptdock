@@ -129,7 +129,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     public string DetailTitle => _detail switch
     {
         LogRecordDetail log => log.Message,
-        RunOutputRecordDetail run => run.Script ?? string.Empty,
+        RunRecordDetail run => run.Script,
         ScanReportRecordDetail scan => RecordFormat.ScanTitle(scan.Found),
         _ => string.Empty,
     };
@@ -497,8 +497,8 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
                 AddBlock("records.details", RecordFormat.LogDetails(log.Line));
                 break;
 
-            case RunOutputRecordDetail run:
-                Add("records.started", run.StartedAt is null ? null : RecordFormat.Time(run.StartedAt, milliseconds: true));
+            case RunRecordDetail run:
+                Add("records.started", RecordFormat.Time(run.Time, milliseconds: true));
                 Add("records.ended", run.EndedAt is null ? null : RecordFormat.Time(run.EndedAt, milliseconds: true));
                 Add("records.endState", run.EndState, code: true);
                 Add("records.exitCode", run.ExitCode?.ToString(Localizer.Current.Culture));
@@ -506,7 +506,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
                 Add("records.processId", run.Pid?.ToString(System.Globalization.CultureInfo.InvariantCulture), code: true);
                 Add("records.processStarted", run.OsStartedAt is null ? null : RecordFormat.Time(run.OsStartedAt, milliseconds: true));
                 Add("records.outputFile", run.OutputPath, code: true);
-                Add("records.imported", RecordFormat.Time(run.Time, milliseconds: true));
+                Add("records.imported", run.ImportedAt is null ? null : RecordFormat.Time(run.ImportedAt, milliseconds: true));
                 Add("records.launch", RecordFormat.Launch(run.Session, _reader.Session));
                 AddBlock("records.output", RecordFormat.OutputText(run.Output));
                 break;
@@ -517,6 +517,28 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
                 AddBlock("records.report", RecordFormat.PrettyJson(scan.Report));
                 break;
         }
+    }
+
+    // A selected run that has not settled is read again as records arrive, and shown again only when its
+    // end or its output has arrived, so the pane is not rebuilt under the reader for nothing.
+    private async Task RefreshRunDetailAsync(RunRecordDetail shown)
+    {
+        var version = _detailVersion;
+        RecordDetail? detail;
+        try
+        {
+            detail = await Bounded(_reader.ReadRecordDetailAsync(shown.Kind, shown.Id));
+        }
+        catch (Exception ex)
+        {
+            if (version == _detailVersion)
+                ReadFailed(ex, "detail");
+            return;
+        }
+
+        if (version == _detailVersion && ReferenceEquals(_detail, shown)
+            && detail is RunRecordDetail run && !run.SameProgress(shown))
+            ShowDetail(run, RecordsDetailStatus.Ready);
     }
 
     private void OnStored() => Dispatcher.UIThread.Post(OnRecordStored);
@@ -538,6 +560,8 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
             return;
 
         _ = ReadSourcesAsync();
+        if (_detail is RunRecordDetail { Settled: false } run)
+            _ = RefreshRunDetailAsync(run);
         if (_atTop)
             _ = ReadNewestAsync();
         else

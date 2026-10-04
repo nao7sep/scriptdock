@@ -51,7 +51,7 @@ public sealed class RecordQueriesTests : IDisposable
         InvalidPatterns = [],
     };
 
-    // A log line, a warning, a failed run's output, a run that exited cleanly, and a scan.
+    // A log line, a warning, a failed run, a run that exited cleanly, each with its output, and a scan.
     private async Task<RecordStore> Seeded()
     {
         var records = new RecordStore(_dir, SessionStart);
@@ -76,11 +76,12 @@ public sealed class RecordQueriesTests : IDisposable
 
         var page = await Page(records, RecordsQuery.All);
 
-        // The two outputs were imported now, after the lines and the scan of a past session start.
+        // A run is listed at its start, whenever its output was imported.
         Assert.False(page.More);
         Assert.Equal(
-            [RecordKind.RunOutput, RecordKind.RunOutput, RecordKind.ScanReport, RecordKind.Log, RecordKind.Log],
+            [RecordKind.Run, RecordKind.Run, RecordKind.ScanReport, RecordKind.Log, RecordKind.Log],
             page.Records.Select(record => record.Kind));
+        Assert.Equal([At(6), At(4)], page.Records.Take(2).Select(record => record.Time));
         var scan = page.Records[2];
         Assert.Equal(LogLevel.Info, scan.Level);
         Assert.Equal(2, scan.Found);
@@ -123,12 +124,12 @@ public sealed class RecordQueriesTests : IDisposable
         using var records = await Seeded();
 
         var launch = await Page(records, RecordsQuery.All with { Session = "2026-10-01T03:00:00.000Z" });
-        var outputs = await Page(records, RecordsQuery.All with { Kind = RecordKind.RunOutput });
+        var outputs = await Page(records, RecordsQuery.All with { Kind = RecordKind.Run });
         var scans = await Page(records, RecordsQuery.All with { Kind = RecordKind.ScanReport });
 
         Assert.Equal("yesterday", Assert.Single(launch.Records).Title);
         Assert.Equal(2, outputs.Records.Count);
-        Assert.All(outputs.Records, record => Assert.Equal(RecordKind.RunOutput, record.Kind));
+        Assert.All(outputs.Records, record => Assert.Equal(RecordKind.Run, record.Kind));
         Assert.Equal(RecordKind.ScanReport, Assert.Single(scans.Records).Kind);
     }
 
@@ -144,10 +145,10 @@ public sealed class RecordQueriesTests : IDisposable
         var info = await Page(records, RecordsQuery.All with { Level = RecordLevelFilter.Info });
         var debug = await Page(records, RecordsQuery.All with { Level = RecordLevelFilter.Debug });
 
-        Assert.Equal(["/code/a/dev.command", "scan failed", "run: terminate failed"], attention.Records.Select(record => record.Title));
-        Assert.Equal(["/code/a/dev.command", "scan failed"], errors.Records.Select(record => record.Title));
+        Assert.Equal(["scan failed", "/code/a/dev.command", "run: terminate failed"], attention.Records.Select(record => record.Title));
+        Assert.Equal(["scan failed", "/code/a/dev.command"], errors.Records.Select(record => record.Title));
         Assert.Equal(
-            [RecordKind.RunOutput, RecordKind.ScanReport, RecordKind.Log],
+            [RecordKind.Run, RecordKind.ScanReport, RecordKind.Log],
             info.Records.Select(record => record.Kind));
         Assert.Equal("poll", Assert.Single(debug.Records).Title);
     }
@@ -161,7 +162,7 @@ public sealed class RecordQueriesTests : IDisposable
         var output = await Page(records, RecordsQuery.All with { Search = "100% of" });
         var wildcard = await Page(records, RecordsQuery.All with { Search = "100_" });
         var report = await Page(records, RecordsQuery.All with { Search = "node_modules" });
-        var script = await Page(records, RecordsQuery.All with { Search = "BUILD.command", Kind = RecordKind.RunOutput });
+        var script = await Page(records, RecordsQuery.All with { Search = "BUILD.command", Kind = RecordKind.Run });
 
         Assert.Equal("run: terminate failed", Assert.Single(field.Records).Title);
         Assert.Equal("/code/a/dev.command", Assert.Single(output.Records).Title);
@@ -179,17 +180,18 @@ public sealed class RecordQueriesTests : IDisposable
             page.Records.First(record => record.Kind == kind && (title == "" || record.Title == title));
 
         var log = Assert.IsType<LogRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Log, Of(RecordKind.Log, "run: terminate failed").Id));
-        var run = Assert.IsType<RunOutputRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.RunOutput, Of(RecordKind.RunOutput, "/code/a/dev.command").Id));
+        var run = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, Of(RecordKind.Run, "/code/a/dev.command").Id));
         var scan = Assert.IsType<ScanReportRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.ScanReport, Of(RecordKind.ScanReport, "").Id));
 
         Assert.Equal((At(2), LogLevel.Warn, "run: terminate failed"), (log.Time, log.Level, log.Message));
         Assert.Contains("\"id\":3", log.Line);
 
         Assert.Equal(LogLevel.Error, run.Level);
-        Assert.Equal((4, "/code/a/dev.command", At(4), 4004), (run.Run, run.Script, run.StartedAt, run.Pid));
+        Assert.Equal((4, "/code/a/dev.command", At(4), 4004), (run.Run, run.Script, run.Time, run.Pid));
         Assert.Equal(TimestampConventions.IsoMillis(SessionStart.AddMinutes(4).AddMilliseconds(5)), run.OsStartedAt);
         Assert.Equal(("/runs/4.log", At(5), "exited", 3), (run.OutputPath, run.EndedAt, run.EndState, run.ExitCode));
-        Assert.Equal("listening on 100% of ports\n", Encoding.UTF8.GetString(run.Output));
+        Assert.NotNull(run.ImportedAt);
+        Assert.Equal("listening on 100% of ports\n", Encoding.UTF8.GetString(run.Output!));
 
         Assert.Equal((At(3), 2), (scan.Time, scan.Found));
         Assert.Contains("\"prunedDirectories\"", scan.Report);
@@ -198,16 +200,71 @@ public sealed class RecordQueriesTests : IDisposable
     }
 
     [Fact]
+    public async Task Lists_a_run_whose_output_was_never_imported_with_its_end_when_there_is_one()
+    {
+        using var records = await Seeded();
+        // A run still going, and one that could not start and so wrote no output.
+        await records.AddRunAsync(Run(8, "/code/c/serve.command"));
+        await records.AddRunAsync(new RunRecord(Session, 9, SessionStart.AddMinutes(9), "/code/d/broken.command", null, null, "/runs/9.log"));
+        await records.AddRunEndAsync(new RunEnd(Session, 9, SessionStart.AddMinutes(9), "failed", null));
+
+        var page = await Page(records, RecordsQuery.All);
+        var runs = await Page(records, RecordsQuery.All with { Kind = RecordKind.Run });
+        var errors = await Page(records, RecordsQuery.All with { Level = RecordLevelFilter.Error });
+        var found = await Page(records, RecordsQuery.All with { Search = "serve" });
+
+        Assert.Equal(
+            [("/code/d/broken.command", LogLevel.Error), ("/code/c/serve.command", LogLevel.Info)],
+            page.Records.Take(2).Select(record => (record.Title, record.Level)));
+        Assert.Equal(4, runs.Records.Count);
+        Assert.Equal(["/code/d/broken.command", "/code/a/dev.command"], errors.Records.Select(record => record.Title));
+        Assert.Equal("/code/c/serve.command", Assert.Single(found.Records).Title);
+
+        var running = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, page.Records[1].Id));
+        Assert.Equal((At(8), LogLevel.Info), (running.Time, running.Level));
+        Assert.Null(running.EndState);
+        Assert.Null(running.ImportedAt);
+        Assert.Null(running.Output);
+        Assert.False(running.Settled);
+        var broken = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, page.Records[0].Id));
+        Assert.Equal(("failed", null, null), (broken.EndState, broken.Pid, broken.Output));
+    }
+
+    [Fact]
+    public async Task Pages_runs_and_other_records_together_from_the_last_record_shown()
+    {
+        using var records = new RecordStore(_dir, SessionStart);
+        for (var index = 0; index < 60; index++)
+        {
+            Log(records, At(index), "info", $"line {index}");
+            await records.AddRunAsync(new RunRecord(Session, index, SessionStart.AddMinutes(index), $"/s/{index}.command", null, null, null));
+        }
+
+        var first = await Page(records, RecordsQuery.All);
+        var last = first.Records[^1];
+        var second = await Page(records, RecordsQuery.All with { After = new RecordCursor(last.Time, last.Kind, last.Id) });
+
+        // At one instant a run comes before a log line, as the kinds' names order them.
+        Assert.Equal([RecordKind.Run, RecordKind.Log], first.Records.Take(2).Select(record => record.Kind));
+        Assert.True(first.More);
+        Assert.Equal(20, second.Records.Count);
+        Assert.False(second.More);
+        Assert.Empty(first.Records.Select(record => record.Key).Intersect(second.Records.Select(record => record.Key)));
+    }
+
+    [Fact]
     public async Task Lists_every_launch_that_has_records_newest_first()
     {
         using (var earlier = new RecordStore(_dir, SessionStart.AddDays(-1)))
             Log(earlier, At(-60), "info", "yesterday");
         using var records = await Seeded();
+        // A launch whose only record is a run with no output yet.
+        await records.AddRunAsync(Run(1, "/code/a/dev.command") with { Session = "2026-10-01T09:00:00.000Z" });
 
         var sources = await records.ReadRecordSourcesAsync();
 
         Assert.Equal(Session, sources.CurrentSession);
-        Assert.Equal([Session, "2026-10-01T03:00:00.000Z"], sources.Sessions);
+        Assert.Equal([Session, "2026-10-01T09:00:00.000Z", "2026-10-01T03:00:00.000Z"], sources.Sessions);
     }
 
     [Fact]

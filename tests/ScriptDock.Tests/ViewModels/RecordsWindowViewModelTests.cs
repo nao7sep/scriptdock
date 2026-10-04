@@ -23,7 +23,7 @@ public sealed class RecordsWindowViewModelTests
     private const string Session = FakeRecordReader.CurrentSession;
 
     private static readonly RecordSummary Failed = new(
-        RecordKind.RunOutput, 4, Session, "2026-10-04T08:01:00.000Z", LogLevel.Error, "/repo/dev.command", null, null);
+        RecordKind.Run, 4, Session, "2026-10-04T08:01:00.000Z", LogLevel.Error, "/repo/dev.command", null, null);
     private static readonly RecordSummary Warning = new(
         RecordKind.Log, 9, Session, "2026-10-04T08:00:30.000Z", LogLevel.Warn, "run: terminate failed", null, null);
     private static readonly RecordSummary Newer = new(
@@ -113,7 +113,7 @@ public sealed class RecordsWindowViewModelTests
                 .Select(key => English.Of(key)),
             vm.LevelOptions.Select(option => option.Label));
         Assert.Equal(
-            new[] { "records.allKinds", "records.kindLog", "records.kindRunOutput", "records.kindScanReport" }.Select(key => English.Of(key)),
+            new[] { "records.allKinds", "records.kindLog", "records.kindRun", "records.kindScanReport" }.Select(key => English.Of(key)),
             vm.KindOptions.Select(option => option.Label));
     }
 
@@ -127,10 +127,10 @@ public sealed class RecordsWindowViewModelTests
         Assert.DoesNotContain(English.Of("records.thisLaunch", ("time", "")).Trim(), vm.LaunchOptions[2].Label);
 
         vm.SelectedLaunch = vm.LaunchOptions[1];
-        vm.SelectedKind = vm.KindOptions.Single(option => Equals(option.Value, RecordKind.RunOutput));
+        vm.SelectedKind = vm.KindOptions.Single(option => Equals(option.Value, RecordKind.Run));
         vm.SelectedLevel = vm.LevelOptions.Single(option => Equals(option.Value, RecordLevelFilter.Attention));
         Pump();
-        Assert.Equal(new RecordsQuery(Session, RecordKind.RunOutput, RecordLevelFilter.Attention, "", null), _reader.LastQuery);
+        Assert.Equal(new RecordsQuery(Session, RecordKind.Run, RecordLevelFilter.Attention, "", null), _reader.LastQuery);
 
         var reads = _reader.PageQueries.Count;
         vm.SearchText = "quo";
@@ -144,19 +144,24 @@ public sealed class RecordsWindowViewModelTests
         Assert.Equal("quota", _reader.LastQuery.Search);
     }
 
+    private static RunRecordDetail RunDetail(string? endState = "exited", string? importedAt = "2026-10-04T08:01:05.000Z", string? output = "out\n") =>
+        new(4, Session, "2026-10-04T08:00:10.000Z", LogLevel.Info, 3, "/repo/dev.command", 4242, "2026-10-04T08:00:10.123Z",
+            "/runs/3.log", endState is null ? null : "2026-10-04T08:01:00.000Z", endState, endState is null ? null : 0,
+            importedAt, output is null ? null : Encoding.UTF8.GetBytes(output));
+
     [AvaloniaFact]
-    public void Shows_everything_a_selected_run_output_holds()
+    public void Shows_everything_a_selected_run_holds()
     {
-        _reader.Detail = (_, _) => Task.FromResult<RecordDetail?>(new RunOutputRecordDetail(
-            4, Session, "2026-10-04T08:01:05.000Z", LogLevel.Error, 3, "/repo/dev.command", "2026-10-04T08:00:10.000Z",
-            4242, "2026-10-04T08:00:10.123Z", "/runs/3.log", "2026-10-04T08:01:00.000Z", "exited", 3,
+        _reader.Detail = (_, _) => Task.FromResult<RecordDetail?>(new RunRecordDetail(
+            4, Session, "2026-10-04T08:00:10.000Z", LogLevel.Error, 3, "/repo/dev.command",
+            4242, "2026-10-04T08:00:10.123Z", "/runs/3.log", "2026-10-04T08:01:00.000Z", "exited", 3, "2026-10-04T08:01:05.000Z",
             Encoding.UTF8.GetBytes("\u001b[31mboom\u001b[0m\r\nprogress 1\rprogress 9\n")));
         var vm = Started();
 
         vm.SelectedRecord = vm.Rows[0];
         Pump();
 
-        Assert.Equal((RecordKind.RunOutput, 4L), Assert.Single(_reader.DetailReads));
+        Assert.Equal((RecordKind.Run, 4L), Assert.Single(_reader.DetailReads));
         Assert.True(vm.HasDetail);
         Assert.Equal("/repo/dev.command", vm.DetailTitle);
         Assert.True(vm.DetailIsError);
@@ -165,6 +170,8 @@ public sealed class RecordsWindowViewModelTests
         Assert.Equal("3", fields[English.Of("records.exitCode")]);
         Assert.Equal("4242", fields[English.Of("records.processId")]);
         Assert.Equal("/runs/3.log", fields[English.Of("records.outputFile")]);
+        Assert.Contains(English.Of("records.started"), fields.Keys);
+        Assert.Contains(English.Of("records.imported"), fields.Keys);
         Assert.Contains(English.Of("records.thisLaunch", ("time", "")).Trim(), fields[English.Of("records.launch")]);
         var output = Assert.Single(vm.DetailBlocks);
         Assert.Equal(English.Of("records.output"), output.Label);
@@ -172,13 +179,28 @@ public sealed class RecordsWindowViewModelTests
     }
 
     [AvaloniaFact]
+    public void A_run_with_no_output_yet_shows_its_fields_and_no_output_block()
+    {
+        _reader.Detail = (_, _) => Task.FromResult<RecordDetail?>(RunDetail(endState: null, importedAt: null, output: null));
+        var vm = Started();
+
+        vm.SelectedRecord = vm.Rows[0];
+        Pump();
+
+        Assert.True(vm.HasDetail);
+        Assert.Empty(vm.DetailBlocks);
+        var labels = vm.DetailFields.Select(field => field.Label).ToList();
+        Assert.Contains(English.Of("records.started"), labels);
+        Assert.DoesNotContain(English.Of("records.ended"), labels);
+        Assert.DoesNotContain(English.Of("records.imported"), labels);
+    }
+
+    [AvaloniaFact]
     public void Hides_a_block_with_only_whitespace_or_empty_json_in_it()
     {
         _reader.Page = new RecordsPage([Failed, Scan], false);
-        _reader.Detail = (kind, id) => Task.FromResult<RecordDetail?>(kind == RecordKind.RunOutput
-            ? new RunOutputRecordDetail(
-                4, Session, "2026-10-04T08:01:05.000Z", LogLevel.Info, 3, "/repo/dev.command", "2026-10-04T08:00:10.000Z",
-                4242, null, "/runs/3.log", null, null, null, Encoding.UTF8.GetBytes(" \r\n\t\n"))
+        _reader.Detail = (kind, id) => Task.FromResult<RecordDetail?>(kind == RecordKind.Run
+            ? RunDetail(output: " \r\n\t\n")
             : new ScanReportRecordDetail(id, Session, Scan.Time, null, "{}"));
         var vm = Started();
 
@@ -215,6 +237,45 @@ public sealed class RecordsWindowViewModelTests
         Pump();
         Assert.True(vm.HasDetail);
         Assert.Empty(vm.DetailBlocks);
+    }
+
+    [AvaloniaFact]
+    public void Reads_a_selected_run_again_as_records_arrive_until_it_has_its_end_and_output()
+    {
+        var shown = RunDetail(endState: null, importedAt: null, output: null);
+        _reader.Detail = (_, _) => Task.FromResult<RecordDetail?>(shown);
+        var vm = Started();
+        vm.SelectedRecord = vm.Rows[0];
+        Pump();
+        var fields = vm.DetailFields.ToList();
+
+        // Read again, but nothing new: the pane is left as it is.
+        _reader.RaiseStored();
+        Pump();
+        Advance(RecordsWindowViewModel.LiveInterval);
+        Assert.Equal(2, _reader.DetailReads.Count);
+        Assert.Same(fields[0], vm.DetailFields[0]);
+
+        // Its end arrives, then its output.
+        _reader.Detail = (_, _) => Task.FromResult<RecordDetail?>(RunDetail(importedAt: null, output: null));
+        _reader.RaiseStored();
+        Pump();
+        Advance(RecordsWindowViewModel.LiveInterval);
+        Assert.Equal("exited", vm.DetailFields.Single(field => field.Label == English.Of("records.endState")).Value);
+        Assert.Empty(vm.DetailBlocks);
+
+        _reader.Detail = (_, _) => Task.FromResult<RecordDetail?>(RunDetail());
+        _reader.RaiseStored();
+        Pump();
+        Advance(RecordsWindowViewModel.LiveInterval);
+        Assert.Equal("out", Assert.Single(vm.DetailBlocks).Text);
+
+        // Settled: new records no longer read it again.
+        var reads = _reader.DetailReads.Count;
+        _reader.RaiseStored();
+        Pump();
+        Advance(RecordsWindowViewModel.LiveInterval);
+        Assert.Equal(reads, _reader.DetailReads.Count);
     }
 
     [AvaloniaFact]

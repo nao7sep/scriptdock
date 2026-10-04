@@ -13,14 +13,17 @@ internal static class RecordQueries
 {
     public const int PageSize = 100;
 
-    // A run's output reads as an error when the run's latest recorded end is a failure or an exit with
-    // another code than 0; with no recorded end it reads as info.
-    private const string RunOutputLevel = """
+    // A run reads as an error when its latest recorded end is a failure or an exit with another code than
+    // 0; with no recorded end it reads as info.
+    private const string RunLevel = """
         COALESCE((SELECT CASE WHEN e.state = 'failed' OR (e.state = 'exited' AND COALESCE(e.exit_code, 0) <> 0)
                               THEN 'error' ELSE 'info' END
-                  FROM run_ends e WHERE e.run_session = o.session AND e.run = o.run
+                  FROM run_ends e WHERE e.run_session = r.session AND e.run = r.run
                   ORDER BY e.time DESC, e.id DESC LIMIT 1), 'info')
         """;
+
+    // Every run, with its output when it was imported.
+    private const string RunsWithOutput = "runs r LEFT JOIN run_outputs o ON o.session = r.session AND o.run = r.run";
 
     private const string ScanFound =
         "CASE WHEN json_valid(report) THEN json_array_length(report, '$.found') END";
@@ -61,13 +64,12 @@ internal static class RecordQueries
                 $"FROM logs WHERE {Where("session", "level", "message", "line")}");
         }
 
-        if (query.Kind is null or RecordKind.RunOutput)
+        if (query.Kind is null or RecordKind.Run)
         {
             parts.Add(
-                $"SELECT 'run-output' AS kind, o.id, o.session, o.time, {RunOutputLevel} AS level, " +
-                "COALESCE(r.script, '') AS title, NULL AS text, NULL AS found " +
-                "FROM run_outputs o LEFT JOIN runs r ON r.session = o.session AND r.run = o.run " +
-                $"WHERE {Where("o.session", RunOutputLevel, "r.script", "CAST(o.output AS TEXT)")}");
+                $"SELECT 'run' AS kind, r.id, r.session, r.time, {RunLevel} AS level, " +
+                "r.script AS title, NULL AS text, NULL AS found " +
+                $"FROM {RunsWithOutput} WHERE {Where("r.session", RunLevel, "r.script", "CAST(o.output AS TEXT)")}");
         }
 
         // A scan report has no level of its own and reads as info.
@@ -133,32 +135,31 @@ internal static class RecordQueries
                     : null;
             }
 
-            case RecordKind.RunOutput:
+            case RecordKind.Run:
             {
                 command.CommandText =
-                    $"SELECT o.id, o.session, o.time, {RunOutputLevel}, o.run, r.script, r.time, r.pid, r.os_started_at, " +
-                    "r.output_path, e.time, e.state, e.exit_code, o.output " +
-                    "FROM run_outputs o LEFT JOIN runs r ON r.session = o.session AND r.run = o.run " +
-                    "LEFT JOIN run_ends e ON e.id = (SELECT id FROM run_ends WHERE run_session = o.session AND run = o.run " +
-                    "ORDER BY time DESC, id DESC LIMIT 1) WHERE o.id = $id";
+                    $"SELECT r.id, r.session, r.time, {RunLevel}, r.run, r.script, r.pid, r.os_started_at, r.output_path, " +
+                    $"e.time, e.state, e.exit_code, o.time, o.output FROM {RunsWithOutput} " +
+                    "LEFT JOIN run_ends e ON e.id = (SELECT id FROM run_ends WHERE run_session = r.session AND run = r.run " +
+                    "ORDER BY time DESC, id DESC LIMIT 1) WHERE r.id = $id";
                 using var reader = command.ExecuteReader();
                 if (!reader.Read())
                     return null;
-                return new RunOutputRecordDetail(
+                return new RunRecordDetail(
                     reader.GetInt64(0),
                     reader.GetString(1),
                     reader.GetString(2),
                     RecordKinds.Level(reader.GetString(3)),
                     reader.GetInt32(4),
-                    TextOrNull(reader, 5),
-                    TextOrNull(reader, 6),
-                    reader.IsDBNull(7) ? null : reader.GetInt32(7),
+                    reader.GetString(5),
+                    reader.IsDBNull(6) ? null : reader.GetInt32(6),
+                    TextOrNull(reader, 7),
                     TextOrNull(reader, 8),
                     TextOrNull(reader, 9),
                     TextOrNull(reader, 10),
-                    TextOrNull(reader, 11),
-                    reader.IsDBNull(12) ? null : reader.GetInt32(12),
-                    (byte[])reader.GetValue(13));
+                    reader.IsDBNull(11) ? null : reader.GetInt32(11),
+                    TextOrNull(reader, 12),
+                    reader.IsDBNull(13) ? null : (byte[])reader.GetValue(13));
             }
 
             case RecordKind.ScanReport:
@@ -180,7 +181,7 @@ internal static class RecordQueries
     {
         using var command = connection.CreateCommand();
         command.CommandText =
-            "SELECT session FROM logs UNION SELECT session FROM run_outputs UNION SELECT session FROM scan_reports " +
+            "SELECT session FROM logs UNION SELECT session FROM runs UNION SELECT session FROM scan_reports " +
             "ORDER BY session DESC";
         var sessions = new List<string>();
         using var reader = command.ExecuteReader();

@@ -104,7 +104,7 @@
   "records.imported": "Импортировано",
   "records.kind": "Тип",
   "records.kindLog": "Строка журнала",
-  "records.kindRunOutput": "Вывод запуска",
+  "records.kindRun": "Запуск",
   "records.kindScanReport": "Отчёт о сканировании",
   "records.launch": "Сеанс",
   "records.level": "Уровень",

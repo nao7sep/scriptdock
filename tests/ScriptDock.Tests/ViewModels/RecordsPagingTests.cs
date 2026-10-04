@@ -11,8 +11,8 @@ public sealed class RecordsPagingTests
     private static RecordSummary Log(long id, string time) =>
         new(RecordKind.Log, id, "s", time, LogLevel.Info, $"line {id}", null, null);
 
-    private static RecordSummary Output(long id, string time) =>
-        new(RecordKind.RunOutput, id, "s", time, LogLevel.Info, "/a.command", null, null);
+    private static RecordSummary Run(long id, string time) =>
+        new(RecordKind.Run, id, "s", time, LogLevel.Info, "/a.command", null, null);
 
     [Fact]
     public void The_next_page_starts_after_the_last_record_shown()
@@ -24,11 +24,11 @@ public sealed class RecordsPagingTests
     [Fact]
     public void Newest_first_orders_by_time_then_kind_then_id_as_the_database_does()
     {
-        var records = new[] { Log(1, "2026-10-04T08:00:00.000Z"), Output(1, "2026-10-04T08:00:00.000Z"), Log(2, "2026-10-04T08:00:00.000Z"), Log(3, "2026-10-04T07:00:00.000Z") }.ToList();
+        var records = new[] { Log(1, "2026-10-04T08:00:00.000Z"), Run(1, "2026-10-04T08:00:00.000Z"), Log(2, "2026-10-04T08:00:00.000Z"), Log(3, "2026-10-04T07:00:00.000Z") }.ToList();
 
         records.Sort(RecordsPaging.NewestFirst);
 
-        Assert.Equal(["run-output:1", "log:2", "log:1", "log:3"], records.Select(record => record.Key));
+        Assert.Equal(["run:1", "log:2", "log:1", "log:3"], records.Select(record => record.Key));
     }
 
     [Fact]

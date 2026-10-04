@@ -106,7 +106,7 @@ public static class RecordFormat
     public static string KindLabel(RecordKind kind) => kind switch
     {
         RecordKind.Log => Localizer.T("records.kindLog"),
-        RecordKind.RunOutput => Localizer.T("records.kindRunOutput"),
+        RecordKind.Run => Localizer.T("records.kindRun"),
         _ => Localizer.T("records.kindScanReport"),
     };
 

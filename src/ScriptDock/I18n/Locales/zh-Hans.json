@@ -98,7 +98,7 @@
   "records.imported": "导入时间",
   "records.kind": "类型",
   "records.kindLog": "日志行",
-  "records.kindRunOutput": "运行输出",
+  "records.kindRun": "运行",
   "records.kindScanReport": "扫描报告",
   "records.launch": "会话",
   "records.level": "级别",

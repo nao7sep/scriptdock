@@ -100,7 +100,7 @@
   "records.imported": "Imported",
   "records.kind": "Kind",
   "records.kindLog": "Log line",
-  "records.kindRunOutput": "Run output",
+  "records.kindRun": "Run",
   "records.kindScanReport": "Scan report",
   "records.launch": "Launch",
   "records.level": "Level",

@@ -102,7 +102,7 @@
   "records.imported": "Importado",
   "records.kind": "Tipo",
   "records.kindLog": "Linha de log",
-  "records.kindRunOutput": "Saída da execução",
+  "records.kindRun": "Execução",
   "records.kindScanReport": "Relatório de exame",
   "records.launch": "Sessão",
   "records.level": "Nível",

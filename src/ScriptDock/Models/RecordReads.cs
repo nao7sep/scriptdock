@@ -4,14 +4,14 @@ using ScriptDock.Services;
 namespace ScriptDock.Models;
 
 /// <summary>
-/// The records the Records window lists: a log line, a run's imported output, and a scan report. A run's
-/// start and recorded end are shown with its output rather than as records of their own; the log lines
-/// tell of starts, stops and Recent dismissals as they happened.
+/// The records the Records window lists: a log line, a run, and a scan report. A run is listed from its
+/// start, with its latest recorded end and its imported output once there are any; the log lines tell of
+/// starts, stops and Recent dismissals as they happened.
 /// </summary>
 public enum RecordKind
 {
     Log,
-    RunOutput,
+    Run,
     ScanReport,
 }
 
@@ -32,7 +32,7 @@ public static class RecordKinds
     public static string Name(RecordKind kind) => kind switch
     {
         RecordKind.Log => "log",
-        RecordKind.RunOutput => "run-output",
+        RecordKind.Run => "run",
         RecordKind.ScanReport => "scan-report",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
@@ -40,7 +40,7 @@ public static class RecordKinds
     public static RecordKind Parse(string name) => name switch
     {
         "log" => RecordKind.Log,
-        "run-output" => RecordKind.RunOutput,
+        "run" => RecordKind.Run,
         "scan-report" => RecordKind.ScanReport,
         _ => throw new ArgumentOutOfRangeException(nameof(name), name, null),
     };
@@ -72,8 +72,8 @@ public sealed record RecordsQuery(
 /// <summary>
 /// One row of the list. <paramref name="Time"/> is the stored ISO time. <paramref name="Title"/> is a log
 /// line's message or a run's script; <paramref name="Text"/> is a scan's roots; <paramref name="Found"/>
-/// is how many scripts a scan found. A run's output reads as <c>error</c> when its run failed or exited
-/// with another code than 0, and a scan report as <c>info</c>.
+/// is how many scripts a scan found. A run's time is its start; it reads as <c>error</c> when it failed or
+/// exited with another code than 0, and a scan report as <c>info</c>.
 /// </summary>
 public sealed record RecordSummary(
     RecordKind Kind,
@@ -98,25 +98,33 @@ public sealed record LogRecordDetail(long Id, string Session, string Time, LogLe
     : RecordDetail(RecordKind.Log, Id, Session, Time, Level);
 
 /// <summary>
-/// A run's imported output with the run it belongs to and the run's latest recorded end. <c>Time</c> is
-/// when the output was imported; the session is the run's.
+/// A run with its latest recorded end and its imported output, each null until there is one. <c>Time</c>
+/// is when the run started; <paramref name="ImportedAt"/> is when its output was imported.
 /// </summary>
-public sealed record RunOutputRecordDetail(
+public sealed record RunRecordDetail(
     long Id,
     string Session,
     string Time,
     LogLevel Level,
     int Run,
-    string? Script,
-    string? StartedAt,
+    string Script,
     int? Pid,
     string? OsStartedAt,
     string? OutputPath,
     string? EndedAt,
     string? EndState,
     int? ExitCode,
-    byte[] Output)
-    : RecordDetail(RecordKind.RunOutput, Id, Session, Time, Level);
+    string? ImportedAt,
+    byte[]? Output)
+    : RecordDetail(RecordKind.Run, Id, Session, Time, Level)
+{
+    /// <summary>Has both its end and its output, so nothing more will be recorded for it.</summary>
+    public bool Settled => EndState is not null && Output is not null;
+
+    /// <summary>The same recorded end and import as <paramref name="other"/>, the only parts a run gains later.</summary>
+    public bool SameProgress(RunRecordDetail other) =>
+        (EndedAt, EndState, ExitCode, ImportedAt, Level) == (other.EndedAt, other.EndState, other.ExitCode, other.ImportedAt, other.Level);
+}
 
 /// <summary>A scan report: when the scan completed and the whole report as stored.</summary>
 public sealed record ScanReportRecordDetail(long Id, string Session, string Time, int? Found, string Report)
