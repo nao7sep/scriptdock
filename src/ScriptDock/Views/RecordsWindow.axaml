@@ -173,9 +173,11 @@
                                         <WrapPanel/>
                                     </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
+                                <!-- Each field takes the width its value needs, at least 200, and a value
+                                     wraps only when the pane cannot fit it on one line. -->
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:RecordField">
-                                        <StackPanel Width="200" Margin="0,0,16,12" Spacing="2">
+                                        <StackPanel MinWidth="200" Margin="0,0,16,12" Spacing="2">
                                             <TextBlock Text="{Binding Label}" FontSize="11"
                                                        Foreground="{DynamicResource TextSecondaryBrush}"/>
                                             <SelectableTextBlock Text="{Binding Value}" Classes.code="{Binding IsCode}"
