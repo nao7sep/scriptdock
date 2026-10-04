@@ -334,6 +334,26 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task Activation_AfterSettingsChange_ClearsTheRescanToApplyLine_ItAnswered()
+    {
+        Touch("a.command");
+        var (vm, _, clock) = ActivatableVm(new KnownPaths { Paths = [] });
+        await vm.InitializeAsync();
+
+        var scan = vm.CreateSettingsDraft();
+        scan.IgnorePatterns.Add("*.tmp");
+        Assert.True(await vm.TryApplySettingsAsync(scan));
+        Assert.Equal("scan.configChanged", vm.CatalogResultMessage?.Key);
+
+        // The quiet rescan applies the new settings and finds nothing to report, so the line asking for a
+        // Rescan goes rather than staying on screen after it has been answered.
+        vm.OnWindowActivated();
+        await SettleActivation(vm, clock);
+        Assert.Null(vm.CatalogResultMessage);
+        await vm.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
     public async Task Rescan_DuringAnActivationScan_StaysAvailable()
     {
         Touch("a.command");

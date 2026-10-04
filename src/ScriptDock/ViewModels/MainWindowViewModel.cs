@@ -76,6 +76,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// <summary>The latest activation rescan, for tests to await.</summary>
     internal Task ActivationScan { get; private set; } = Task.CompletedTask;
 
+    // "Settings changed — Rescan to apply." is on screen, so the next completed scan answers it.
+    private bool _rescanToApplyShown;
+
     public ObservableCollection<ScriptItem> Scripts { get; } = [];
     public ObservableCollection<RecentEntry> Recent { get; } = [];
 
@@ -426,6 +429,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             RebuildScripts();
         }
         ShowCatalogResult(Message.Of("scan.configChanged"));
+        _rescanToApplyShown = true;
         return true;
     }
 
@@ -495,6 +499,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             ResolveOperationalError("scan");
             if (!background || diff.Added.Count > 0 || diff.Removed.Count > 0)
                 ShowCatalogResult(ScanResultMessage(diff), transient: true);
+            else if (_rescanToApplyShown)
+                ClearCatalogResult(); // this scan applied the settings that line asked a Rescan for
+            _rescanToApplyShown = false;
         }
         catch (OperationCanceledException)
         {
