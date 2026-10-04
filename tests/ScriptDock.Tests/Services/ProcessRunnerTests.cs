@@ -341,6 +341,34 @@ public sealed class ProcessRunnerTests : IDisposable
     }
 
     [MacOnlyFact]
+    public async Task TerminateAsync_KillsAGrandchildTheScriptStarted()
+    {
+        // The script starts a child shell, which starts the grandchild and waits on it: login shell →
+        // script → child → grandchild, the shape of `npm run dev` starting a server.
+        var pidFile = Path.Combine(_dir, "grandchild.pid");
+        var script = WriteExecutableScript(
+            "grandparent.command",
+            $"bash -c 'sleep 300 & echo $! > \"$1\"; wait' _ '{pidFile}' &\nwait\n");
+        var runner = new ProcessRunner(_runsDir);
+        var handle = runner.Start(script);
+        var grandchild = ReadPid(pidFile);
+        try
+        {
+            Assert.True(IsAlive(grandchild));
+
+            Assert.True(await runner.TerminateAsync(handle));
+
+            Assert.Equal(RunState.Terminated, handle.State);
+            Assert.True(GoneWithin(grandchild, TimeSpan.FromSeconds(20)), $"grandchild {grandchild} outlived its script");
+        }
+        finally
+        {
+            if (IsAlive(grandchild))
+                Process.GetProcessById(grandchild).Kill();
+        }
+    }
+
+    [MacOnlyFact]
     public async Task StopAllAsync_StopsEveryRunningScriptAndItsChild_EachEndingOnce()
     {
         var first = WriteScriptWithChild("first.command", out var firstPidFile);
