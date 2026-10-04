@@ -256,4 +256,61 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         Assert.False(vm.Scripts.Single(s => Name(s) == "a.command").IsNew);
         Assert.True(vm.Scripts.Single(s => Name(s) == "b.command").IsNew);
     }
+
+    // The app's own known-paths store over the temp home, loaded the way the composition root loads it.
+    private async Task<MainWindowViewModel> ScannedWithRealKnownPaths()
+    {
+        var store = new JsonStore<KnownPaths>(AppPaths.KnownPathsFileName, "known paths", recordBackups: false, rebuildable: true);
+        var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
+        var state = new AppState();
+        var vm = new MainWindowViewModel(
+            new FakeConfigStore { Value = config },
+            new FakeJsonStore<AppState> { Value = state },
+            store,
+            new FakeRecordStore(),
+            config, state, store.Load(), new ScriptScanner(), new FakeProcessRunner());
+        await vm.RescanCommand.ExecuteAsync(null);
+        return vm;
+    }
+
+    private string KnownPathsFile => Path.Combine(_home, AppPaths.KnownPathsFileName);
+
+    [Fact]
+    public async Task Rescan_WithNoKnownPathsFile_FlagsNothing_ThenComparesAgainstWhatItSaved()
+    {
+        Touch("a.command");
+
+        var first = await ScannedWithRealKnownPaths();
+        Assert.False(Assert.Single(first.Scripts).IsNew);
+
+        // The first scan saved what it found, so the next launch compares against it.
+        Touch("b.command");
+        var next = await ScannedWithRealKnownPaths();
+        Assert.False(next.Scripts.Single(s => Name(s) == "a.command").IsNew);
+        Assert.True(next.Scripts.Single(s => Name(s) == "b.command").IsNew);
+    }
+
+    [Fact]
+    public async Task Rescan_WithAnUnreadableKnownPathsFile_FlagsNothingNewOrRemoved()
+    {
+        Touch("a.command");
+        File.WriteAllText(KnownPathsFile, "{ not json");
+
+        var vm = await ScannedWithRealKnownPaths();
+
+        var item = Assert.Single(vm.Scripts);
+        Assert.Equal(ScriptFlag.None, item.Flag);
+    }
+
+    [Fact]
+    public async Task Rescan_WithASavedEmptyList_FlagsEveryScriptNew()
+    {
+        Touch("a.command");
+        Touch("b.command");
+        File.WriteAllText(KnownPathsFile, """{"paths":[]}""");
+
+        var vm = await ScannedWithRealKnownPaths();
+
+        Assert.All(vm.Scripts, s => Assert.True(s.IsNew));
+    }
 }

@@ -57,4 +57,22 @@ public sealed class ScanDiffTests
         Assert.Empty(diff.Added);
         Assert.Empty(diff.Removed);
     }
+
+    [Fact]
+    public void Compute_WithNoSavedList_FlagsNothingNewOrRemoved()
+    {
+        var diff = ScanDiff.Compute(["/a.command", "/b.command"], known: null);
+
+        Assert.Empty(diff.Added);
+        Assert.Empty(diff.Removed);
+    }
+
+    [Fact]
+    public void Compute_WithAnEmptySavedList_FlagsEveryFoundScriptNew()
+    {
+        var diff = ScanDiff.Compute(["/b.command", "/a.command"], known: []);
+
+        Assert.Equal(["/a.command", "/b.command"], diff.Added);
+        Assert.Empty(diff.Removed);
+    }
 }
