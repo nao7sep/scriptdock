@@ -50,6 +50,7 @@ public partial class App : Application
                 "ScriptDock",
                 showAbout: () => _mainWindow?.ShowAboutFromMenu(),
                 showSettings: () => _mainWindow?.ShowSettingsFromMenu(),
+                quit: () => _ = QuitFromMenuAsync(desktop),
                 canShowAppDialogs: () => _mainWindow is { IsActive: true });
 
             // An emoji chosen in the macOS picker arrives while the window is in the background; macOS only.
@@ -110,6 +111,22 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    // The app's own Quit (the menu item and its Cmd+Q) asks first while scripts run, as the main
+    // window's close button does; the shutdown it then starts never asks again. With no main window
+    // (a startup failure notice) nothing runs, so it quits at once.
+    private async System.Threading.Tasks.Task QuitFromMenuAsync(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        try
+        {
+            if (_mainWindow is null || await _mainWindow.ConfirmAppQuitAsync())
+                desktop.TryShutdown();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("ui: quit from the menu failed", ex);
+        }
     }
 
     private static void RegisterOwnerActivation(Window window)

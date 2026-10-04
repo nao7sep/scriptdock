@@ -100,4 +100,25 @@ public sealed class MainWindowCloseGuardTests
                 shutdownSaved: false,
                 shutdownSaveInProgress: false));
     }
+
+    [Fact]
+    public void TheAppsQuitAsksExactlyWhenTheCloseButtonWould()
+    {
+        // Cmd+Q and the menu's Quit ask while scripts run, as the close button does.
+        Assert.Equal(AppQuitAction.PromptThenQuit, MainWindowCloseGuard.DecideAppQuit(
+            quitPromptOpen: false, quitConfirmed: false, hasRunningWorkToKill: true));
+        Assert.True(MainWindowCloseGuard.ShouldConfirmQuit(WindowCloseReason.WindowClosing, true));
+
+        Assert.Equal(AppQuitAction.Quit, MainWindowCloseGuard.DecideAppQuit(
+            quitPromptOpen: false, quitConfirmed: false, hasRunningWorkToKill: false));
+        Assert.Equal(AppQuitAction.Quit, MainWindowCloseGuard.DecideAppQuit(
+            quitPromptOpen: false, quitConfirmed: true, hasRunningWorkToKill: true));
+    }
+
+    [Fact]
+    public void TheAppsQuitWhileAQuitPromptIsUpIsDropped()
+    {
+        Assert.Equal(AppQuitAction.Drop, MainWindowCloseGuard.DecideAppQuit(
+            quitPromptOpen: true, quitConfirmed: false, hasRunningWorkToKill: true));
+    }
 }

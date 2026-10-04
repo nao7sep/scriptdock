@@ -29,6 +29,7 @@ public partial class MainWindow : Window
     private bool _consolePinnedToBottom = true;
     private bool _scrollConsolePending = true; // follow the console on the next layout after output/selection changes
     private bool _quitConfirmed; // set once the user confirms quitting with scripts running, so the re-close proceeds
+    private bool _quitPromptOpen; // a quit prompt is up, so a second quit request is dropped rather than asking twice
 
     // The user's INTENT for the two fixed panes, in pixels: what they last dragged the Recent column /
     // console row to. The on-screen size is DERIVED from this (clamped to what the current window can
@@ -311,13 +312,11 @@ public partial class MainWindow : Window
                 {
                     // Quitting stops every running script, so confirm it first:
                     // cancel this close, ask, and only close for real on a yes (mirrors the dialog
-                    // discard guard).
+                    // discard guard). A prompt the menu's Quit already put up decides instead.
                     e.Cancel = true;
-                    var proceed = await ConfirmDialog.ConfirmDestructiveAsync(
-                        this,
-                        Message.Of("quit.title"),
-                        Message.Of("quit.message", ("count", vm.RunningCount)),
-                        "quit.confirm");
+                    if (_quitPromptOpen)
+                        return;
+                    var proceed = await ConfirmQuitAsync(vm);
                     if (proceed)
                     {
                         _quitConfirmed = true;
@@ -366,6 +365,46 @@ public partial class MainWindow : Window
             // A persistence bug must not wedge the window open forever; let the close proceed.
             _shutdownSaved = true;
             Close();
+        }
+    }
+
+    /// <summary>
+    /// Whether the app's own Quit (the menu item and its Cmd+Q) may shut the app down: it asks first
+    /// while scripts run, exactly as the close button does.
+    /// </summary>
+    internal async Task<bool> ConfirmAppQuitAsync()
+    {
+        if (ViewModel is not { } vm)
+            return true;
+
+        switch (MainWindowCloseGuard.DecideAppQuit(_quitPromptOpen, _quitConfirmed, vm.ShouldConfirmQuit()))
+        {
+            case AppQuitAction.Drop:
+                return false;
+            case AppQuitAction.Quit:
+                return true;
+        }
+
+        if (!await ConfirmQuitAsync(vm))
+            return false;
+        _quitConfirmed = true;
+        return true;
+    }
+
+    private async Task<bool> ConfirmQuitAsync(MainWindowViewModel vm)
+    {
+        _quitPromptOpen = true;
+        try
+        {
+            return await ConfirmDialog.ConfirmDestructiveAsync(
+                this,
+                Message.Of("quit.title"),
+                Message.Of("quit.message", ("count", vm.RunningCount)),
+                "quit.confirm");
+        }
+        finally
+        {
+            _quitPromptOpen = false;
         }
     }
 

@@ -20,6 +20,19 @@ public enum MainWindowCloseAction
     RunShutdownSavePass,
 }
 
+/// <summary>What the app's own Quit command (the menu item and its shortcut) should do.</summary>
+public enum AppQuitAction
+{
+    /// <summary>Start the app shutdown, which never asks.</summary>
+    Quit,
+
+    /// <summary>Ask first, and start the app shutdown only on a yes.</summary>
+    PromptThenQuit,
+
+    /// <summary>A quit prompt is already up and decides; do nothing.</summary>
+    Drop,
+}
+
 /// <summary>
 /// The close-sequencing decision for <see cref="MainWindow"/>: direct window closes may prompt;
 /// owner/app/OS shutdown must always drain. Once past the prompt, the pane-size and shutdown
@@ -33,6 +46,17 @@ public static class MainWindowCloseGuard
 {
     public static bool ShouldConfirmQuit(WindowCloseReason reason, bool hasRunningWorkToKill) =>
         reason == WindowCloseReason.WindowClosing && hasRunningWorkToKill;
+
+    /// <summary>The app's own Quit is a user close (modal-dialog-conventions), so it asks exactly when the
+    /// window's close button would; the app shutdown it then starts is not asked about again.</summary>
+    public static AppQuitAction DecideAppQuit(bool quitPromptOpen, bool quitConfirmed, bool hasRunningWorkToKill)
+    {
+        if (quitPromptOpen)
+            return AppQuitAction.Drop;
+        return !quitConfirmed && ShouldConfirmQuit(WindowCloseReason.WindowClosing, hasRunningWorkToKill)
+            ? AppQuitAction.PromptThenQuit
+            : AppQuitAction.Quit;
+    }
 
     public static MainWindowCloseAction DecideAction(
         WindowCloseReason reason,

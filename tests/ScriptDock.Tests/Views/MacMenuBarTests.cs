@@ -303,19 +303,22 @@ public sealed class MacMenuBarTests
     }
 
     [MacOnlyFact]
-    public void The_app_target_answers_About_and_Settings_and_disables_them_when_told()
+    public void The_app_target_answers_About_Settings_and_Quit_and_disables_About_and_Settings_when_told()
     {
         LoadAppKit();
         var target = CreateAppActionTarget(UniqueClassName("Target"));
         var about = 0;
         var settings = 0;
+        var quit = 0;
         var canShow = true;
-        ConfigureAppActions(() => about++, () => settings++, () => canShow);
+        ConfigureAppActions(() => about++, () => settings++, () => quit++, () => canShow);
         try
         {
             ObjC.Send(target, AboutAction, IntPtr.Zero);
             ObjC.Send(target, SettingsAction, IntPtr.Zero);
-            Assert.Equal((1, 1), (about, settings));
+            // Quit goes to the app, which asks first while scripts run, rather than straight to the lifetime.
+            ObjC.Send(target, QuitAction, IntPtr.Zero);
+            Assert.Equal((1, 1, 1), (about, settings, quit));
 
             var aboutItem = NewItem(new Item("About ScriptDock", AboutAction), target);
             var quitItem = NewItem(new Item("Quit ScriptDock", QuitAction, "q"), target);
@@ -326,7 +329,7 @@ public sealed class MacMenuBarTests
         }
         finally
         {
-            ConfigureAppActions(() => { }, () => { }, () => false);
+            ConfigureAppActions(() => { }, () => { }, () => { }, () => false);
         }
     }
 

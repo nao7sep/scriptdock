@@ -42,8 +42,9 @@ internal static class MacMenuBar
         Command = 1 << 20,
     }
 
-    // The actions ScriptDock answers itself; every other action is AppKit's own. Quit shuts down
-    // through the lifetime, as Avalonia's own Quit item did, so the app's shutdown path runs.
+    // The actions ScriptDock answers itself; every other action is AppKit's own. Quit calls the app,
+    // which asks first while scripts run and then shuts down through the lifetime, so the app's
+    // shutdown path runs.
     internal const string AboutAction = "showAbout:";
     internal const string SettingsAction = "showSettings:";
     internal const string QuitAction = "quit:";
@@ -168,6 +169,7 @@ internal static class MacMenuBar
 
     private static Action s_showAbout = () => { };
     private static Action s_showSettings = () => { };
+    private static Action s_quit = () => { };
     private static Func<bool> s_canShowAppDialogs = () => false;
 
     // AppKit calls back through these; the fields keep the delegates alive for the process's life.
@@ -182,12 +184,12 @@ internal static class MacMenuBar
     /// its main window being in front, as a Mac app disables them while a dialog is up. Does nothing
     /// off macOS.
     /// </summary>
-    public static void Install(string appName, Action showAbout, Action showSettings, Func<bool> canShowAppDialogs)
+    public static void Install(string appName, Action showAbout, Action showSettings, Action quit, Func<bool> canShowAppDialogs)
     {
         if (!OperatingSystem.IsMacOS() || Installed)
             return;
         Installed = true;
-        ConfigureAppActions(showAbout, showSettings, canShowAppDialogs);
+        ConfigureAppActions(showAbout, showSettings, quit, canShowAppDialogs);
         s_appName = appName;
 
         try
@@ -244,10 +246,11 @@ internal static class MacMenuBar
         }
     }
 
-    internal static void ConfigureAppActions(Action showAbout, Action showSettings, Func<bool> canShowAppDialogs)
+    internal static void ConfigureAppActions(Action showAbout, Action showSettings, Action quit, Func<bool> canShowAppDialogs)
     {
         s_showAbout = showAbout;
         s_showSettings = showSettings;
+        s_quit = quit;
         s_canShowAppDialogs = canShowAppDialogs;
     }
 
@@ -374,9 +377,7 @@ internal static class MacMenuBar
             {
                 case AboutAction: s_showAbout(); break;
                 case SettingsAction: s_showSettings(); break;
-                case QuitAction:
-                    (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.TryShutdown();
-                    break;
+                case QuitAction: s_quit(); break;
             }
         }
         catch (Exception ex)
