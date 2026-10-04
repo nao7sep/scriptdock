@@ -62,6 +62,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // a slow/unresponsive root can never strand IsScanning (and thus the Rescan command) forever.
     private CancellationTokenSource? _scanCts;
 
+    /// <summary>How long the Scripts pane waits after the main window comes back to the front before it
+    /// rescans, so a burst of activations makes one scan.</summary>
+    public static readonly TimeSpan ActivationRescanDelay = TimeSpan.FromMilliseconds(500);
+
+    // Activation rescans start once the first scan has run and stop when the window shuts down. The
+    // version moves with each activation, so only the latest one's wait ends in a scan.
+    private bool _activationRescans;
+    private ITimer? _activationRescanTimer;
+    private int _activationRescanVersion;
+
     public ObservableCollection<ScriptItem> Scripts { get; } = [];
     public ObservableCollection<RecentEntry> Recent { get; } = [];
 
@@ -226,6 +236,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// owns measurement and native minimum sizing, so it remeasures after the new font lays out.</summary>
     public event EventHandler? UiFontChanged;
 
+    /// <summary>Set by the view: whether one of its dialogs is open, which holds an activation rescan off.</summary>
+    public Func<bool> IsDialogOpen { get; set; } = () => false;
+
+    /// <summary>The clock the activation rescan waits on; tests pass their own.</summary>
+    internal TimeProvider Time { get; init; } = TimeProvider.System;
+
     /// <summary>Set by the view to confirm a destructive action (the view owns the dialog). Returns
     /// true to proceed. Null when no view is attached (e.g. tests), in which case the action proceeds
     /// unconfirmed.</summary>
@@ -244,6 +260,34 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         await LoadRecentAsync();
         RebuildRecent();
         await RescanAsync();
+        _activationRescans = true;
+    }
+
+    /// <summary>
+    /// The main window came back to the front: rescan the Scripts pane once activations settle, unless a
+    /// scan is running or a dialog is open by then. The rescan keeps the selection, as every rebuild does.
+    /// </summary>
+    public void OnWindowActivated()
+    {
+        if (!_activationRescans)
+            return;
+
+        var version = ++_activationRescanVersion;
+        _activationRescanTimer?.Dispose();
+        _activationRescanTimer = Time.CreateTimer(
+            _ => Dispatcher.UIThread.Post(() => RescanAfterActivation(version)),
+            null, ActivationRescanDelay, Timeout.InfiniteTimeSpan);
+    }
+
+    private void RescanAfterActivation(int version)
+    {
+        if (version != _activationRescanVersion || !_activationRescans)
+            return;
+        _activationRescanTimer?.Dispose();
+        _activationRescanTimer = null;
+
+        if (!IsScanning && !IsDialogOpen() && RescanCommand.CanExecute(null))
+            RescanCommand.Execute(null);
     }
 
     internal async Task LoadRecentAsync()
@@ -296,6 +340,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _outputTimer?.Stop();
         _outputImportTimer?.Stop();
         _catalogResultTimer?.Stop();
+        _activationRescans = false;
+        _activationRescanTimer?.Dispose();
         _scanCts?.Cancel(); // don't let a slow scan keep the closing window's work alive
         _outputImportCts.Cancel();
         await _runner.StopAllAsync();

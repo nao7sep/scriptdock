@@ -59,7 +59,11 @@ public partial class MainWindow : Window
         }
 
         // The app's inactive-window treatments (the quieter focus ring) key on this class, as in DialogBase.
-        Activated += (_, _) => Classes.Set("windowInactive", false);
+        Activated += (_, _) =>
+        {
+            Classes.Set("windowInactive", false);
+            ViewModel?.OnWindowActivated(); // the Scripts pane rescans when the window comes back to the front
+        };
         Deactivated += (_, _) => Classes.Set("windowInactive", true);
         Loaded += OnLoaded;
         LayoutRoot.PropertyChanged += (_, e) =>
@@ -124,6 +128,7 @@ public partial class MainWindow : Window
             vm.PropertyChanged += OnViewModelPropertyChanged;
             vm.ConsoleInputFocusRequested += OnConsoleInputFocusRequested;
             vm.UiFontChanged += OnUiFontChanged;
+            vm.IsDialogOpen = () => OwnedWindows.OfType<DialogBase>().Any();
             vm.ConfirmHandler = request =>
                 ConfirmDialog.ConfirmDestructiveAsync(this, request.Title, request.Message, request.ConfirmLabelKey);
 

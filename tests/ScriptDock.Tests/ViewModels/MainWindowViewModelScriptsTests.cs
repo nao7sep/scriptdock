@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using ScriptDock;
 using ScriptDock.I18n;
 using ScriptDock.Models;
@@ -255,5 +257,87 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         var vm = await ScannedWithRealKnownPaths();
 
         Assert.All(vm.Scripts, s => Assert.True(s.IsNew));
+    }
+
+    private (MainWindowViewModel Vm, FakeRecordStore Records, FakeTimeProvider Clock) ActivatableVm()
+    {
+        var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
+        var state = new AppState();
+        var records = new FakeRecordStore();
+        var clock = new FakeTimeProvider();
+        var vm = new MainWindowViewModel(
+            new FakeConfigStore { Value = config },
+            new FakeJsonStore<AppState> { Value = state },
+            new FakeJsonStore<KnownPaths>(),
+            records,
+            config, state, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner()) { Time = clock };
+        return (vm, records, clock);
+    }
+
+    // Lets the activation wait pass, then the scan it started finish.
+    private static async Task SettleActivation(MainWindowViewModel vm, FakeTimeProvider clock)
+    {
+        clock.Advance(MainWindowViewModel.ActivationRescanDelay);
+        Dispatcher.UIThread.RunJobs();
+        if (vm.RescanCommand.ExecutionTask is { } scan)
+            await scan;
+    }
+
+    [AvaloniaFact]
+    public async Task Activation_RescansOnce_ForABurstOfActivations_AndKeepsTheSelection()
+    {
+        Touch("a.command");
+        Touch("b.command");
+        var (vm, records, clock) = ActivatableVm();
+        await vm.InitializeAsync();
+        vm.SelectedScript = vm.Scripts.Single(s => Name(s) == "b.command");
+        var scans = records.ScanReports.Count;
+        Touch("c.command");
+
+        vm.OnWindowActivated();
+        clock.Advance(MainWindowViewModel.ActivationRescanDelay / 2);
+        vm.OnWindowActivated();
+        vm.OnWindowActivated();
+        await SettleActivation(vm, clock);
+
+        Assert.Equal(scans + 1, records.ScanReports.Count);
+        Assert.Contains(vm.Scripts, s => Name(s) == "c.command");
+        Assert.Equal("b.command", Name(vm.SelectedScript!));
+        await vm.ShutdownAsync(); // stops the timers InitializeAsync started
+    }
+
+    [AvaloniaFact]
+    public async Task Activation_DoesNotRescan_WhileADialogIsOpen_OrAScanRuns_OrBeforeTheFirstScan()
+    {
+        var (vm, records, clock) = ActivatableVm();
+
+        // Before the first scan has run, an activation is the window opening, not coming back.
+        vm.OnWindowActivated();
+        clock.Advance(MainWindowViewModel.ActivationRescanDelay);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Empty(records.ScanReports);
+
+        await vm.InitializeAsync();
+        var scans = records.ScanReports.Count;
+
+        var dialogOpen = true;
+        vm.IsDialogOpen = () => dialogOpen;
+        vm.OnWindowActivated();
+        await SettleActivation(vm, clock);
+        Assert.Equal(scans, records.ScanReports.Count);
+
+        dialogOpen = false;
+        vm.IsScanning = true;
+        vm.OnWindowActivated();
+        await SettleActivation(vm, clock);
+        Assert.Equal(scans, records.ScanReports.Count);
+        vm.IsScanning = false;
+
+        // Once the window shuts down, a late activation starts nothing.
+        await vm.ShutdownAsync();
+        vm.OnWindowActivated();
+        clock.Advance(MainWindowViewModel.ActivationRescanDelay);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(scans, records.ScanReports.Count);
     }
 }
