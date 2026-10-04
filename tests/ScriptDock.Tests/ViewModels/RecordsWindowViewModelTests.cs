@@ -172,18 +172,64 @@ public sealed class RecordsWindowViewModelTests
     }
 
     [AvaloniaFact]
+    public void Hides_a_block_with_only_whitespace_or_empty_json_in_it()
+    {
+        _reader.Page = new RecordsPage([Failed, Scan], false);
+        _reader.Detail = (kind, id) => Task.FromResult<RecordDetail?>(kind == RecordKind.RunOutput
+            ? new RunOutputRecordDetail(
+                4, Session, "2026-10-04T08:01:05.000Z", LogLevel.Info, 3, "/repo/dev.command", "2026-10-04T08:00:10.000Z",
+                4242, null, "/runs/3.log", null, null, null, Encoding.UTF8.GetBytes(" \r\n\t\n"))
+            : new ScanReportRecordDetail(id, Session, Scan.Time, null, "{}"));
+        var vm = Started();
+
+        vm.SelectedRecord = vm.Rows[0];
+        Pump();
+        Assert.True(vm.HasDetail);
+        Assert.Empty(vm.DetailBlocks);
+
+        vm.SelectedRecord = vm.Rows[1];
+        Pump();
+        Assert.True(vm.HasDetail);
+        Assert.Empty(vm.DetailBlocks);
+        Assert.NotEmpty(vm.DetailFields);
+    }
+
+    [AvaloniaFact]
+    public void A_log_line_s_details_leave_out_what_the_pane_already_shows_and_hide_when_nothing_remains()
+    {
+        _reader.Page = new RecordsPage([Warning, Newer], false);
+        _reader.Detail = (_, id) => Task.FromResult<RecordDetail?>(id == Warning.Id
+            ? new LogRecordDetail(id, Session, Warning.Time, LogLevel.Warn, Warning.Title,
+                """{"time":"2026-10-04T08:00:30.000Z","level":"warn","message":"run: terminate failed","id":3,"error":{"message":"denied"}}""")
+            : new LogRecordDetail(id, Session, Newer.Time, LogLevel.Info, Newer.Title,
+                """{"time":"2026-10-04T08:02:00.000Z","level":"info","message":"app.later"}"""));
+        var vm = Started();
+
+        vm.SelectedRecord = vm.Rows[0];
+        Pump();
+        var details = Assert.Single(vm.DetailBlocks);
+        Assert.Equal(English.Of("records.details"), details.Label);
+        Assert.Equal("{\n  \"id\": 3,\n  \"error\": {\n    \"message\": \"denied\"\n  }\n}", details.Text.Replace("\r\n", "\n"));
+
+        vm.SelectedRecord = vm.Rows[1];
+        Pump();
+        Assert.True(vm.HasDetail);
+        Assert.Empty(vm.DetailBlocks);
+    }
+
+    [AvaloniaFact]
     public void Shows_a_log_line_and_a_scan_report_as_stored_json_indented()
     {
         _reader.Page = new RecordsPage([Warning, Scan], false);
         _reader.Detail = (kind, id) => Task.FromResult<RecordDetail?>(kind == RecordKind.Log
-            ? new LogRecordDetail(id, Session, Warning.Time, LogLevel.Warn, "run: terminate failed", """{"level":"warn","id":3}""")
+            ? new LogRecordDetail(id, Session, Warning.Time, LogLevel.Warn, "run: terminate failed", """{"level":"warn","id":3,"script":"/a"}""")
             : new ScanReportRecordDetail(id, Session, Scan.Time, 3, """{"roots":["/code"]}"""));
         var vm = Started();
 
         vm.SelectedRecord = vm.Rows[0];
         Pump();
         Assert.Equal("run: terminate failed", vm.DetailTitle);
-        Assert.Equal("{\n  \"level\": \"warn\",\n  \"id\": 3\n}", Assert.Single(vm.DetailBlocks).Text.Replace("\r\n", "\n"));
+        Assert.Equal("{\n  \"id\": 3,\n  \"script\": \"/a\"\n}", Assert.Single(vm.DetailBlocks).Text.Replace("\r\n", "\n"));
 
         vm.SelectedRecord = vm.Rows[1];
         Pump();

@@ -68,7 +68,7 @@ public class RenderedKeyTests : WindowTest
             Page = new RecordsPage([output, scan], false),
             Detail = (_, _) => System.Threading.Tasks.Task.FromResult<RecordDetail?>(new RunOutputRecordDetail(
                 4, session, output.Time, ScriptDock.Services.LogLevel.Error, 1, output.Title, output.Time, 42, output.Time, "/runs/1.log",
-                output.Time, "exited", 1, [])),
+                output.Time, "exited", 1, "done\n"u8.ToArray())),
         };
         var store = new Fakes.FakeJsonStore<AppState>();
         var viewModel = new RecordsWindowViewModel(reader, store, store.Value, new Fakes.FakeTimeProvider());

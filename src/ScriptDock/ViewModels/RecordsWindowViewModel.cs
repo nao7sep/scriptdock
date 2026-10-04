@@ -468,7 +468,8 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(DetailKindText));
     }
 
-    // Every field the record holds, under its label; a field the record does not have is left out.
+    // Every field the record holds, under its label; a field the record does not have, and a block with
+    // nothing in it, are left out.
     private void BuildDetail()
     {
         DetailFields.Clear();
@@ -482,12 +483,18 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
                 DetailFields.Add(new RecordField(Localizer.T(key), value, code));
         }
 
+        void AddBlock(string key, string? text)
+        {
+            if (text is not null)
+                DetailBlocks.Add(new RecordBlock(Localizer.T(key), text));
+        }
+
         switch (_detail)
         {
             case LogRecordDetail log:
                 Add("records.time", RecordFormat.Time(log.Time, milliseconds: true));
                 Add("records.launch", RecordFormat.Launch(log.Session, _reader.Session));
-                DetailBlocks.Add(new RecordBlock(Localizer.T("records.details"), RecordFormat.PrettyJson(log.Line)));
+                AddBlock("records.details", RecordFormat.LogDetails(log.Line));
                 break;
 
             case RunOutputRecordDetail run:
@@ -501,13 +508,13 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
                 Add("records.outputFile", run.OutputPath, code: true);
                 Add("records.imported", RecordFormat.Time(run.Time, milliseconds: true));
                 Add("records.launch", RecordFormat.Launch(run.Session, _reader.Session));
-                DetailBlocks.Add(new RecordBlock(Localizer.T("records.output"), RecordFormat.OutputText(run.Output)));
+                AddBlock("records.output", RecordFormat.OutputText(run.Output));
                 break;
 
             case ScanReportRecordDetail scan:
                 Add("records.time", RecordFormat.Time(scan.Time, milliseconds: true));
                 Add("records.launch", RecordFormat.Launch(scan.Session, _reader.Session));
-                DetailBlocks.Add(new RecordBlock(Localizer.T("records.report"), RecordFormat.PrettyJson(scan.Report)));
+                AddBlock("records.report", RecordFormat.PrettyJson(scan.Report));
                 break;
         }
     }

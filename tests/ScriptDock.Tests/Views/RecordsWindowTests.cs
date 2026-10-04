@@ -130,7 +130,7 @@ public sealed class RecordsWindowTests : WindowTest
     public void Shows_the_rows_and_moving_the_selection_shows_the_selected_record()
     {
         _reader.Detail = (_, id) => Task.FromResult<RecordDetail?>(
-            new LogRecordDetail(id, Session, Line.Time, LogLevel.Warn, Line.Title, """{"message":"run: terminate failed"}"""));
+            new LogRecordDetail(id, Session, Line.Time, LogLevel.Warn, Line.Title, """{"message":"run: terminate failed","id":3}"""));
         var window = Show(new RecordsWindow { DataContext = NewViewModel(), Width = 1100, Height = 700 });
         var list = List(window);
 
