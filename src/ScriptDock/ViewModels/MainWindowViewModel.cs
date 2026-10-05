@@ -696,13 +696,23 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
+            // No run started, so nothing enters Recent: the failure shows on the script's existing
+            // Recent row, or in the operational error bar when it has none.
             Log.Error("ui: run failed", ex, new { script = path });
-            EnsureRecentPath(path);
             RebuildRecent();
-            SelectRecentPath(path);
-            ReportProcessActionError(path, "run", Message.Of("process.runFailed"));
+            if (Recent.Any(entry => PathIdentity.Same(entry.Path, path)))
+            {
+                SelectRecentPath(path);
+                ReportProcessActionError(path, "run", Message.Of("process.runFailed"));
+            }
+            else
+            {
+                ReportOperationalError(RunFailedKey(path), Message.Of("process.runFailed"));
+            }
             return;
         }
+
+        ResolveOperationalError(RunFailedKey(path));
 
         // Running a script ends its "new" flag at once; otherwise the flag lasts until the next full scan.
         if (_newPaths.Remove(PathIdentity.Key(path)))
@@ -1077,13 +1087,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         RecentActionErrorCount = errors?.Count ?? 0;
     }
 
-    private void EnsureRecentPath(string path)
-    {
-        if (_recent.Any(run => PathIdentity.Same(run.Path, path)))
-            return;
-        _recent = RecentRuns.Add(_recent, path, DateTimeOffset.UtcNow);
-        _recentVersion++;
-    }
+    private static string RunFailedKey(string path) => "run " + PathIdentity.Key(path);
 
     private void SelectRecentPath(string path) =>
         SelectedRecentEntry = Recent.FirstOrDefault(entry => PathIdentity.Same(entry.Path, path));

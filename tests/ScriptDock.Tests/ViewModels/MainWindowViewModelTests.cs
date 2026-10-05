@@ -487,6 +487,48 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task RunScript_ThatNeverStarted_StaysOutOfRecent_AndShowsInTheErrorBar()
+    {
+        var records = new FakeRecordStore();
+        var (vm, runner) = BuildVm(records: records);
+        runner.StartException = new InvalidOperationException("boom");
+        var item = new ScriptItem("/x/new.command") { DisplayName = "new" };
+
+        await vm.RunScriptCommand.ExecuteAsync(item);
+
+        Assert.Empty(vm.Recent);
+        Assert.Empty(records.Runs);
+        Assert.Null(vm.SelectedRecentEntry);
+        Assert.Equal(English.Of("process.runFailed"), vm.OperationalError);
+
+        // A later launch that does start enters Recent and clears that error.
+        runner.StartException = null;
+        await vm.RunScriptCommand.ExecuteAsync(item);
+
+        Assert.Equal(["/x/new.command"], vm.Recent.Select(e => e.Path));
+        Assert.False(vm.HasOperationalError);
+    }
+
+    [Fact]
+    public async Task RunScript_ThatNeverStarted_KeepsItsRecentRowsLastRun_AndShowsTheErrorThere()
+    {
+        var records = RecordsWithRuns("/x/old.command");
+        var (vm, runner) = BuildVm(records: records);
+        await vm.InitializeAsync();
+        var lastRan = Assert.Single(vm.Recent).LastRanAt;
+        runner.StartException = new InvalidOperationException("boom");
+
+        await vm.RunScriptCommand.ExecuteAsync(new ScriptItem("/x/old.command") { DisplayName = "old" });
+
+        var entry = Assert.Single(vm.Recent);
+        Assert.Equal(lastRan, entry.LastRanAt);
+        Assert.Single(records.Runs);
+        Assert.Same(entry, vm.SelectedRecentEntry);
+        Assert.Equal(English.Of("process.runFailed"), vm.RecentActionError);
+        Assert.False(vm.HasOperationalError);
+    }
+
+    [Fact]
     public async Task InitializeAsync_ShowsEachRecentRowsRecordedEnd()
     {
         // An earlier session's run that exited 0, as a launcher whose shell hands its app to the system does.
