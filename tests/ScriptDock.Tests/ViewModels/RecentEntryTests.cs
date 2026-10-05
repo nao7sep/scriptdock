@@ -38,8 +38,8 @@ public sealed class RecentEntryTests
 
     [Theory]
     [InlineData(null)]
-    [InlineData("gone")]
-    public void No_recorded_end_or_an_old_gone_reads_unknown(string? state)
+    [InlineData("unrecognized")]
+    public void No_recorded_end_or_an_unrecognized_state_reads_unknown(string? state)
     {
         var entry = Recorded(state is null ? null : new RecordedEnd(state, null));
 

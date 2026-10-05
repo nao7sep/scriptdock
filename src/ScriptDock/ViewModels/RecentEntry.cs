@@ -80,7 +80,7 @@ public sealed class RecentEntry
     };
 
     // The records' own state values. No recorded end (ScriptDock crashed, or a tree outlived the quit
-    // bound) and an older value such as "gone" both say nothing about how the run ended.
+    // bound) says nothing about how the run ended, and neither does any other value.
     private static PillKind RecordedKind(RecordedEnd? end) => end?.State switch
     {
         "exited" => end.ExitCode is 0 or null ? PillKind.ExitedOk : PillKind.ExitedError,
