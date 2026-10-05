@@ -237,6 +237,23 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
     }
 
     [Fact]
+    public async Task Rescan_ThatFindsTheSamePaths_DoesNotRewriteKnownPaths()
+    {
+        Touch("a.command");
+        var vm = await ScannedWithRealKnownPaths();
+        var earlier = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(KnownPathsFile, earlier);
+
+        await vm.RescanCommand.ExecuteAsync(null);
+        Assert.Equal(earlier, File.GetLastWriteTimeUtc(KnownPathsFile));
+
+        // A scan that finds something else does write.
+        Touch("b.command");
+        await vm.RescanCommand.ExecuteAsync(null);
+        Assert.NotEqual(earlier, File.GetLastWriteTimeUtc(KnownPathsFile));
+    }
+
+    [Fact]
     public async Task Rescan_WithAnUnreadableKnownPathsFile_FlagsNothingNewOrRemoved()
     {
         Touch("a.command");

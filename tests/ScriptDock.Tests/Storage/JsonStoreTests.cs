@@ -97,6 +97,32 @@ public sealed class JsonStoreTests : IDisposable
     }
 
     [Fact]
+    public void Save_UnchangedContent_LeavesTheFileUntouched()
+    {
+        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        store.Save(new SampleDoc { Name = "one" });
+        var earlier = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(PathOf("doc.json"), earlier);
+
+        store.Save(new SampleDoc { Name = "one" });
+
+        Assert.Equal(earlier, File.GetLastWriteTimeUtc(PathOf("doc.json")));
+    }
+
+    [Fact]
+    public void Save_ComparesAgainstTheFileOnDisk_SoAnOutsideEditIsReplaced()
+    {
+        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        store.Save(new SampleDoc { Name = "one" });
+        var saved = File.ReadAllText(PathOf("doc.json"));
+        File.WriteAllText(PathOf("doc.json"), saved.Replace("one", "edited"));
+
+        store.Save(new SampleDoc { Name = "one" });
+
+        Assert.Equal(saved, File.ReadAllText(PathOf("doc.json")));
+    }
+
+    [Fact]
     public void Load_CorruptPrimary_ReturnsDefault()
     {
         // The .bak sidecar is retired: an unreadable live file is quarantined aside (see the

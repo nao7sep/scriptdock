@@ -10,8 +10,9 @@ namespace ScriptDock.Storage;
 /// <summary>
 /// Generic JSON-backed store with atomic replace. A single file is written:
 /// <c>{file}</c> is the live document, replaced by a write-to-temp-then-rename so a
-/// crash mid-write never tears it. If the live document is missing, the type's
-/// default-constructed value is returned. If it exists but will not parse, it is
+/// crash mid-write never tears it, and is not written at all when its bytes already match the
+/// file on disk, so an unchanged save leaves the file and its backups alone. If the live
+/// document is missing, the type's default-constructed value is returned. If it exists but will not parse, it is
 /// quarantined (moved aside, bytes preserved) and the default-constructed value is
 /// returned in its place — see <see cref="TryLoadFile"/>; a rebuildable store's unreadable
 /// file is only logged, and its next save replaces it (store-recovery-conventions).
@@ -111,6 +112,9 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         {
             try
             {
+                // A write that changes nothing is skipped (content-lifecycle-conventions).
+                if (MatchesFile(bytes))
+                    return;
                 StorageRoot.EnsureExists();
                 WriteAtomically(bytes);
                 Log.Info("store: saved", new { label = _label, path = _filePath });
@@ -122,6 +126,11 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
             }
         }).ConfigureAwait(false);
     }
+
+    // Compared at write time against what is on disk, not against the last value saved, so an edit
+    // made to the file from outside is still replaced by the app's own content.
+    private bool MatchesFile(byte[] bytes) =>
+        File.Exists(_filePath) && File.ReadAllBytes(_filePath).AsSpan().SequenceEqual(bytes);
 
     private bool TryLoadFile(string filePath, out T value)
     {
