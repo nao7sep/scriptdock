@@ -99,31 +99,43 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
     private int _disposed;
 
     /// <summary>Opens (or creates) the database in <paramref name="directory"/> for the session that started
-    /// at <paramref name="sessionStartedAt"/>. Never throws: a database that cannot be opened sends every
-    /// entry to the fallback file.</summary>
+    /// at <paramref name="sessionStartedAt"/>. A database that cannot be opened sends every entry to the
+    /// fallback file; one a newer version wrote is left untouched and refused with
+    /// <see cref="NewerFormatVersionException"/>, the only exception this throws.</summary>
     public RecordStore(string directory, DateTimeOffset sessionStartedAt)
     {
         Session = TimestampConventions.IsoMillis(sessionStartedAt);
         FilePath = Path.Combine(directory, FileName);
         FallbackPath = Path.Combine(directory, "logs", TimestampConventions.FileStampMillis(sessionStartedAt) + ".log");
 
+        SqliteConnection? connection = null;
         try
         {
             Directory.CreateDirectory(directory);
-            var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+            connection = new SqliteConnection(new SqliteConnectionStringBuilder
             {
                 DataSource = FilePath,
                 Mode = SqliteOpenMode.ReadWriteCreate,
             }.ToString());
             connection.Open();
+            Execute(connection, "PRAGMA busy_timeout = 1000;");
+            // Before anything writes, the journal mode included.
+            var unmarked = SqliteFormatVersion.CheckReadable(connection, FilePath, FormatVersions.Records);
             Execute(connection, "PRAGMA journal_mode = WAL;");
             Execute(connection, "PRAGMA synchronous = NORMAL;");
-            Execute(connection, "PRAGMA busy_timeout = 1000;");
             Execute(connection, Schema);
+            if (unmarked)
+                SqliteFormatVersion.Record(connection, FormatVersions.Records);
             _connection = connection;
+        }
+        catch (NewerFormatVersionException)
+        {
+            connection?.Dispose();
+            throw;
         }
         catch (Exception ex)
         {
+            connection?.Dispose();
             Fallback(FailureLine("records: could not open the database; entries go to this file", ex), null);
         }
 

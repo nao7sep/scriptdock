@@ -52,8 +52,20 @@ sealed class Program
         }
 
         // The records hold this session's log; the logger installs its own crash hooks and
-        // console fallback. The session is this launch, by its start time.
-        var records = new RecordStore(StorageRoot.Directory, DateTimeOffset.UtcNow);
+        // console fallback. The session is this launch, by its start time. Records a newer version
+        // wrote are left as they are, and the app stops before anything can write to them.
+        RecordStore records;
+        try
+        {
+            records = new RecordStore(StorageRoot.Directory, DateTimeOffset.UtcNow);
+        }
+        catch (NewerFormatVersionException ex)
+        {
+            App.StartupFailureMessage = FailurePresentation.NewerStore(ex.FilePath);
+            Console.Error.WriteLine("ScriptDock cannot start: " + ex.Message);
+            _ = BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+            return 1;
+        }
         Log.Start(records);
         App.Records = records;
         var clean = true;

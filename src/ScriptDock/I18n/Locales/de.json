@@ -24,6 +24,7 @@
     "other": "{count} Fehler"
   },
   "error.dismiss": "Fehler schließen",
+  "failure.newerStore": "{path} wurde mit einer neueren ScriptDock-Version gespeichert und kann von dieser Version nicht gelesen werden. ScriptDock hat die Datei unverändert gelassen und weder Skripte geöffnet noch Einstellungen geändert. Verwenden Sie die neuere Version oder reparieren oder verschieben Sie die Datei und starten Sie ScriptDock erneut.",
   "failure.recoveredData": "Eine Einstellungsdatei war nicht lesbar. ScriptDock hat sie aufbewahrt und stattdessen mit den Standardwerten gestartet. Ihre Skripte sind unverändert. Der Speicherort der aufbewahrten Kopie steht im Sitzungsprotokoll.",
   "failure.rootPicker": "Die Ordnerauswahl konnte nicht geöffnet werden. Ihre Stammverzeichnisse sind unverändert; versuchen Sie erneut, ein Verzeichnis hinzuzufügen.",
   "failure.scriptStart": "Das Skript konnte nicht gestartet werden. Einzelheiten finden Sie im Sitzungsprotokoll; versuchen Sie es dann erneut.",

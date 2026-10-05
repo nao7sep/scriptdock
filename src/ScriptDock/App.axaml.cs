@@ -4,7 +4,6 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
-using ScriptDock.Models;
 using ScriptDock.Services;
 using ScriptDock.Storage;
 using ScriptDock.ViewModels;
@@ -64,12 +63,23 @@ public partial class App : Application
                 return;
             }
 
-            // If an unreadable store cannot be set aside, stop before defaults can overwrite it.
+            // Stop before defaults can overwrite a store that a newer version wrote, or an unreadable one
+            // that cannot be set aside.
             MainWindowViewModel viewModel;
             Func<RecordsWindowViewModel> recordsViewModel;
             try
             {
                 (viewModel, recordsViewModel) = CreateViewModels();
+            }
+            catch (NewerFormatVersionException ex)
+            {
+                // Already logged by the store; the file stays exactly as it is.
+                desktop.MainWindow = NoticeDialog.CreateStartupFailure(
+                    I18n.Message.Of("startup.failedTitle"),
+                    FailurePresentation.NewerStore(ex.FilePath));
+                RegisterOwnerActivation(desktop.MainWindow);
+                base.OnFrameworkInitializationCompleted();
+                return;
             }
             catch (Exception ex)
             {
@@ -160,12 +170,8 @@ public partial class App : Application
     private static (MainWindowViewModel Main, Func<RecordsWindowViewModel> Records) CreateViewModels()
     {
         var configStore = new ConfigStore();
-        // not recorded: rebuildable, view state harmless to lose.
-        var stateStore = new JsonStore<AppState>(
-            AppPaths.StateFileName, "state", recordBackups: false, rebuildable: true);
-        // not recorded: rebuildable, the last scan's result.
-        var knownPathsStore = new JsonStore<KnownPaths>(
-            AppPaths.KnownPathsFileName, "known paths", recordBackups: false, rebuildable: true);
+        var stateStore = AppStores.State();
+        var knownPathsStore = AppStores.KnownPaths();
 
         var config = configStore.Load();
         var state = stateStore.Load();

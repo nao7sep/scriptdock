@@ -188,7 +188,7 @@ public sealed class BackupStoreTests : IDisposable
     {
         // The end-to-end wire: a managed-text save through JsonStore's single atomic-write choke point
         // records the exact bytes it wrote, at the file's full absolute path, strictly after the rename.
-        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
         var docPath = Path.Combine(_root, "doc.json");
 
         store.Save(new SampleDoc { Name = "one" });
@@ -204,7 +204,7 @@ public sealed class BackupStoreTests : IDisposable
     public async Task JsonStoreSave_OptedOutStatePersistsWithoutCreatingOrAddingToHistory()
     {
         var statePath = Path.Combine(_root, AppPaths.StateFileName);
-        var stateStore = new JsonStore<AppState>(AppPaths.StateFileName, "state", recordBackups: false);
+        var stateStore = AppStores.State();
         var state = new AppState { WindowWidth = 1100, WindowHeight = 760 };
         await stateStore.SaveAsync(state);
         Assert.False(File.Exists(StoreFile));
@@ -226,7 +226,7 @@ public sealed class BackupStoreTests : IDisposable
     [Fact]
     public void JsonStoreSave_RepeatedIdenticalSaves_Dedup_ButAChangeRecordsANewVersion()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
         var docPath = Path.Combine(_root, "doc.json");
 
         store.Save(new SampleDoc { Name = "one" });

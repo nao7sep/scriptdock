@@ -24,6 +24,7 @@
     "other": "{count} errors"
   },
   "error.dismiss": "Dismiss error",
+  "failure.newerStore": "{path} was saved by a newer version of ScriptDock, and this version cannot read it. ScriptDock left the file unchanged and has not opened scripts or changed settings. Use the newer version, or repair or move the file, then start ScriptDock again.",
   "failure.recoveredData": "A settings file was unreadable, so ScriptDock preserved it and started with defaults in its place. Your scripts are untouched. Check the session log for the preserved copy’s location.",
   "failure.rootPicker": "The folder picker could not be opened. Your root directories are unchanged; try adding a directory again.",
   "failure.scriptStart": "The script could not be started. Check the session log for details, then try again.",

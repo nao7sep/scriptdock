@@ -18,6 +18,8 @@ public static class FailurePresentation
 
     public static Message RecoveredData() => Message.Of("failure.recoveredData");
 
+    public static Message NewerStore(string path) => Message.Of("failure.newerStore", ("path", path));
+
     public static Message RootPicker(Exception error) => Message.Of("failure.rootPicker");
 
     public static Message ScriptStart(Exception error) => error is UnauthorizedAccessException

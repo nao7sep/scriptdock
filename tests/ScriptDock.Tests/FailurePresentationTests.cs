@@ -28,6 +28,14 @@ public sealed class FailurePresentationTests
     }
 
     [Fact]
+    public void NewerStoreNamesTheFileByItsPath()
+    {
+        const string path = "/Users/me/.scriptdock/config.json";
+
+        Assert.StartsWith(path + " was saved by a newer version", English.Of(FailurePresentation.NewerStore(path)), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PermissionFailureUsesStructuredRecovery()
     {
         var message = FailurePresentation.ScriptStart(new UnauthorizedAccessException(Hostile));

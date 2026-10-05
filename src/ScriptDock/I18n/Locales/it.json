@@ -25,6 +25,7 @@
     "other": "{count} errori"
   },
   "error.dismiss": "Ignora errore",
+  "failure.newerStore": "{path} è stato salvato da una versione più recente di ScriptDock e questa versione non può leggerlo. ScriptDock ha lasciato il file invariato e non ha aperto script né modificato impostazioni. Usa la versione più recente, oppure ripara o sposta il file, poi avvia di nuovo ScriptDock.",
   "failure.recoveredData": "Un file di impostazioni era illeggibile, quindi ScriptDock lo ha conservato e si è avviato con i valori predefiniti al suo posto. I tuoi script non sono stati toccati. Controlla il log della sessione per sapere dove si trova la copia conservata.",
   "failure.rootPicker": "Impossibile aprire il selettore di cartelle. Le tue directory radice non sono cambiate; prova ad aggiungere di nuovo una directory.",
   "failure.scriptStart": "Impossibile avviare lo script. Controlla il log della sessione per i dettagli, poi riprova.",

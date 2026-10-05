@@ -67,8 +67,8 @@ public static class BackupStore
 
     /// <summary>
     /// Open and initialize the store once (create the table if absent, switch on WAL and a busy timeout).
-    /// Best-effort: on any failure it logs ONE warn, leaves recording disabled for the session, and never
-    /// throws. WAL keeps backup reads and writes robust while ScriptDock owns the store exclusively.
+    /// Best-effort: on any failure, a database a newer version wrote included (left untouched), it logs ONE
+    /// warn, leaves recording disabled for the session, and never throws. WAL keeps backup reads and writes robust while ScriptDock owns the store exclusively.
     /// </summary>
     private static SqliteConnection? EnsureOpen()
     {
@@ -76,6 +76,7 @@ public static class BackupStore
             return _connection;
         _initialized = true;
 
+        SqliteConnection? connection = null;
         try
         {
             var file = StoreFile;
@@ -88,7 +89,7 @@ public static class BackupStore
             // special case (data-backup conventions: "A binary store, excluded from itself").
             StorageRoot.EnsureExists();
 
-            var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+            connection = new SqliteConnection(new SqliteConnectionStringBuilder
             {
                 DataSource = file,
                 Mode = SqliteOpenMode.ReadWriteCreate,
@@ -97,10 +98,17 @@ public static class BackupStore
 
             using (var pragmas = connection.CreateCommand())
             {
-                pragmas.CommandText = "PRAGMA journal_mode = WAL;";
-                pragmas.ExecuteNonQuery();
                 // busy_timeout also covers short contention with external backup inspection tools.
                 pragmas.CommandText = "PRAGMA busy_timeout = 5000;";
+                pragmas.ExecuteNonQuery();
+            }
+
+            // Before anything writes, the journal mode included.
+            var unmarked = SqliteFormatVersion.CheckReadable(connection, file, FormatVersions.Backups);
+
+            using (var pragmas = connection.CreateCommand())
+            {
+                pragmas.CommandText = "PRAGMA journal_mode = WAL;";
                 pragmas.ExecuteNonQuery();
             }
 
@@ -110,10 +118,23 @@ public static class BackupStore
                 schema.ExecuteNonQuery();
             }
 
+            if (unmarked)
+                SqliteFormatVersion.Record(connection, FormatVersions.Backups);
+
             _connection = connection;
+        }
+        catch (NewerFormatVersionException ex)
+        {
+            // A side store: left exactly as the newer version wrote it, and this session records nothing
+            // (store-recovery-conventions).
+            connection?.Dispose();
+            Log.Warn("backup store: written by a newer version; left in place, recording disabled for this session", ex,
+                new { file = StoreFile, found = ex.Found, supported = ex.Supported });
+            _connection = null;
         }
         catch (Exception ex)
         {
+            connection?.Dispose();
             Log.Warn("backup store: could not open; recording disabled for this session", ex,
                 new { file = StoreFile });
             _connection = null;

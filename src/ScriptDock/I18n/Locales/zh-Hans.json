@@ -23,6 +23,7 @@
     "other": "{count} 个错误"
   },
   "error.dismiss": "关闭错误提示",
+  "failure.newerStore": "{path} 是由较新版本的 ScriptDock 保存的，当前版本无法读取。ScriptDock 让该文件保持原样，没有打开脚本，也没有更改设置。请改用较新版本，或者修复或移走该文件，然后重新启动 ScriptDock。",
   "failure.recoveredData": "有一个设置文件无法读取，ScriptDock 已将它保留下来，并改用默认设置启动。你的脚本未受影响。保留副本的位置请查看会话日志。",
   "failure.rootPicker": "无法打开文件夹选择器。你的根目录没有变化；请重新尝试添加目录。",
   "failure.scriptStart": "无法启动该脚本。请在会话日志中查看详情，然后重试。",

@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using ScriptDock.Services;
 
@@ -17,6 +18,12 @@ namespace ScriptDock.Storage;
 /// returned in its place — see <see cref="TryLoadFile"/>; a rebuildable store's unreadable
 /// file is only logged, and its next save replaces it (store-recovery-conventions).
 /// </summary>
+/// <remarks>
+/// The store owns its format version (store-recovery-conventions): every write puts it first in the
+/// document as <c>formatVersion</c>, and a read takes it out before the document is deserialized, so
+/// the stored type never sees it. A missing marker reads as 1. A file recording a newer version than
+/// the store's is refused with <see cref="NewerFormatVersionException"/> and left exactly in place.
+/// </remarks>
 /// <remarks>
 /// The app's single managed-text atomic-write choke point, and so the one place the
 /// data-backup hook lives: each recorded store feeds <see cref="BackupStore"/>
@@ -38,8 +45,11 @@ namespace ScriptDock.Storage;
 /// </remarks>
 public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
 {
+    private const string FormatVersionKey = "formatVersion";
+
     private readonly string _filePath;
     private readonly string _label;
+    private readonly int _formatVersion;
     private readonly bool _recordBackups;
     private readonly bool _rebuildable;
 
@@ -53,12 +63,14 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
     /// </summary>
     /// <param name="fileName">File name (no directory component), e.g. <c>"config.json"</c>.</param>
     /// <param name="label">Human-readable noun used in log messages, e.g. <c>"config"</c>.</param>
+    /// <param name="formatVersion">The format version this build writes and reads up to, from <see cref="FormatVersions"/>.</param>
     /// <param name="recordBackups">False for volatile state; durable text is recorded by default.</param>
     /// <param name="rebuildable">True for a store the app rebuilds on its own, whose unreadable file is not preserved.</param>
-    public JsonStore(string fileName, string label, bool recordBackups = true, bool rebuildable = false)
+    public JsonStore(string fileName, string label, int formatVersion, bool recordBackups = true, bool rebuildable = false)
     {
         _filePath = Path.Combine(StorageRoot.Directory, fileName);
         _label = label;
+        _formatVersion = formatVersion;
         _recordBackups = recordBackups;
         _rebuildable = rebuildable;
     }
@@ -81,7 +93,10 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         // Cheap, in-memory, CPU-only work: takes the exact snapshot the caller intends, right now,
         // before the caller can mutate the shared document any further. Only the disk write below is
         // queued off the calling thread.
-        var json = JsonSerializer.Serialize(value, JsonOptions.Default);
+        var document = JsonSerializer.SerializeToNode(value, JsonOptions.Default) as JsonObject
+            ?? throw new InvalidOperationException($"The {_label} store's document is not a JSON object.");
+        document.Insert(0, FormatVersionKey, _formatVersion);
+        var json = document.ToJsonString(JsonOptions.Default);
         // Encode once to raw bytes and write those exact bytes, so the copy the backup records is
         // byte-identical to what lands on disk (no re-encode, no BOM surprise). UTF-8 without a BOM,
         // matching File.WriteAllText's default so the on-disk shape is unchanged from before.
@@ -143,12 +158,24 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
 
         try
         {
-            var json = File.ReadAllText(filePath);
-            value = JsonSerializer.Deserialize<T>(json, JsonOptions.Default) ?? new T();
+            var document = JsonNode.Parse(File.ReadAllText(filePath));
+            var found = FormatVersionOf(document);
+            if (found > _formatVersion)
+                throw new NewerFormatVersionException(filePath, found, _formatVersion);
+            if (document is JsonObject fields)
+                fields.Remove(FormatVersionKey);
+            value = JsonSerializer.Deserialize<T>(document, JsonOptions.Default) ?? new T();
             if (value is IJsonNormalizable normalizable)
                 normalizable.NormalizeAfterLoad();
             Log.Info("store: loaded", new { label = _label, path = filePath });
             return true;
+        }
+        catch (NewerFormatVersionException ex)
+        {
+            // Intact data a newer build wrote: never quarantined, rebuilt or written to.
+            Log.Warn("store: written by a newer version, left in place", ex,
+                new { label = _label, path = filePath, found = ex.Found, supported = ex.Supported });
+            throw;
         }
         catch (Exception ex) when (_rebuildable)
         {
@@ -161,6 +188,16 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
             Quarantine(filePath, ex);
             return false;
         }
+    }
+
+    // A missing marker reads as 1; one that is not a positive integer makes the file unreadable.
+    private static int FormatVersionOf(JsonNode? document)
+    {
+        if (document is not JsonObject fields || !fields.TryGetPropertyValue(FormatVersionKey, out var marker))
+            return 1;
+        return marker is JsonValue number && number.TryGetValue<int>(out var version) && version >= 1
+            ? version
+            : throw new JsonException($"{FormatVersionKey} is not a positive integer.");
     }
 
     // Moves the unreadable file aside to its timestamped same-directory .invalid name, preserving

@@ -73,7 +73,7 @@ public sealed class JsonStoreTests : IDisposable
     [Fact]
     public void SaveThenLoad_RoundTripsValue()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
         store.Save(new SampleDoc { Name = "x", Kind = SampleKind.SecondChoice, Items = ["a", "b"] });
 
         var loaded = store.Load();
@@ -86,7 +86,7 @@ public sealed class JsonStoreTests : IDisposable
     [Fact]
     public void Load_MissingFile_ReturnsDefault()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
 
         var loaded = store.Load();
 
@@ -99,7 +99,7 @@ public sealed class JsonStoreTests : IDisposable
     [Fact]
     public void Save_UnchangedContent_LeavesTheFileUntouched()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
         store.Save(new SampleDoc { Name = "one" });
         var earlier = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         File.SetLastWriteTimeUtc(PathOf("doc.json"), earlier);
@@ -112,7 +112,7 @@ public sealed class JsonStoreTests : IDisposable
     [Fact]
     public void Save_ComparesAgainstTheFileOnDisk_SoAnOutsideEditIsReplaced()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
         store.Save(new SampleDoc { Name = "one" });
         var saved = File.ReadAllText(PathOf("doc.json"));
         File.WriteAllText(PathOf("doc.json"), saved.Replace("one", "edited"));
@@ -128,7 +128,7 @@ public sealed class JsonStoreTests : IDisposable
         // The .bak sidecar is retired: an unreadable live file is quarantined aside (see the
         // dedicated quarantine tests below) rather than a sidecar being consulted; earlier content
         // is recovered, if ever needed, from the quarantine file or backups.sqlite3.
-        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
         store.Save(new SampleDoc { Name = "one" });
         store.Save(new SampleDoc { Name = "two" });
 
@@ -148,7 +148,7 @@ public sealed class JsonStoreTests : IDisposable
         // never be left in place for a later Save to silently overwrite (the storage-path
         // conventions' forbidden path). The storage layer moves it aside instead, so it survives
         // as diagnostic debris, and defaults proceed from here.
-        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
         store.Save(new SampleDoc { Name = "one" });
         store.Save(new SampleDoc { Name = "two" });
 
@@ -173,7 +173,7 @@ public sealed class JsonStoreTests : IDisposable
     [Fact]
     public void Save_AfterQuarantine_RecreatesTheLiveFileAndLeavesTheQuarantineAlone()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
         File.WriteAllText(PathOf("doc.json"), "{ not valid json");
 
         store.Load(); // quarantines the corrupt file and returns defaults
@@ -198,7 +198,7 @@ public sealed class JsonStoreTests : IDisposable
     {
         File.WriteAllText(PathOf("doc.json"), "{ not valid json");
         QuarantineJournal.Drain();
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", recordBackups: false, rebuildable: true);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1, recordBackups: false, rebuildable: true);
 
         var loaded = store.Load();
 
@@ -211,11 +211,35 @@ public sealed class JsonStoreTests : IDisposable
         Assert.Equal("rebuilt", store.Load().Name);
     }
 
+    [Theory]
+    [InlineData("\"1\"")]
+    [InlineData("1.5")]
+    [InlineData("0")]
+    [InlineData("null")]
+    public void Load_FormatVersionThatIsNotAPositiveInteger_IsUnreadable(string marker)
+    {
+        File.WriteAllText(PathOf("doc.json"), $$"""{"formatVersion":{{marker}},"name":"x"}""");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+
+        Assert.Equal("", store.Load().Name);
+        Assert.Single(Directory.EnumerateFiles(_root, "doc-*.invalid"));
+    }
+
+    [Fact]
+    public void Load_TakesTheMarkerOutBeforeTheDocumentIsRead()
+    {
+        // A dictionary-shaped document, like config.json's sets, never sees the store's own key.
+        var store = new JsonStore<Dictionary<string, int>>("doc.json", "doc", formatVersion: 1);
+        store.Save(new Dictionary<string, int> { ["a"] = 1 });
+
+        Assert.Equal(["a"], store.Load().Keys);
+    }
+
     [Fact]
     public void Load_LiteralNullDocument_ReturnsDefault()
     {
         File.WriteAllText(PathOf("doc.json"), "null");
-        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
 
         var loaded = store.Load();
 
@@ -226,7 +250,7 @@ public sealed class JsonStoreTests : IDisposable
     [Fact]
     public void Save_FirstTime_CreatesLiveFileButNoBakSidecar()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
 
         store.Save(new SampleDoc());
 
@@ -237,7 +261,7 @@ public sealed class JsonStoreTests : IDisposable
     [Fact]
     public void Save_SecondTime_WritesNewContentAndStillNoBakSidecar()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
         store.Save(new SampleDoc { Name = "one" });
         store.Save(new SampleDoc { Name = "two" });
 
@@ -252,7 +276,7 @@ public sealed class JsonStoreTests : IDisposable
     public void Save_LeavesOnlyTheLiveFileInTheRoot()
     {
         // Locks the retirement: repeated saves produce exactly one file — no .bak, no leftover .tmp.
-        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
         store.Save(new SampleDoc { Name = "one" });
         store.Save(new SampleDoc { Name = "two" });
         store.Save(new SampleDoc { Name = "three" });
@@ -268,7 +292,7 @@ public sealed class JsonStoreTests : IDisposable
     [Fact]
     public void Save_LeavesNoTempFiles()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
         store.Save(new SampleDoc());
         store.Save(new SampleDoc { Name = "two" });
 
@@ -284,7 +308,7 @@ public sealed class JsonStoreTests : IDisposable
         // even though the shared document is mutated in place between calls and every write is queued
         // off the calling thread rather than run inline. This drives many overlapping SaveAsync calls
         // against the SAME store, back to back, with no artificial ordering help from the caller.
-        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
 
         // Queue every write back to back before any of them can possibly have landed, exactly as the
         // UI thread does when several actions fire close together (e.g. a burst of process events).
@@ -301,7 +325,7 @@ public sealed class JsonStoreTests : IDisposable
     [Fact]
     public void Save_WritesCamelCasePropertiesAndSnakeCaseEnums()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
         store.Save(new SampleDoc { Name = "x", Kind = SampleKind.SecondChoice });
 
         var json = File.ReadAllText(PathOf("doc.json"));

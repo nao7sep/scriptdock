@@ -206,7 +206,7 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
     // The app's own known-paths store over the temp home, loaded the way the composition root loads it.
     private async Task<MainWindowViewModel> ScannedWithRealKnownPaths()
     {
-        var store = new JsonStore<KnownPaths>(AppPaths.KnownPathsFileName, "known paths", recordBackups: false, rebuildable: true);
+        var store = AppStores.KnownPaths();
         var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
         var state = new AppState();
         var vm = new MainWindowViewModel(

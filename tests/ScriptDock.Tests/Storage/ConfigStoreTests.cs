@@ -178,9 +178,14 @@ public sealed class ConfigStoreTests : IDisposable
     private static MainWindowViewModel NewViewModel(ConfigStore store, AppConfig config) =>
         new(store, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeRecordStore(), config, new AppState(), new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
 
+    // The sets the file holds; the format version beside them is the store's own.
     private string[] ReadKeys()
     {
         using var document = JsonDocument.Parse(File.ReadAllText(ConfigPath));
-        return document.RootElement.EnumerateObject().Select(property => property.Name).Order().ToArray();
+        return document.RootElement.EnumerateObject()
+            .Select(property => property.Name)
+            .Where(name => name != "formatVersion")
+            .Order()
+            .ToArray();
     }
 }

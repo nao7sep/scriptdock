@@ -10,7 +10,7 @@ namespace ScriptDock.Storage;
 /// <summary>Config sets per the config-sets-conventions, persisted through the atomic managed-text store.</summary>
 public sealed class ConfigStore : IConfigStore
 {
-    private readonly JsonStore<Dictionary<string, JsonElement>> _store = new(AppPaths.ConfigFileName, "config");
+    private readonly JsonStore<Dictionary<string, JsonElement>> _store = new(AppPaths.ConfigFileName, "config", FormatVersions.Config);
 
     public AppConfig Load()
     {

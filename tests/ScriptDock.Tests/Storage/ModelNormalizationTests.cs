@@ -35,7 +35,7 @@ public sealed class ModelNormalizationTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "known-paths.json"), """{"paths":[null,"/a.command"]}""");
 
         var config = new ConfigStore().Load();
-        var knownPaths = new JsonStore<KnownPaths>("known-paths.json", "known paths").Load();
+        var knownPaths = AppStores.KnownPaths().Load();
 
         Assert.Equal("", config.UiFontFamily);
         Assert.Empty(config.RootDirs);
