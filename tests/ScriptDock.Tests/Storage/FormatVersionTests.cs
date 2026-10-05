@@ -12,8 +12,9 @@ using Xunit;
 namespace ScriptDock.Tests.Storage;
 
 /// <summary>
-/// Each store's format version (store-recovery-conventions): a missing marker reads as 1, the current
-/// version round-trips, and a newer one is refused with the file left byte-identical.
+/// Each store's format version (store-recovery-conventions): a store without its marker takes its
+/// unreadable branch, the current version round-trips, and a newer one is refused with the file left
+/// byte-identical.
 /// </summary>
 [Collection(StorageRootEnvironment.CollectionName)]
 public sealed class FormatVersionTests : IDisposable
@@ -44,11 +45,14 @@ public sealed class FormatVersionTests : IDisposable
     // config.json
 
     [Fact]
-    public void Config_MissingMarker_ReadsAsOne()
+    public void Config_MissingMarker_IsQuarantined()
     {
-        File.WriteAllText(PathOf(AppPaths.ConfigFileName), """{"hidden":["/a.command"]}""");
+        const string json = """{"hidden":["/a.command"]}""";
+        File.WriteAllText(PathOf(AppPaths.ConfigFileName), json);
 
-        Assert.Equal(["/a.command"], new ConfigStore().Load().Hidden);
+        Assert.Empty(new ConfigStore().Load().Hidden);
+        Assert.Equal(json, File.ReadAllText(Assert.Single(Directory.GetFiles(_root, "config-*.invalid"))));
+        Assert.Single(QuarantineJournal.Drain());
     }
 
     [Fact]
@@ -70,11 +74,12 @@ public sealed class FormatVersionTests : IDisposable
     // state.json
 
     [Fact]
-    public void State_MissingMarker_ReadsAsOne()
+    public void State_MissingMarker_IsRebuilt()
     {
         File.WriteAllText(PathOf(AppPaths.StateFileName), """{"windowWidth":900}""");
 
-        Assert.Equal(900, AppStores.State().Load().WindowWidth);
+        Assert.Null(AppStores.State().Load().WindowWidth);
+        Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
     }
 
     [Fact]
@@ -94,11 +99,12 @@ public sealed class FormatVersionTests : IDisposable
     // known-paths.json
 
     [Fact]
-    public void KnownPaths_MissingMarker_ReadsAsOne()
+    public void KnownPaths_MissingMarker_IsRebuilt()
     {
         File.WriteAllText(PathOf(AppPaths.KnownPathsFileName), """{"paths":["/a.command"]}""");
 
-        Assert.Equal(["/a.command"], AppStores.KnownPaths().Load().Paths);
+        Assert.Null(AppStores.KnownPaths().Load().Paths);
+        Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
     }
 
     [Fact]
@@ -118,15 +124,20 @@ public sealed class FormatVersionTests : IDisposable
     // records.sqlite3
 
     [Fact]
-    public async Task Records_MissingMarker_ReadsAsOne()
+    public async Task Records_MissingMarker_IsUnreadable()
     {
         var file = PathOf(RecordStore.FileName);
         CreateDatabase(file, userVersion: 0);
+        var before = File.ReadAllBytes(file);
 
         using (var records = new RecordStore(_root, SessionStart))
-            await records.AddDismissalAsync("/a.command");
+        {
+            await Assert.ThrowsAnyAsync<Exception>(() => records.AddDismissalAsync("/a.command"));
+            Assert.True(File.Exists(records.FallbackPath));
+        }
 
-        Assert.Equal(FormatVersions.Records, UserVersion(file));
+        SqliteConnection.ClearAllPools();
+        Assert.Equal(before, File.ReadAllBytes(file));
     }
 
     [Fact]
@@ -157,15 +168,16 @@ public sealed class FormatVersionTests : IDisposable
     // backups.sqlite3, a side store: a newer one disables recording for the session instead of stopping the app.
 
     [Fact]
-    public void Backups_MissingMarker_ReadsAsOne()
+    public void Backups_MissingMarker_IsUnreadable()
     {
         CreateDatabase(BackupStore.StoreFile, userVersion: 0);
+        var before = File.ReadAllBytes(BackupStore.StoreFile);
 
-        BackupStore.Record(PathOf("doc.json"), [1, 2, 3]);
+        Assert.Null(Record.Exception(() => BackupStore.Record(PathOf("doc.json"), [1, 2, 3])));
+
         BackupStore.Close();
-
-        Assert.Equal(1L, Scalar(BackupStore.StoreFile, "SELECT COUNT(*) FROM backups"));
-        Assert.Equal(FormatVersions.Backups, UserVersion(BackupStore.StoreFile));
+        SqliteConnection.ClearAllPools();
+        Assert.Equal(before, File.ReadAllBytes(BackupStore.StoreFile));
     }
 
     [Fact]

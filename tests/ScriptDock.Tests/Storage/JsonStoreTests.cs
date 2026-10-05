@@ -235,16 +235,17 @@ public sealed class JsonStoreTests : IDisposable
         Assert.Equal(["a"], store.Load().Keys);
     }
 
-    [Fact]
-    public void Load_LiteralNullDocument_ReturnsDefault()
+    [Theory]
+    [InlineData("""{"name":"x"}""")]
+    [InlineData("null")]
+    [InlineData("[]")]
+    public void Load_DocumentWithoutTheMarker_IsUnreadable(string json)
     {
-        File.WriteAllText(PathOf("doc.json"), "null");
+        File.WriteAllText(PathOf("doc.json"), json);
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
 
-        var loaded = store.Load();
-
-        Assert.Equal("", loaded.Name);
-        Assert.Equal(SampleKind.FirstChoice, loaded.Kind);
+        Assert.Equal("", store.Load().Name);
+        Assert.Equal(json, File.ReadAllText(Assert.Single(Directory.EnumerateFiles(_root, "doc-*.invalid"))));
     }
 
     [Fact]

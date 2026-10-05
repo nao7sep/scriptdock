@@ -104,7 +104,7 @@ public static class BackupStore
             }
 
             // Before anything writes, the journal mode included.
-            var unmarked = SqliteFormatVersion.CheckReadable(connection, file, FormatVersions.Backups);
+            SqliteFormatVersion.Check(connection, file, FormatVersions.Backups);
 
             using (var pragmas = connection.CreateCommand())
             {
@@ -117,9 +117,6 @@ public static class BackupStore
                 schema.CommandText = Schema;
                 schema.ExecuteNonQuery();
             }
-
-            if (unmarked)
-                SqliteFormatVersion.Record(connection, FormatVersions.Backups);
 
             _connection = connection;
         }

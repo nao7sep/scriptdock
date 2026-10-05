@@ -120,12 +120,10 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
             connection.Open();
             Execute(connection, "PRAGMA busy_timeout = 1000;");
             // Before anything writes, the journal mode included.
-            var unmarked = SqliteFormatVersion.CheckReadable(connection, FilePath, FormatVersions.Records);
+            SqliteFormatVersion.Check(connection, FilePath, FormatVersions.Records);
             Execute(connection, "PRAGMA journal_mode = WAL;");
             Execute(connection, "PRAGMA synchronous = NORMAL;");
             Execute(connection, Schema);
-            if (unmarked)
-                SqliteFormatVersion.Record(connection, FormatVersions.Records);
             _connection = connection;
         }
         catch (NewerFormatVersionException)

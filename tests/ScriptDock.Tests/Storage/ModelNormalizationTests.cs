@@ -31,8 +31,8 @@ public sealed class ModelNormalizationTests : IDisposable
     public void Load_NormalizesNestedNullCollectionsAndReferences()
     {
         File.WriteAllText(Path.Combine(_root, "config.json"),
-            """{"uiFontFamily":null,"rootDirs":[null,"/ok"],"extensions":null,"ignorePatterns":null,"hidden":null}""");
-        File.WriteAllText(Path.Combine(_root, "known-paths.json"), """{"paths":[null,"/a.command"]}""");
+            """{"formatVersion":1,"uiFontFamily":null,"rootDirs":[null,"/ok"],"extensions":null,"ignorePatterns":null,"hidden":null}""");
+        File.WriteAllText(Path.Combine(_root, "known-paths.json"), """{"formatVersion":1,"paths":[null,"/a.command"]}""");
 
         var config = new ConfigStore().Load();
         var knownPaths = AppStores.KnownPaths().Load();
@@ -48,7 +48,7 @@ public sealed class ModelNormalizationTests : IDisposable
     [Fact]
     public void Load_PreservesAnExplicitBundledFontName()
     {
-        File.WriteAllText(Path.Combine(_root, "config.json"), """{"uiFontFamily":"Inter"}""");
+        File.WriteAllText(Path.Combine(_root, "config.json"), """{"formatVersion":1,"uiFontFamily":"Inter"}""");
 
         var config = new ConfigStore().Load();
 
@@ -58,7 +58,7 @@ public sealed class ModelNormalizationTests : IDisposable
     [Fact]
     public void Load_KeepsAStoredValueDifferentFromTheDefault()
     {
-        File.WriteAllText(Path.Combine(_root, "config.json"), """{"uiFontFamily":"Helvetica Neue"}""");
+        File.WriteAllText(Path.Combine(_root, "config.json"), """{"formatVersion":1,"uiFontFamily":"Helvetica Neue"}""");
 
         var config = new ConfigStore().Load();
 

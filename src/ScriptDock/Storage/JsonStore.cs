@@ -21,8 +21,8 @@ namespace ScriptDock.Storage;
 /// <remarks>
 /// The store owns its format version (store-recovery-conventions): every write puts it first in the
 /// document as <c>formatVersion</c>, and a read takes it out before the document is deserialized, so
-/// the stored type never sees it. A missing marker reads as 1. A file recording a newer version than
-/// the store's is refused with <see cref="NewerFormatVersionException"/> and left exactly in place.
+/// the stored type never sees it. A file without it is unreadable. A file recording a newer version
+/// than the store's is refused with <see cref="NewerFormatVersionException"/> and left exactly in place.
 /// </remarks>
 /// <remarks>
 /// The app's single managed-text atomic-write choke point, and so the one place the
@@ -158,13 +158,13 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
 
         try
         {
-            var document = JsonNode.Parse(File.ReadAllText(filePath));
+            var document = JsonNode.Parse(File.ReadAllText(filePath)) as JsonObject
+                ?? throw new JsonException("The document is not a JSON object.");
             var found = FormatVersionOf(document);
             if (found > _formatVersion)
                 throw new NewerFormatVersionException(filePath, found, _formatVersion);
-            if (document is JsonObject fields)
-                fields.Remove(FormatVersionKey);
-            value = JsonSerializer.Deserialize<T>(document, JsonOptions.Default) ?? new T();
+            document.Remove(FormatVersionKey);
+            value = document.Deserialize<T>(JsonOptions.Default)!;
             if (value is IJsonNormalizable normalizable)
                 normalizable.NormalizeAfterLoad();
             Log.Info("store: loaded", new { label = _label, path = filePath });
@@ -190,15 +190,11 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         }
     }
 
-    // A missing marker reads as 1; one that is not a positive integer makes the file unreadable.
-    private static int FormatVersionOf(JsonNode? document)
-    {
-        if (document is not JsonObject fields || !fields.TryGetPropertyValue(FormatVersionKey, out var marker))
-            return 1;
-        return marker is JsonValue number && number.TryGetValue<int>(out var version) && version >= 1
+    // A marker that is missing or not a positive integer makes the file unreadable.
+    private static int FormatVersionOf(JsonObject document) =>
+        document[FormatVersionKey] is JsonValue marker && marker.TryGetValue<int>(out var version) && version >= 1
             ? version
-            : throw new JsonException($"{FormatVersionKey} is not a positive integer.");
-    }
+            : throw new JsonException($"{FormatVersionKey} is missing or not a positive integer.");
 
     // Moves the unreadable file aside to its timestamped same-directory .invalid name, preserving
     // the bytes, and logs one warning naming both paths. The move either lands or its failure

@@ -270,7 +270,7 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
     {
         Touch("a.command");
         Touch("b.command");
-        File.WriteAllText(KnownPathsFile, """{"paths":[]}""");
+        File.WriteAllText(KnownPathsFile, """{"formatVersion":1,"paths":[]}""");
 
         var vm = await ScannedWithRealKnownPaths();
 

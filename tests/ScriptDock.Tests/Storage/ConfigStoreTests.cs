@@ -77,7 +77,7 @@ public sealed class ConfigStoreTests : IDisposable
     public async Task Dialog_WritesEverySetThatDiffersAndDropsUnknownKeys()
     {
         // Retired process settings are among the keys a save drops.
-        File.WriteAllText(ConfigPath, """{"hidden":["/hidden"],"extensions":[],"version":1,"unknown":true,"killProcessesOnClose":true,"recaptureProcessesOnLaunch":false}""");
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"hidden":["/hidden"],"extensions":[],"version":1,"unknown":true,"killProcessesOnClose":true,"recaptureProcessesOnLaunch":false}""");
         var store = new ConfigStore();
         var config = store.Load();
         var vm = NewViewModel(store, config);
@@ -91,7 +91,7 @@ public sealed class ConfigStoreTests : IDisposable
     [Fact]
     public async Task Reset_RemovesTheResetSets()
     {
-        File.WriteAllText(ConfigPath, """{"extensions":[".sh"],"ignorePatterns":["/custom/"]}""");
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[".sh"],"ignorePatterns":["/custom/"]}""");
         var store = new ConfigStore();
         var config = store.Load();
         var vm = NewViewModel(store, config);
@@ -108,7 +108,7 @@ public sealed class ConfigStoreTests : IDisposable
     [Fact]
     public async Task CopiesEqualToTheirBuiltInAfterCleanup_LoseTheirKeysAtTheNextSave()
     {
-        File.WriteAllText(ConfigPath, $$"""{"extensions":[" {{ConfigDefaults.DefaultExtension}}\n"],"uiFontFamily":"  ","theme":"system"}""");
+        File.WriteAllText(ConfigPath, $$"""{"formatVersion":1,"extensions":[" {{ConfigDefaults.DefaultExtension}}\n"],"uiFontFamily":"  ","theme":"system"}""");
         var store = new ConfigStore();
         var vm = NewViewModel(store, store.Load());
         await vm.ToggleHiddenCommand.ExecuteAsync(new ScriptItem("/scripts/run.command"));
@@ -118,7 +118,7 @@ public sealed class ConfigStoreTests : IDisposable
     [Fact]
     public async Task InvalidSet_LosesItsKeyAtTheNextSave()
     {
-        File.WriteAllText(ConfigPath, """{"extensions":[null,".sh"],"theme":"future","hidden":["/ok"]}""");
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[null,".sh"],"theme":"future","hidden":["/ok"]}""");
         var store = new ConfigStore();
         var config = store.Load();
         await store.SaveAsync(config);
@@ -128,7 +128,7 @@ public sealed class ConfigStoreTests : IDisposable
     [Fact]
     public void InvalidSet_UsesBuiltInWithoutQuarantiningOrChangingOtherSets()
     {
-        const string json = """{"extensions":[null,".sh"],"theme":"future","language":"unknown","hidden":["/ok"]}""";
+        const string json = """{"formatVersion":1,"extensions":[null,".sh"],"theme":"future","language":"unknown","hidden":["/ok"]}""";
         File.WriteAllText(ConfigPath, json);
         var store = new ConfigStore();
         var loaded = store.Load();

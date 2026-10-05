@@ -1,4 +1,4 @@
-using System;
+using System.IO;
 using Microsoft.Data.Sqlite;
 
 namespace ScriptDock.Storage;
@@ -9,25 +9,29 @@ namespace ScriptDock.Storage;
 internal static class SqliteFormatVersion
 {
     /// <summary>
-    /// Refuses a database newer than <paramref name="supported"/> before anything is written to it, and
-    /// returns whether it records no version yet. SQLite's 0, a database that never set one, reads as 1.
+    /// Runs before anything else writes to the database: stamps a brand-new, empty one with
+    /// <paramref name="current"/>, and refuses one that has tables but no version (unreadable) or a
+    /// version newer than <paramref name="current"/>.
     /// </summary>
-    public static bool CheckReadable(SqliteConnection connection, string filePath, int supported)
+    public static void Check(SqliteConnection connection, string filePath, int current)
     {
-        using var command = connection.CreateCommand();
-        command.CommandText = "PRAGMA user_version;";
-        var recorded = Convert.ToInt32(command.ExecuteScalar());
-        var found = recorded == 0 ? 1 : recorded;
-        if (found > supported)
-            throw new NewerFormatVersionException(filePath, found, supported);
-        return recorded == 0;
+        var found = Scalar(connection, "PRAGMA user_version;");
+        if (found > current)
+            throw new NewerFormatVersionException(filePath, (int)found, current);
+        if (found != 0)
+            return;
+        if (Scalar(connection, "SELECT COUNT(*) FROM sqlite_master;") != 0)
+            throw new InvalidDataException($"{filePath} records no format version.");
+
+        using var stamp = connection.CreateCommand();
+        stamp.CommandText = $"PRAGMA user_version = {current};";
+        stamp.ExecuteNonQuery();
     }
 
-    /// <summary>Records <paramref name="version"/> in a database that has none yet.</summary>
-    public static void Record(SqliteConnection connection, int version)
+    private static long Scalar(SqliteConnection connection, string sql)
     {
         using var command = connection.CreateCommand();
-        command.CommandText = $"PRAGMA user_version = {version};";
-        command.ExecuteNonQuery();
+        command.CommandText = sql;
+        return (long)command.ExecuteScalar()!;
     }
 }
