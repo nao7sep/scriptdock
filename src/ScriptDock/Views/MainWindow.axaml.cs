@@ -303,18 +303,9 @@ public partial class MainWindow : Window
             if (vm is null)
                 return;
 
-            if (!_shutdownSaved && SessionEnd.Is(e.CloseReason))
-            {
-                // The system waits for this close to answer, so the quit's work runs here to its bounds,
-                // asks nothing, and the window closes whatever it did. A quit the user started and that is
-                // still running ends with it.
-                _shutdownSaved = true;
-                RunUntilDone(EndSessionAsync(vm));
-                return;
-            }
-
             var action = MainWindowCloseGuard.DecideAction(
                 e.CloseReason,
+                SessionEnd.Is(e.CloseReason),
                 _quitConfirmed,
                 vm.ShouldConfirmQuit(),
                 _shutdownSaved,
@@ -323,6 +314,14 @@ public partial class MainWindow : Window
             switch (action)
             {
                 case MainWindowCloseAction.ProceedToRealClose:
+                    return;
+
+                case MainWindowCloseAction.EndSession:
+                    // The system waits for this close to answer, so the quit's work runs here to its
+                    // bounds, and the window closes whatever it did. A quit the user started and that is
+                    // still running ends with it.
+                    _shutdownSaved = true;
+                    RunUntilDone(EndSessionAsync(vm));
                     return;
 
                 case MainWindowCloseAction.Drop:

@@ -7,10 +7,10 @@ namespace ScriptDock.Tests.Views;
 public sealed class MainWindowCloseGuardTests
 {
     [Fact]
-    public void OnlyDirectWindowCloseMayPrompt()
+    public void OnlyAQuitTheUserStartedMayPrompt()
     {
         Assert.True(MainWindowCloseGuard.ShouldConfirmQuit(WindowCloseReason.WindowClosing, true));
-        Assert.False(MainWindowCloseGuard.ShouldConfirmQuit(WindowCloseReason.ApplicationShutdown, true));
+        Assert.True(MainWindowCloseGuard.ShouldConfirmQuit(WindowCloseReason.ApplicationShutdown, true));
         Assert.False(MainWindowCloseGuard.ShouldConfirmQuit(WindowCloseReason.OSShutdown, true));
         Assert.False(MainWindowCloseGuard.ShouldConfirmQuit(WindowCloseReason.OwnerWindowClosing, true));
         Assert.False(MainWindowCloseGuard.ShouldConfirmQuit(WindowCloseReason.WindowClosing, false));
@@ -21,6 +21,7 @@ public sealed class MainWindowCloseGuardTests
     {
         var action = MainWindowCloseGuard.DecideAction(
             WindowCloseReason.WindowClosing,
+            sessionEnd: false,
             quitConfirmed: false,
             hasRunningWorkToKill: true,
             shutdownSaved: false,
@@ -34,6 +35,7 @@ public sealed class MainWindowCloseGuardTests
     {
         var action = MainWindowCloseGuard.DecideAction(
             WindowCloseReason.WindowClosing,
+            sessionEnd: false,
             quitConfirmed: false,
             hasRunningWorkToKill: false,
             shutdownSaved: false,
@@ -50,6 +52,7 @@ public sealed class MainWindowCloseGuardTests
         // running must not start a second, overlapping save-and-shutdown pass.
         var action = MainWindowCloseGuard.DecideAction(
             WindowCloseReason.WindowClosing,
+            sessionEnd: false,
             quitConfirmed: true,
             hasRunningWorkToKill: false,
             shutdownSaved: false,
@@ -63,6 +66,7 @@ public sealed class MainWindowCloseGuardTests
     {
         var action = MainWindowCloseGuard.DecideAction(
             WindowCloseReason.WindowClosing,
+            sessionEnd: false,
             quitConfirmed: true,
             hasRunningWorkToKill: false,
             shutdownSaved: true,
@@ -80,6 +84,7 @@ public sealed class MainWindowCloseGuardTests
         // kill pass, leaving the newly started process uncaptured and running after the app exits.
         var action = MainWindowCloseGuard.DecideAction(
             WindowCloseReason.WindowClosing,
+            sessionEnd: false,
             quitConfirmed: false,
             hasRunningWorkToKill: true,
             shutdownSaved: false,
@@ -89,16 +94,37 @@ public sealed class MainWindowCloseGuardTests
     }
 
     [Fact]
-    public void OwnerAndAppShutdownNeverPromptEvenWithRunningWork()
+    public void DockQuitWithRunningWorkPromptsBeforeSaving()
     {
-        Assert.Equal(
-            MainWindowCloseAction.RunShutdownSavePass,
-            MainWindowCloseGuard.DecideAction(
-                WindowCloseReason.ApplicationShutdown,
-                quitConfirmed: false,
-                hasRunningWorkToKill: true,
-                shutdownSaved: false,
-                shutdownSaveInProgress: false));
+        // On macOS the Dock's Quit arrives as an app shutdown with no session-end reason on its quit event.
+        var action = MainWindowCloseGuard.DecideAction(
+            WindowCloseReason.ApplicationShutdown,
+            sessionEnd: false,
+            quitConfirmed: false,
+            hasRunningWorkToKill: true,
+            shutdownSaved: false,
+            shutdownSaveInProgress: false);
+
+        Assert.Equal(MainWindowCloseAction.PromptToConfirmQuit, action);
+    }
+
+    [Theory]
+    [InlineData(WindowCloseReason.ApplicationShutdown, false, false)] // macOS logout, restart or shutdown; Windows logoff
+    [InlineData(WindowCloseReason.OSShutdown, false, false)] // Windows restart or shutdown
+    [InlineData(WindowCloseReason.ApplicationShutdown, false, true)] // a quit the user started is still running
+    [InlineData(WindowCloseReason.ApplicationShutdown, true, true)] // a confirmed quit is still running
+    public void SessionEndNeverPromptsEvenWithRunningWork(
+        WindowCloseReason reason, bool quitConfirmed, bool shutdownSaveInProgress)
+    {
+        var action = MainWindowCloseGuard.DecideAction(
+            reason,
+            sessionEnd: true,
+            quitConfirmed,
+            hasRunningWorkToKill: true,
+            shutdownSaved: false,
+            shutdownSaveInProgress);
+
+        Assert.Equal(MainWindowCloseAction.EndSession, action);
     }
 
     [Fact]
