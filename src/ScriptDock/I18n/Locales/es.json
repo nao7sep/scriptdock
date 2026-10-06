@@ -68,8 +68,6 @@
   "process.historyFailed": "El script se inició, pero no se pudo guardar su entrada en Recientes.",
   "process.readOutputFailed": "No se pudo actualizar la salida de este script.",
   "process.restartFailed": "El script existente no se detuvo; no se inició ningún reemplazo.",
-  "process.runFailed": "No se pudo iniciar el script. Revisa el registro e inténtalo de nuevo.",
-  "process.runFailedSeeOutput": "No se pudo iniciar el script. Revisa su salida e inténtalo de nuevo.",
   "process.sendInputFailed": "No se pudo enviar la entrada. Inténtalo de nuevo mientras el script esté en ejecución.",
   "process.stopFailed": "El script no se detuvo; ScriptDock lo sigue supervisando.",
   "quit.confirm": "Salir",

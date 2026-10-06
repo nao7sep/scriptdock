@@ -22,7 +22,6 @@ public sealed class ScriptProcess : IDisposable
     private readonly object _lifecycleGate = new();
     private TerminationDisposition _terminationDisposition;
     private bool _exitObserved;
-    private I18n.Message? _failureMessage;
     private readonly SemaphoreSlim _inputGate = new(1, 1);
     private readonly CancellationTokenSource _inputLifetime = new();
     private static readonly TimeSpan InputTimeout = TimeSpan.FromSeconds(2);
@@ -86,11 +85,6 @@ public sealed class ScriptProcess : IDisposable
     /// </summary>
     public IReadOnlyList<string> ReadOutput()
     {
-        // ScriptDock's own line, not the script's: rendered here, in the language showing now, while
-        // everything else in this console is the script's output read back verbatim.
-        if (_failureMessage is not null)
-            return [I18n.Localizer.Of(_failureMessage)];
-
         if (LogFilePath is null)
             return Array.Empty<string>();
 
@@ -243,23 +237,6 @@ public sealed class ScriptProcess : IDisposable
             Finish(_terminationDisposition == TerminationDisposition.Confirmed
                 ? RunState.Terminated
                 : RunState.Exited);
-        }
-
-        AnnounceEnd();
-    }
-
-    internal void Fail(I18n.Message message)
-    {
-        // Honour the once-only finalisation latch, exactly as Complete does: a run is finalised
-        // once, so a Fail after the process has already Exited (or vice versa) cannot overwrite the
-        // real terminal state or re-raise StateChanged.
-        lock (_lifecycleGate)
-        {
-            if (_finalized == 1)
-                return;
-            _finalized = 1;
-            _failureMessage = message;
-            State = RunState.Failed;
         }
 
         AnnounceEnd();

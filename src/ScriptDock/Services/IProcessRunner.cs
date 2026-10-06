@@ -23,8 +23,12 @@ public interface IProcessRunner
     /// <summary>The current set of runs ScriptDock owns (running and finished-but-not-dismissed).</summary>
     IReadOnlyList<ScriptProcess> Active { get; }
 
+    /// <summary>Launches a script. Throws when it could not be started; no run then exists.</summary>
     ScriptProcess Start(string scriptPath);
     Task<bool> TerminateAsync(ScriptProcess handle);
+
+    /// <summary>Stops and dismisses a run, then starts its script afresh: null when the old run did not
+    /// stop, and throws as <see cref="Start"/> does when the replacement could not be started.</summary>
     Task<ScriptProcess?> RestartAsync(ScriptProcess handle);
     void Dismiss(ScriptProcess handle);
     Task StopAllAsync();

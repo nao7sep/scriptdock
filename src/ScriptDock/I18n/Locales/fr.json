@@ -68,8 +68,6 @@
   "process.historyFailed": "Le script a démarré, mais son entrée dans Récents n’a pas pu être enregistrée.",
   "process.readOutputFailed": "Impossible d’actualiser la sortie de ce script.",
   "process.restartFailed": "Le script déjà en cours ne s’est pas arrêté\u00a0; aucun remplacement n’a été lancé.",
-  "process.runFailed": "Le script n’a pas pu être démarré. Consultez le journal, puis réessayez.",
-  "process.runFailedSeeOutput": "Le script n’a pas pu être démarré. Consultez sa sortie, puis réessayez.",
   "process.sendInputFailed": "Impossible d’envoyer la saisie. Réessayez pendant que le script est en cours d’exécution.",
   "process.stopFailed": "Le script ne s’est pas arrêté\u00a0; ScriptDock continue de le suivre.",
   "quit.confirm": "Quitter",

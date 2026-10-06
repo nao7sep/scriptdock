@@ -75,7 +75,6 @@ public sealed class RecentEntry
         { State: RunState.Exited, ExitCode: 0 or null } => PillKind.ExitedOk,
         { State: RunState.Exited } => PillKind.ExitedError,
         { State: RunState.Terminated } => PillKind.Stopped,
-        { State: RunState.Failed } => PillKind.Failed,
         _ => PillKind.Unknown,
     };
 

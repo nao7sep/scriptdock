@@ -499,7 +499,7 @@ public sealed class MainWindowViewModelTests
         Assert.Empty(vm.Recent);
         Assert.Empty(records.Runs);
         Assert.Null(vm.SelectedRecentEntry);
-        Assert.Equal(English.Of("process.runFailed"), vm.OperationalError);
+        Assert.Equal(English.Of("failure.scriptStart"), vm.OperationalError);
 
         // A later launch that does start enters Recent and clears that error.
         runner.StartException = null;
@@ -524,7 +524,7 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(lastRan, entry.LastRanAt);
         Assert.Single(records.Runs);
         Assert.Same(entry, vm.SelectedRecentEntry);
-        Assert.Equal(English.Of("process.runFailed"), vm.RecentActionError);
+        Assert.Equal(English.Of("failure.scriptStart"), vm.RecentActionError);
         Assert.False(vm.HasOperationalError);
     }
 

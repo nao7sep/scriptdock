@@ -67,8 +67,6 @@
   "process.historyFailed": "Das Skript wurde gestartet, aber sein Eintrag unter „Verlauf“ konnte nicht gespeichert werden.",
   "process.readOutputFailed": "Die Ausgabe dieses Skripts konnte nicht aktualisiert werden.",
   "process.restartFailed": "Das laufende Skript wurde nicht gestoppt; es wurde kein Ersatz gestartet.",
-  "process.runFailed": "Das Skript konnte nicht gestartet werden. Prüfen Sie das Protokoll und versuchen Sie es erneut.",
-  "process.runFailedSeeOutput": "Das Skript konnte nicht gestartet werden. Prüfen Sie seine Ausgabe und versuchen Sie es erneut.",
   "process.sendInputFailed": "Die Eingabe konnte nicht gesendet werden. Versuchen Sie es erneut, während das Skript läuft.",
   "process.stopFailed": "Das Skript wurde nicht gestoppt; ScriptDock verfolgt es weiterhin.",
   "quit.confirm": "Beenden",

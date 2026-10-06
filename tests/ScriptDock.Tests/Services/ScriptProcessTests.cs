@@ -1,64 +1,28 @@
 using ScriptDock.Models;
 using ScriptDock.Services;
-using ScriptDock.Tests.I18n;
 using Xunit;
 
 namespace ScriptDock.Tests.Services;
 
 /// <summary>
 /// Finalisation invariants for a run that never owns a real OS process (so these stay pure): the
-/// once-only latch means whichever of Complete/Fail runs first wins, and the loser cannot overwrite
-/// the terminal state or re-raise StateChanged.
+/// once-only latch means a run is finalised once and cannot re-raise StateChanged.
 /// </summary>
 public sealed class ScriptProcessTests
 {
     private static ScriptProcess New() => new(1, "/x/run.command", default);
 
     [Fact]
-    public void Fail_SetsFailedState_AndSurfacesMessageAsOutput()
-    {
-        var process = New();
-
-        process.Fail(ScriptDock.I18n.Message.Of("failure.scriptStart"));
-
-        Assert.Equal(RunState.Failed, process.State);
-        Assert.Equal([English.Of("failure.scriptStart")], process.ReadOutput());
-    }
-
-    [Fact]
-    public void Complete_ThenFail_KeepsExited_OnceOnly()
-    {
-        var process = New();
-
-        process.Complete();           // no live process → Exited
-        process.Fail(ScriptDock.I18n.Message.Of("failure.scriptStart")); // must be ignored: already finalised
-
-        Assert.Equal(RunState.Exited, process.State);
-        Assert.Empty(process.ReadOutput()); // no failure message leaked in
-    }
-
-    [Fact]
-    public void Fail_ThenComplete_KeepsFailed_OnceOnly()
-    {
-        var process = New();
-
-        process.Fail(ScriptDock.I18n.Message.Of("failure.scriptStartPermission"));
-        process.Complete(); // must be ignored
-
-        Assert.Equal(RunState.Failed, process.State);
-        Assert.Equal([English.Of("failure.scriptStartPermission")], process.ReadOutput());
-    }
-
-    [Fact]
-    public void StateChanged_FiresExactlyOnce_AcrossCompleteAndFail()
+    public void StateChanged_FiresExactlyOnce_AcrossRepeatedCompletes()
     {
         var process = New();
         var raised = 0;
         process.StateChanged += (_, _) => raised++;
 
-        process.Complete();
-        process.Fail(ScriptDock.I18n.Message.Of("failure.scriptStart"));
+        process.Complete(); // no live process → Exited
+        process.Complete(); // must be ignored: already finalised
 
+        Assert.Equal(RunState.Exited, process.State);
         Assert.Equal(1, raised);
     }
 

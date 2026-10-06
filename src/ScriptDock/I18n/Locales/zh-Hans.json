@@ -66,8 +66,6 @@
   "process.historyFailed": "脚本已启动，但无法保存它在“最近运行”中的记录。",
   "process.readOutputFailed": "无法刷新该脚本的输出。",
   "process.restartFailed": "原有脚本没有停止，因此没有启动新的脚本。",
-  "process.runFailed": "无法启动该脚本。请查看日志后重试。",
-  "process.runFailedSeeOutput": "无法启动该脚本。请查看它的输出后重试。",
   "process.sendInputFailed": "无法发送输入。请在脚本运行时重试。",
   "process.stopFailed": "该脚本没有停止，ScriptDock 仍在跟踪它。",
   "quit.confirm": "退出",

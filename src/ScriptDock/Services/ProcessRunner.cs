@@ -108,8 +108,10 @@ public sealed class ProcessRunner : IProcessRunner
         }
         catch (Exception ex)
         {
-            handle.Fail(FailurePresentation.ScriptStart(ex));
+            // Nothing started, so there is no run to own, record or end: the caller shows the failure.
             Log.Error("run: start failed", ex, new { script = scriptPath });
+            handle.Dispose();
+            throw;
         }
 
         lock (_gate)

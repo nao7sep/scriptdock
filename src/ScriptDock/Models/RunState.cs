@@ -11,7 +11,4 @@ public enum RunState
 
     /// <summary>ScriptDock terminated the process (a stop or a restart).</summary>
     Terminated,
-
-    /// <summary>The process could not be started.</summary>
-    Failed,
 }

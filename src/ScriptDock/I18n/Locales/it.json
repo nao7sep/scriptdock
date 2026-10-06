@@ -68,8 +68,6 @@
   "process.historyFailed": "Lo script è stato avviato, ma non è stato possibile salvarne la voce in Recenti.",
   "process.readOutputFailed": "Impossibile aggiornare l’output di questo script.",
   "process.restartFailed": "Lo script esistente non si è arrestato; non è stato avviato nulla al suo posto.",
-  "process.runFailed": "Impossibile avviare lo script. Controlla il log e riprova.",
-  "process.runFailedSeeOutput": "Impossibile avviare lo script. Controllane l’output e riprova.",
   "process.sendInputFailed": "Impossibile inviare l’input. Riprova mentre lo script è in esecuzione.",
   "process.stopFailed": "Lo script non si è arrestato; ScriptDock continua a tenerne traccia.",
   "quit.confirm": "Esci",

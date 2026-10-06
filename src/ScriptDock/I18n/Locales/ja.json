@@ -66,8 +66,6 @@
   "process.historyFailed": "スクリプトは開始しましたが、「最近の実行」の項目を保存できませんでした。",
   "process.readOutputFailed": "このスクリプトの出力を更新できませんでした。",
   "process.restartFailed": "実行中のスクリプトが停止しませんでした。新しいプロセスは起動していません。",
-  "process.runFailed": "スクリプトを開始できませんでした。ログを確認して、もう一度お試しください。",
-  "process.runFailedSeeOutput": "スクリプトを開始できませんでした。出力を確認して、もう一度お試しください。",
   "process.sendInputFailed": "入力を送信できませんでした。スクリプトの実行中にもう一度お試しください。",
   "process.stopFailed": "スクリプトが停止しませんでした。ScriptDock は引き続き追跡しています。",
   "quit.confirm": "終了",

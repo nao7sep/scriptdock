@@ -703,11 +703,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             if (Recent.Any(entry => PathIdentity.Same(entry.Path, path)))
             {
                 SelectRecentPath(path);
-                ReportProcessActionError(path, "run", Message.Of("process.runFailed"));
+                ReportProcessActionError(path, "run", FailurePresentation.ScriptStart(ex));
             }
             else
             {
-                ReportOperationalError(RunFailedKey(path), Message.Of("process.runFailed"));
+                ReportOperationalError(RunFailedKey(path), FailurePresentation.ScriptStart(ex));
             }
             return;
         }
@@ -739,10 +739,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         // Failures tied to the prior process no longer have a surviving consequence on this row.
         ResolveReplacedProcessActionErrors(path);
 
-        if (started.State == RunState.Failed)
-            ReportProcessActionError(path, "run", Message.Of("process.runFailedSeeOutput"));
-        else
-            ResolveProcessActionError(path, "run");
+        ResolveProcessActionError(path, "run");
 
         // A freshly started/restarted run owns a stdin pipe, so move keyboard focus to the console
         // input for immediate typing. Gated on CanSendInput so a non-input run never steals focus.
