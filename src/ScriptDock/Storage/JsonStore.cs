@@ -218,7 +218,7 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         {
             Log.Warn("store: file unreadable, could not quarantine", moveEx,
                 new { label = _label, path = filePath, loadError = loadException.Message });
-            throw;
+            throw new QuarantineFailedException(filePath, moveEx);
         }
     }
 

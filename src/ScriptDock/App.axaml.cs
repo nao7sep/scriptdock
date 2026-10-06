@@ -81,12 +81,12 @@ public partial class App : Application
                 base.OnFrameworkInitializationCompleted();
                 return;
             }
-            catch (Exception ex)
+            catch (QuarantineFailedException ex)
             {
                 Log.Error("startup: a settings file could not be read or set aside", ex);
                 desktop.MainWindow = NoticeDialog.CreateStartupFailure(
                     I18n.Message.Of("startup.failedTitle"),
-                    FailurePresentation.StartupData());
+                    FailurePresentation.StartupData(ex.FilePath));
                 RegisterOwnerActivation(desktop.MainWindow);
                 base.OnFrameworkInitializationCompleted();
                 return;
@@ -109,13 +109,12 @@ public partial class App : Application
             // Report material recovery once the main window can own the dialog.
             mainWindow.Opened += async (_, _) =>
             {
-                var quarantined = Storage.QuarantineJournal.Drain();
-                if (quarantined.Count > 0)
+                foreach (var quarantined in Storage.QuarantineJournal.Drain())
                 {
                     await Views.NoticeDialog.ShowAsync(
                         mainWindow,
                         I18n.Message.Of("startup.settingsResetTitle"),
-                        FailurePresentation.RecoveredData());
+                        FailurePresentation.RecoveredData(quarantined));
                 }
             };
         }

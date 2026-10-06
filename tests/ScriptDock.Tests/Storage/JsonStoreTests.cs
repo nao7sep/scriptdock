@@ -223,6 +223,38 @@ public sealed class JsonStoreTests : IDisposable
     }
 
     [Fact]
+    public void Load_UnreadableFileThatCannotBeMovedAside_NamesItAndLeavesItInPlace()
+    {
+        var path = PathOf("doc.json");
+        const string corruptContent = "{ not valid json";
+        File.WriteAllText(path, corruptContent);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1, recordBackups: false);
+
+        // The move aside fails: on Windows an open handle that does not share deletion blocks it, and on
+        // macOS a folder that cannot be written to.
+        FileStream? holder = null;
+        if (OperatingSystem.IsWindows())
+            holder = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        else
+            File.SetUnixFileMode(_root, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        QuarantineFailedException failure;
+        try
+        {
+            failure = Assert.Throws<QuarantineFailedException>(() => store.Load());
+        }
+        finally
+        {
+            holder?.Dispose();
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(_root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        Assert.Equal(path, failure.FilePath);
+        Assert.Equal(corruptContent, File.ReadAllText(path));
+        Assert.Empty(Directory.EnumerateFiles(_root, "doc-*.invalid"));
+    }
+
+    [Fact]
     public void Load_UnreadableRebuildableFile_ReturnsDefaultWithoutQuarantineOrNotice()
     {
         File.WriteAllText(PathOf("doc.json"), "{ not valid json");

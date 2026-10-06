@@ -17,8 +17,8 @@ public sealed class FailurePresentationTests
         var messages = new[]
         {
             FailurePresentation.StartupStorage(),
-            FailurePresentation.StartupData(),
-            FailurePresentation.RecoveredData(),
+            FailurePresentation.StartupData("/x/config.json"),
+            FailurePresentation.RecoveredData("/x/config-20260101-000000-000.invalid"),
             FailurePresentation.RootPicker(error),
             FailurePresentation.ScriptStart(error),
         };
@@ -33,6 +33,16 @@ public sealed class FailurePresentationTests
         const string path = "/Users/me/.scriptdock/config.json";
 
         Assert.StartsWith(path + " was saved by a newer version", English.Of(FailurePresentation.NewerStore(path)), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RecoveryNoticesNameTheActualFile()
+    {
+        const string preserved = "/Users/me/.scriptdock/config-20260101-000000-000.invalid";
+        const string halted = "/Users/me/.scriptdock/config.json";
+
+        Assert.Contains(preserved, English.Of(FailurePresentation.RecoveredData(preserved)), StringComparison.Ordinal);
+        Assert.StartsWith(halted + " could not be read", English.Of(FailurePresentation.StartupData(halted)), StringComparison.Ordinal);
     }
 
     [Fact]

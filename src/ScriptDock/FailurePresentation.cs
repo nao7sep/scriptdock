@@ -14,9 +14,9 @@ public static class FailurePresentation
 {
     public static Message StartupStorage() => Message.Of("failure.startupStorage");
 
-    public static Message StartupData() => Message.Of("failure.startupData");
+    public static Message StartupData(string path) => Message.Of("failure.startupData", ("path", path));
 
-    public static Message RecoveredData() => Message.Of("failure.recoveredData");
+    public static Message RecoveredData(string path) => Message.Of("failure.recoveredData", ("path", path));
 
     public static Message NewerStore(string path) => Message.Of("failure.newerStore", ("path", path));
 
