@@ -79,7 +79,11 @@ sealed class Program
                 storageDir = StorageRoot.Directory,
                 debugLogging = Log.DebugEnabled,
             });
-            return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+            // On macOS a logout or shutdown ends the process as soon as the lifetime exits, before the
+            // finally below runs, so what the quit logged is written here first, within the records' bound.
+            return BuildAvaloniaApp().StartWithClassicDesktopLifetime(
+                args,
+                lifetime => lifetime.Exit += (_, _) => Log.Flush());
         }
         catch (Exception ex)
         {

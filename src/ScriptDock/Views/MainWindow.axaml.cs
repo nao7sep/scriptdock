@@ -282,13 +282,19 @@ public partial class MainWindow : Window
     private void OnConsoleSplitterDragCompleted(object? sender, VectorEventArgs e) =>
         _consoleHeightIntent = LeftPanesGrid.RowDefinitions[2].ActualHeight;
 
-    // Set once the pane-size and shutdown saves have actually landed, so the re-triggered Close()
-    // below is let through instead of holding the window open (and re-running the saves) forever.
+    // Set once the quit's work has run, or the session is ending, so the re-triggered Close() below is let
+    // through instead of holding the window open (and re-running the work) forever.
     private bool _shutdownSaved;
 
-    // Set while the pane-size/shutdown save pass below is in flight; see MainWindowCloseGuard.
+    // Set while a quit the user started runs the quit's work; see MainWindowCloseGuard.
     private bool _shutdownSaveInProgress;
 
+    // The quit's work, started once by whichever quit reaches it first.
+    private Task? _quitWork;
+
+    // Every quit path closes the main window: the menu's Quit and Cmd+Q and the Dock's Quit through the
+    // lifetime, the window's own close, and the operating system ending the session
+    // (unsaved-edits-conventions, Quitting).
     private async void OnClosing(object? sender, WindowClosingEventArgs e)
     {
         try
@@ -296,6 +302,16 @@ public partial class MainWindow : Window
             var vm = ViewModel;
             if (vm is null)
                 return;
+
+            if (!_shutdownSaved && SessionEnd.Is(e.CloseReason))
+            {
+                // The system waits for this close to answer, so the quit's work runs here to its bounds,
+                // asks nothing, and the window closes whatever it did. A quit the user started and that is
+                // still running ends with it.
+                _shutdownSaved = true;
+                RunUntilDone(_quitWork ??= RunQuitWorkAsync(vm));
+                return;
+            }
 
             var action = MainWindowCloseGuard.DecideAction(
                 e.CloseReason,
@@ -331,44 +347,72 @@ public partial class MainWindow : Window
                 }
             }
 
-            _shutdownSaveInProgress = true;
-
-            // The Records window closes first, so it cannot keep the app running and its placement is in
-            // the view-state save awaited below.
-            Records?.Close();
-
             // Closing does not itself wait for an async handler, so without this the window (and, as
-            // the last window, the app) would finish closing while the saves below are still in
-            // flight. Cancel this attempt, save, then close again once the saves have landed —
-            // mirroring the confirm branch above and DialogBase's own close guard.
+            // the last window, the app) would finish closing while the quit's work is still in flight.
+            // Cancel this attempt, do the work, then close again — mirroring the confirm branch above and
+            // DialogBase's own close guard.
             e.Cancel = true;
-
-            RememberNormalGeometry();
-            if (WindowState is WindowState.Normal or WindowState.Maximized
-                && _normalGeometry is { } normal)
-            {
-                vm.CaptureWindowPlacement(
-                    normal.X, normal.Y, normal.Width, normal.Height,
-                    OperatingSystem.IsWindows() && WindowState == WindowState.Maximized);
-            }
-
-            // Persist the stored INTENT, not the live ActualWidth/ActualHeight — those may have been
-            // clamped down by a small window, and saving a clamped size would lose the user's intent.
-            // Falls back to the live size only if no intent was ever established (defensive; OnLoaded
-            // always seeds it). Awaited, in order, each within its bound.
-            await vm.PersistPaneSizesAsync(
-                _recentWidthIntent ?? BodyGrid.ColumnDefinitions[2].ActualWidth,
-                _consoleHeightIntent ?? LeftPanesGrid.RowDefinitions[2].ActualHeight);
-            await vm.ShutdownAsync();
+            _shutdownSaveInProgress = true;
+            await (_quitWork ??= RunQuitWorkAsync(vm));
+            if (_shutdownSaved)
+                return; // the session ended while this quit ran, and closed the window itself
             _shutdownSaved = true;
             Close();
         }
         catch (Exception ex)
         {
             Log.Error("ui: window close failed", ex);
-            // A persistence bug must not wedge the window open forever; let the close proceed.
+            // A bug in the quit's work must not wedge the window open forever; let the close proceed.
+            if (!e.Cancel || _shutdownSaved)
+                return;
             _shutdownSaved = true;
             Close();
+        }
+    }
+
+    // The quit's work: the Records window closes, the view state is saved, and the running scripts are
+    // stopped, each step within its bound, so it never holds the quit past them.
+    private async Task RunQuitWorkAsync(MainWindowViewModel vm)
+    {
+        // The Records window closes first, so it cannot keep the app running and its placement is in
+        // the view-state save below.
+        Records?.Close();
+
+        RememberNormalGeometry();
+        if (WindowState is WindowState.Normal or WindowState.Maximized
+            && _normalGeometry is { } normal)
+        {
+            vm.CaptureWindowPlacement(
+                normal.X, normal.Y, normal.Width, normal.Height,
+                OperatingSystem.IsWindows() && WindowState == WindowState.Maximized);
+        }
+
+        // Persist the stored INTENT, not the live ActualWidth/ActualHeight — those may have been
+        // clamped down by a small window, and saving a clamped size would lose the user's intent.
+        // Falls back to the live size only if no intent was ever established (defensive; OnLoaded
+        // always seeds it).
+        await vm.PersistPaneSizesAsync(
+            _recentWidthIntent ?? BodyGrid.ColumnDefinitions[2].ActualWidth,
+            _consoleHeightIntent ?? LeftPanesGrid.RowDefinitions[2].ActualHeight);
+        await vm.ShutdownAsync();
+    }
+
+    // Keeps the dispatcher running, so the work's own continuations can run, until the work is done. The
+    // work carries its own bounds.
+    private static void RunUntilDone(Task work)
+    {
+        if (work.IsCompleted)
+            return;
+
+        try
+        {
+            var frame = new DispatcherFrame();
+            work.ContinueWith(_ => frame.Continue = false, TaskScheduler.Default);
+            Dispatcher.UIThread.PushFrame(frame);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("ui: could not wait for the quit's work as the session ended", ex);
         }
     }
 
