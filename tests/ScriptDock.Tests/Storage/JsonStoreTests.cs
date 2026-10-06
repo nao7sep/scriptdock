@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.Versioning;
 using System.Threading.Tasks;
 using ScriptDock;
 using ScriptDock.Storage;
@@ -120,6 +122,33 @@ public sealed class JsonStoreTests : IDisposable
         store.Save(new SampleDoc { Name = "one" });
 
         Assert.Equal(saved, File.ReadAllText(PathOf("doc.json")));
+    }
+
+    [MacOnlyFact]
+    [SupportedOSPlatform("macos")]
+    public void Save_Changed_KeepsTheFilesPermissionModeAndExtendedAttributes()
+    {
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        store.Save(new SampleDoc { Name = "one" });
+        var path = PathOf("doc.json");
+        const UnixFileMode restricted = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        File.SetUnixFileMode(path, restricted);
+        Xattr("-w", "com.example.tag", "kept", path);
+
+        store.Save(new SampleDoc { Name = "two" });
+
+        Assert.Equal("two", store.Load().Name);
+        Assert.Equal(restricted, File.GetUnixFileMode(path));
+        Assert.Equal("kept", Xattr("-p", "com.example.tag", path));
+    }
+
+    private static string Xattr(params string[] arguments)
+    {
+        using var process = Process.Start(new ProcessStartInfo("/usr/bin/xattr", arguments) { RedirectStandardOutput = true })!;
+        var output = process.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+        Assert.Equal(0, process.ExitCode);
+        return output.Trim();
     }
 
     [Fact]

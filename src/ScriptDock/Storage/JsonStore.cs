@@ -248,6 +248,7 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
 
             if (File.Exists(_filePath))
             {
+                MacFileMetadata.Copy(_filePath, tempPath);
                 File.Replace(tempPath, _filePath, destinationBackupFileName: null, ignoreMetadataErrors: true);
             }
             else
