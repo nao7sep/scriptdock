@@ -73,7 +73,11 @@
     "one": "Beim Beenden von ScriptDock wird {count} laufendes Skript gestoppt. Trotzdem beenden?",
     "other": "Beim Beenden von ScriptDock werden {count} laufende Skripte gestoppt. Trotzdem beenden?"
   },
+  "quit.quitAnyway": "Trotzdem beenden",
+  "quit.retry": "Erneut versuchen",
   "quit.title": "ScriptDock beenden",
+  "quit.unsavedMessage": "Ihre letzte Änderung an den Einstellungen oder an der Liste der ausgeblendeten Skripte konnte nicht gespeichert werden. Wenn Sie ScriptDock jetzt beenden, geht sie verloren.",
+  "quit.unsavedTitle": "Einstellungen nicht gespeichert",
   "recent.dismiss": "Entfernen",
   "recent.empty": "Keine Ausführungen im Verlauf. Doppelklicken Sie auf ein Skript, um es auszuführen.",
   "recent.run": "Ausführen",

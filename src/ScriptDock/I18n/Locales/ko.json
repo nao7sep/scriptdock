@@ -71,7 +71,11 @@
   "quit.message": {
     "other": "ScriptDock을 종료하면 실행 중인 스크립트 {count}개가 중지됩니다. 그래도 종료하시겠습니까?"
   },
+  "quit.quitAnyway": "저장하지 않고 종료",
+  "quit.retry": "다시 시도",
   "quit.title": "ScriptDock 종료",
+  "quit.unsavedMessage": "설정 또는 숨긴 스크립트 목록에 대한 마지막 변경 사항을 저장하지 못했습니다. 지금 종료하면 이 변경 사항은 사라집니다.",
+  "quit.unsavedTitle": "설정이 저장되지 않음",
   "recent.dismiss": "지우기",
   "recent.empty": "최근 실행 기록이 없습니다. 스크립트를 두 번 클릭하면 실행됩니다.",
   "recent.run": "실행",

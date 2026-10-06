@@ -92,6 +92,41 @@ public class LabelFitTests : WindowTest
         AssertNothingClipped(dialog, tag, atLeast: 4);
     }
 
+    [AvaloniaTheory]
+    [InlineData("en")]
+    [InlineData("de")]
+    [InlineData("es")]
+    [InlineData("fr")]
+    [InlineData("it")]
+    [InlineData("pt-BR")]
+    [InlineData("ru")]
+    [InlineData("ja")]
+    [InlineData("ko")]
+    [InlineData("zh-Hans")]
+    public void the_unsaved_settings_quit_dialog_clips_nothing(string tag)
+    {
+        using var speaking = Localizer.Speaking(tag);
+
+        var dialog = Show(new UnsavedSettingsQuitDialog());
+
+        // Its message wraps; its three button labels do not.
+        AssertNothingClipped(dialog, tag, atLeast: 3);
+
+        // A footer of three buttons wider than the dialog would run past its edge, which the labels alone
+        // cannot show: every button lies inside the footer's 24px side margins.
+        const double footerMargin = 24;
+        var buttons = dialog.GetVisualDescendants().OfType<Button>().ToList();
+        Assert.Equal(3, buttons.Count);
+        foreach (var button in buttons)
+        {
+            var left = button.TranslatePoint(new Point(0, 0), dialog)!.Value.X;
+            var right = left + button.Bounds.Width;
+            Assert.True(
+                left >= footerMargin - Tolerance && right <= UnsavedSettingsQuitDialog.DialogWidth - footerMargin + Tolerance,
+                $"{tag}: “{button.Content}” spans {left:F0}–{right:F0}px in a {UnsavedSettingsQuitDialog.DialogWidth}px dialog");
+        }
+    }
+
     private static void AssertNothingClipped(Visual root, string tag, int atLeast)
     {
         var clipped = new List<string>();

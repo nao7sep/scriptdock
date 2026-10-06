@@ -309,7 +309,7 @@ public partial class MainWindow : Window
                 // asks nothing, and the window closes whatever it did. A quit the user started and that is
                 // still running ends with it.
                 _shutdownSaved = true;
-                RunUntilDone(_quitWork ??= RunQuitWorkAsync(vm));
+                RunUntilDone(EndSessionAsync(vm));
                 return;
             }
 
@@ -353,6 +353,19 @@ public partial class MainWindow : Window
             // DialogBase's own close guard.
             e.Cancel = true;
             _shutdownSaveInProgress = true;
+            if (!await SettingsSavedOrQuitAnywayAsync(vm))
+            {
+                if (_shutdownSaved)
+                    return; // the session ended while this quit asked, and closed the window itself
+
+                // Cancelled: the app stays open, and the next quit asks again from the start.
+                _shutdownSaveInProgress = false;
+                _quitConfirmed = false;
+                return;
+            }
+
+            if (_shutdownSaved)
+                return;
             await (_quitWork ??= RunQuitWorkAsync(vm));
             if (_shutdownSaved)
                 return; // the session ended while this quit ran, and closed the window itself
@@ -368,6 +381,42 @@ public partial class MainWindow : Window
             _shutdownSaved = true;
             Close();
         }
+    }
+
+    // A settings change of the user's that did not land stops a quit the user started: they retry it,
+    // quit anyway, or cancel and keep the app open (unsaved-edits-conventions, Quitting). The running
+    // scripts are stopped only after this, so a cancelled quit leaves them running.
+    private async Task<bool> SettingsSavedOrQuitAnywayAsync(MainWindowViewModel vm)
+    {
+        var retry = false;
+        while (!await vm.SettingsSavedForQuitAsync(retry))
+        {
+            if (_shutdownSaved)
+                return false; // the session ended meanwhile and took the quit over
+
+            switch (await UnsavedSettingsQuitDialog.AskAsync(this))
+            {
+                case UnsavedQuitChoice.Retry:
+                    retry = true;
+                    continue;
+                case UnsavedQuitChoice.QuitAnyway:
+                    Log.Warn("quit: quitting with the settings change unsaved");
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
+    // The system ending the session: the same waits as any quit, within their bounds, and never a
+    // question; a settings change that did not land is logged.
+    private async Task EndSessionAsync(MainWindowViewModel vm)
+    {
+        if (!await vm.SettingsSavedForQuitAsync())
+            Log.Error("quit: the session ended with the settings change unsaved");
+        await (_quitWork ??= RunQuitWorkAsync(vm));
     }
 
     // The quit's work: the Records window closes, the view state is saved, and the running scripts are

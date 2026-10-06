@@ -75,7 +75,11 @@
     "many": "{count} di script in esecuzione verranno arrestati quando esci da ScriptDock. Vuoi uscire comunque?",
     "other": "{count} script in esecuzione verranno arrestati quando esci da ScriptDock. Vuoi uscire comunque?"
   },
+  "quit.quitAnyway": "Esci comunque",
+  "quit.retry": "Riprova",
   "quit.title": "Esci da ScriptDock",
+  "quit.unsavedMessage": "Non è stato possibile salvare l’ultima modifica alle impostazioni o all’elenco degli script nascosti. Se esci ora, andrà persa.",
+  "quit.unsavedTitle": "Impostazioni non salvate",
   "recent.dismiss": "Rimuovi",
   "recent.empty": "Nessuna esecuzione recente. Fai doppio clic su uno script per eseguirlo.",
   "recent.run": "Esegui",

@@ -71,7 +71,11 @@
   "quit.message": {
     "other": "退出 ScriptDock 时，将停止 {count} 个正在运行的脚本。仍要退出吗？"
   },
+  "quit.quitAnyway": "仍然退出",
+  "quit.retry": "重试",
   "quit.title": "退出 ScriptDock",
+  "quit.unsavedMessage": "无法保存你对设置或隐藏脚本列表所做的最近一次更改。如果现在退出，此更改将会丢失。",
+  "quit.unsavedTitle": "设置未保存",
   "recent.dismiss": "移除",
   "recent.empty": "暂无最近的运行记录。双击脚本即可运行。",
   "recent.run": "运行",

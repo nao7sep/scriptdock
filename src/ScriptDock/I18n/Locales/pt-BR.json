@@ -75,7 +75,11 @@
     "many": "{count} de scripts em execução serão parados quando o ScriptDock for encerrado. Encerrar mesmo assim?",
     "other": "{count} scripts em execução serão parados quando o ScriptDock for encerrado. Encerrar mesmo assim?"
   },
+  "quit.quitAnyway": "Encerrar mesmo assim",
+  "quit.retry": "Tentar novamente",
   "quit.title": "Encerrar o ScriptDock",
+  "quit.unsavedMessage": "Não foi possível salvar sua última alteração nas configurações ou na lista de scripts ocultos. Se você encerrar agora, ela será perdida.",
+  "quit.unsavedTitle": "Configurações não salvas",
   "recent.dismiss": "Descartar",
   "recent.empty": "Nenhuma execução recente. Clique duas vezes em um script para executá-lo.",
   "recent.run": "Executar",

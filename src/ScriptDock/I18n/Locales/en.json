@@ -73,7 +73,11 @@
     "one": "{count} running script will be stopped when ScriptDock quits. Quit anyway?",
     "other": "{count} running scripts will be stopped when ScriptDock quits. Quit anyway?"
   },
+  "quit.quitAnyway": "Quit anyway",
+  "quit.retry": "Retry",
   "quit.title": "Quit ScriptDock",
+  "quit.unsavedMessage": "Your latest change to the settings or to the list of hidden scripts could not be saved. If you quit now, it will be lost.",
+  "quit.unsavedTitle": "Settings not saved",
   "recent.dismiss": "Dismiss",
   "recent.empty": "No recent runs. Double-click a script to run it.",
   "recent.run": "Run",

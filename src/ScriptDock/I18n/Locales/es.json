@@ -75,7 +75,11 @@
     "many": "{count} de scripts en ejecución se detendrán al salir de ScriptDock. ¿Salir de todos modos?",
     "other": "{count} scripts en ejecución se detendrán al salir de ScriptDock. ¿Salir de todos modos?"
   },
+  "quit.quitAnyway": "Salir de todos modos",
+  "quit.retry": "Reintentar",
   "quit.title": "Salir de ScriptDock",
+  "quit.unsavedMessage": "No se pudo guardar tu último cambio en la configuración o en la lista de scripts ocultos. Si sales ahora, se perderá.",
+  "quit.unsavedTitle": "Configuración no guardada",
   "recent.dismiss": "Descartar",
   "recent.empty": "No hay ejecuciones recientes. Haz doble clic en un script para ejecutarlo.",
   "recent.run": "Ejecutar",

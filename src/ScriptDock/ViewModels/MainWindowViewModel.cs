@@ -324,9 +324,54 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     // How long each step of a quit may take; together they stay well inside the time the system gives an
     // app at logout or shutdown (unsaved-edits-conventions, Quitting).
+    internal static readonly TimeSpan QuitSettingsWriteBound = TimeSpan.FromSeconds(1);
     internal static readonly TimeSpan QuitStateSaveBound = TimeSpan.FromMilliseconds(500);
     internal static readonly TimeSpan QuitStopScriptsBound = TimeSpan.FromSeconds(1);
     internal static readonly TimeSpan QuitOutputImportBound = TimeSpan.FromMilliseconds(250);
+
+    // The latest settings or hidden-list write and the settings it saves, so a quit can wait for it and
+    // save it again.
+    private AppConfig? _configWriteCandidate;
+    private Task _configWrite = Task.CompletedTask;
+
+    private Task SaveConfigAsync(AppConfig candidate)
+    {
+        _configWriteCandidate = candidate;
+        return _configWrite = _configStore.SaveAsync(candidate);
+    }
+
+    /// <summary>
+    /// Whether the user's own settings are safe for a quit. A settings or hidden-list change is adopted
+    /// only once it is saved, and a failure is shown where it was made, so the one thing a quit can cut
+    /// off is such a write still running; this waits for it within its bound. With
+    /// <paramref name="retry"/> it saves that change again first. False when the change did not land: its
+    /// write failed, or was still running at the bound.
+    /// </summary>
+    public async Task<bool> SettingsSavedForQuitAsync(bool retry = false)
+    {
+        var write = _configWrite;
+        if (!retry && write.IsCompleted)
+            return true; // landed, or failed before the quit and was reported where the change was made
+
+        try
+        {
+            if (retry && _configWriteCandidate is { } candidate)
+                write = SaveConfigAsync(candidate);
+            await write.WaitAsync(QuitSettingsWriteBound, Time);
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            Log.Warn("quit: the settings change was still being saved at its bound",
+                new { boundMs = QuitSettingsWriteBound.TotalMilliseconds });
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("quit: the settings change could not be saved", ex);
+            return false;
+        }
+    }
 
     /// <summary>
     /// The quit's view-state save: the pane sizes with the window placement and the rest of the view
@@ -421,7 +466,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         candidate.Hidden = _config.Hidden.ToList();
         try
         {
-            await _configStore.SaveAsync(candidate);
+            await SaveConfigAsync(candidate);
         }
         catch (Exception ex)
         {
@@ -668,7 +713,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            await _configStore.SaveAsync(candidate);
+            await SaveConfigAsync(candidate);
             ResolveOperationalError("toggle hidden");
         }
         catch (Exception ex)
