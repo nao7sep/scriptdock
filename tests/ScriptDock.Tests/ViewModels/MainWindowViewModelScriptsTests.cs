@@ -153,6 +153,39 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
     }
 
     [Fact]
+    public async Task ToggleHidden_WhenTheSaveFails_ChangesNothing_AndARetryStillHides()
+    {
+        Touch("a.command");
+        Touch("b.command");
+        var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
+        var configStore = new FakeConfigStore { Value = config, ThrowOnSave = true };
+        var vm = new MainWindowViewModel(
+            configStore, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeRecordStore(),
+            config, new AppState(), new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+        await vm.RescanCommand.ExecuteAsync(null);
+
+        await vm.ToggleHiddenCommand.ExecuteAsync(vm.Scripts.Single(s => Name(s) == "b.command"));
+
+        Assert.True(vm.HasOperationalError);
+        Assert.Empty(config.Hidden);
+        await vm.RescanCommand.ExecuteAsync(null); // a later rebuild does not apply the failed choice
+        Assert.False(vm.Scripts.Single(s => Name(s) == "b.command").IsHidden);
+
+        // A later settings save does not persist it either.
+        configStore.ThrowOnSave = false;
+        Assert.True(await vm.TryApplySettingsAsync(new SettingsDialogViewModel(config)));
+        Assert.Empty(configStore.LastSaved!.Hidden);
+
+        // The retry performs the originally requested action: it hides.
+        await vm.ToggleHiddenCommand.ExecuteAsync(vm.Scripts.Single(s => Name(s) == "b.command"));
+
+        Assert.False(vm.HasOperationalError);
+        Assert.Equal([Path.Combine(_root, "b.command")], config.Hidden);
+        Assert.Equal(config.Hidden, configStore.LastSaved!.Hidden);
+        Assert.DoesNotContain(vm.Scripts, s => Name(s) == "b.command");
+    }
+
+    [Fact]
     public async Task ToggleHidden_OnSelected_WithShowHiddenOn_KeepsSelection_AndFlipsLabel()
     {
         Touch("a.command");

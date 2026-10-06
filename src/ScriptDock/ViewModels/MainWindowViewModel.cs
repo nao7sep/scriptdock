@@ -623,14 +623,25 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         if (item is null)
             return;
 
-        var removedHidden = _config.Hidden.RemoveAll(path => PathIdentity.Same(path, item.Path));
-        var nowHidden = removedHidden == 0;
-        if (nowHidden)
-            _config.Hidden.Add(item.Path);
+        // The live config takes the new hidden list only once it is saved, so a failed save changes nothing.
+        var nowHidden = !_config.Hidden.Any(path => PathIdentity.Same(path, item.Path));
+        var hidden = nowHidden
+            ? [.. _config.Hidden, item.Path]
+            : _config.Hidden.Where(path => !PathIdentity.Same(path, item.Path)).ToList();
+        var candidate = new AppConfig
+        {
+            UiFontFamily = _config.UiFontFamily,
+            Language = _config.Language,
+            Theme = _config.Theme,
+            RootDirs = _config.RootDirs,
+            Extensions = _config.Extensions,
+            IgnorePatterns = _config.IgnorePatterns,
+            Hidden = hidden,
+        };
 
         try
         {
-            await _configStore.SaveAsync(_config);
+            await _configStore.SaveAsync(candidate);
             ResolveOperationalError("toggle hidden");
         }
         catch (Exception ex)
@@ -640,6 +651,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        _config.Hidden = hidden;
         Log.Info("ui: toggle hidden", new { script = item.Path, hidden = nowHidden });
         // Keep the toggled script selected; if hiding made it vanish (Show hidden off), fall to its
         // neighbour so the Scripts selection — and the Hide/Show label — never just resets.
