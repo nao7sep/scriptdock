@@ -36,5 +36,9 @@ public sealed class FakeJsonStore<T> : IJsonStore<T> where T : class, new()
     // Runs the same (possibly throwing) Save on a background thread, so a caller that awaits this —
     // the same way it awaits the real JsonStore<T> — observes a faulted task on failure rather than a
     // synchronous throw, matching production semantics for orchestration tests.
-    public Task SaveAsync(T value) => Task.Run(() => Save(value));
+    public Task SaveAsync(T value) => SaveGate is { } gate ? gate.Task : Task.Run(() => Save(value));
+
+    /// <summary>When set, <see cref="SaveAsync"/> returns this gate's task instead of saving: a save on a
+    /// stalled disk, still running until the test settles it.</summary>
+    public TaskCompletionSource? SaveGate { get; set; }
 }

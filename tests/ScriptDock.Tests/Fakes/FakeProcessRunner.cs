@@ -81,10 +81,13 @@ public sealed class FakeProcessRunner : IProcessRunner
 
     public int StopAllCalls { get; private set; }
 
+    /// <summary>When set, <see cref="StopAllAsync"/> returns this gate's task: process trees still dying.</summary>
+    public TaskCompletionSource? StopAllGate { get; set; }
+
     public Task StopAllAsync()
     {
         StopAllCalls++;
-        return Task.CompletedTask;
+        return StopAllGate?.Task ?? Task.CompletedTask;
     }
 
     public void ReconcileExited() { }

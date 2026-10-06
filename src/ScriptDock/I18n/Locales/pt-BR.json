@@ -33,7 +33,6 @@
   "failure.startupData": "Não foi possível ler {path}, e o ScriptDock também não conseguiu separá-lo, então ele foi mantido sem alterações em vez de correr o risco de ser sobrescrito. Seus scripts não são afetados. Repare ou mova o arquivo e inicie o ScriptDock novamente.",
   "failure.startupStorage": "O ScriptDock não consegue usar seu local de armazenamento, por isso não abriu scripts nem alterou configurações. Repare o local de SCRIPTDOCK_DATA_DIR ou suas permissões e inicie o ScriptDock novamente.",
   "guard.refresh": "Não foi possível atualizar as listas — consulte o log.",
-  "guard.savePaneSizes": "Não foi possível salvar os tamanhos dos painéis — consulte o log.",
   "guard.showHidden": "Não foi possível mostrar os scripts ocultos — consulte o log.",
   "guard.shutdown": "O encerramento não foi concluído corretamente — consulte o log.",
   "guard.toggleHidden": "Não foi possível ocultar nem mostrar o script — consulte o log.",

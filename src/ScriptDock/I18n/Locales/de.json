@@ -32,7 +32,6 @@
   "failure.startupData": "{path} konnte nicht gelesen und von ScriptDock auch nicht beiseitegelegt werden; die Datei blieb daher unverändert, statt ein Überschreiben zu riskieren. Ihre Skripte sind nicht betroffen. Reparieren oder verschieben Sie die Datei und starten Sie ScriptDock erneut.",
   "failure.startupStorage": "ScriptDock kann seinen Speicherort nicht verwenden und hat daher keine Skripte geöffnet und keine Einstellungen geändert. Reparieren Sie den Speicherort SCRIPTDOCK_DATA_DIR oder dessen Berechtigungen und starten Sie ScriptDock erneut.",
   "guard.refresh": "Die Listen konnten nicht aktualisiert werden — siehe Protokoll.",
-  "guard.savePaneSizes": "Die Bereichsgrößen konnten nicht gespeichert werden — siehe Protokoll.",
   "guard.showHidden": "Ausgeblendete Skripte konnten nicht angezeigt werden — siehe Protokoll.",
   "guard.shutdown": "Das Beenden wurde nicht sauber abgeschlossen — siehe Protokoll.",
   "guard.toggleHidden": "Das Skript konnte nicht aus- oder eingeblendet werden — siehe Protokoll.",

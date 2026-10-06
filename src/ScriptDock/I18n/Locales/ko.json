@@ -31,7 +31,6 @@
   "failure.startupData": "{path} 파일을 읽지 못했고 ScriptDock이 그 파일을 따로 보관해 둘 수도 없어, 덮어쓸 위험을 피하기 위해 그대로 두었습니다. 스크립트에는 영향이 없습니다. 이 파일을 복구하거나 다른 곳으로 옮긴 뒤 ScriptDock을 다시 시작하십시오.",
   "failure.startupStorage": "ScriptDock이 저장 위치를 사용할 수 없어 스크립트를 열지도, 설정을 변경하지도 않았습니다. SCRIPTDOCK_DATA_DIR 위치나 그 권한을 복구한 뒤 ScriptDock을 다시 시작하십시오.",
   "guard.refresh": "목록을 새로 고치지 못했습니다 — 로그를 확인하십시오.",
-  "guard.savePaneSizes": "패널 크기를 저장하지 못했습니다 — 로그를 확인하십시오.",
   "guard.showHidden": "숨긴 스크립트를 표시하지 못했습니다 — 로그를 확인하십시오.",
   "guard.shutdown": "종료가 정상적으로 끝나지 않았습니다 — 로그를 확인하십시오.",
   "guard.toggleHidden": "스크립트를 숨기거나 표시하지 못했습니다 — 로그를 확인하십시오.",

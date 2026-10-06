@@ -54,7 +54,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     // Moves finished runs' output into the records now and then; one pass at a time, cancelled on shutdown.
     private static readonly TimeSpan OutputImportInterval = TimeSpan.FromMinutes(5);
-    private static readonly TimeSpan OutputImportShutdownWait = TimeSpan.FromSeconds(5);
     private DispatcherTimer? _outputImportTimer;
     private readonly CancellationTokenSource _outputImportCts = new();
     private Task _outputImport = Task.CompletedTask;
@@ -246,7 +245,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// <summary>Set by the view: whether one of its dialogs is open, which holds an activation rescan off.</summary>
     public Func<bool> IsDialogOpen { get; set; } = () => false;
 
-    /// <summary>The clock the activation rescan waits on; tests pass their own.</summary>
+    /// <summary>The clock the activation rescan and the quit's bounds wait on; tests pass their own.</summary>
     internal TimeProvider Time { get; init; } = TimeProvider.System;
 
     /// <summary>Set by the view to confirm a destructive action (the view owns the dialog). Returns
@@ -323,13 +322,22 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    public Task PersistPaneSizesAsync(double recentWidth, double consoleHeight) =>
-        GuardAsync("save pane sizes", Message.Of("guard.savePaneSizes"), () =>
-        {
-            _state.RecentPaneWidth = recentWidth;
-            _state.ConsoleHeight = consoleHeight;
-            return _stateStore.SaveAsync(_state);
-        });
+    // How long each step of a quit may take; together they stay well inside the time the system gives an
+    // app at logout or shutdown (unsaved-edits-conventions, Quitting).
+    internal static readonly TimeSpan QuitStateSaveBound = TimeSpan.FromMilliseconds(500);
+    internal static readonly TimeSpan QuitStopScriptsBound = TimeSpan.FromSeconds(1);
+    internal static readonly TimeSpan QuitOutputImportBound = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>
+    /// The quit's view-state save: the pane sizes with the window placement and the rest of the view
+    /// state, within its bound. View state never holds a quit, so a failure is logged only.
+    /// </summary>
+    public Task PersistPaneSizesAsync(double recentWidth, double consoleHeight)
+    {
+        _state.RecentPaneWidth = recentWidth;
+        _state.ConsoleHeight = consoleHeight;
+        return QuitStepAsync("view state save", QuitStateSaveBound, () => _stateStore.SaveAsync(_state));
+    }
 
     public void CaptureWindowPlacement(int x, int y, double width, double height, bool maximized)
     {
@@ -341,7 +349,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Stops timers and scanning, stops every running script's process tree, and waits, within a
+    /// Stops timers and scanning, stops every running script's process tree, and waits, each within its
     /// bound, for those trees and for the output import in flight — the window only finishes closing,
     /// and the app only exits, once this completes. The run output files stay for the next launch's import.
     /// </summary>
@@ -354,9 +362,28 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _activationRescanTimer?.Dispose();
         _scanCts?.Cancel(); // don't let a slow scan keep the closing window's work alive
         _outputImportCts.Cancel();
-        await _runner.StopAllAsync();
-        await Task.WhenAny(_outputImport, Task.Delay(OutputImportShutdownWait));
+        await QuitStepAsync("stop running scripts", QuitStopScriptsBound, _runner.StopAllAsync);
+        await QuitStepAsync("output import", QuitOutputImportBound, () => _outputImport);
     });
+
+    // One step of a quit, within its bound. A failure, or a step still running at the bound, is logged and
+    // the quit goes on; a step still running carries on and settles on its own, its outcome unknown.
+    private async Task QuitStepAsync(string step, TimeSpan bound, Func<Task> work)
+    {
+        try
+        {
+            await work().WaitAsync(bound, Time);
+        }
+        catch (TimeoutException)
+        {
+            Log.Warn("quit: a step was still running at its bound; quitting without it",
+                new { step, boundMs = bound.TotalMilliseconds });
+        }
+        catch (Exception ex)
+        {
+            Log.Error("quit: a step failed", ex, new { step });
+        }
+    }
 
     // Called on whichever thread saw the run end, so a failure is logged, not shown; the records' fallback
     // file keeps the end the database could not take.

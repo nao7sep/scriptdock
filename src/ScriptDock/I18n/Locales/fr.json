@@ -33,7 +33,6 @@
   "failure.startupData": "{path} n’a pas pu être lu, et ScriptDock n’a pas pu le mettre de côté non plus\u00a0: ScriptDock l’a donc laissé tel quel plutôt que de risquer de l’écraser. Vos scripts ne sont pas affectés. Réparez ou déplacez le fichier, puis relancez ScriptDock.",
   "failure.startupStorage": "ScriptDock ne peut pas utiliser son emplacement de stockage\u00a0: il n’a donc ni ouvert de scripts ni modifié de paramètres. Réparez l’emplacement SCRIPTDOCK_DATA_DIR ou ses autorisations, puis relancez ScriptDock.",
   "guard.refresh": "Les listes n’ont pas pu être actualisées — voir le journal.",
-  "guard.savePaneSizes": "La taille des volets n’a pas pu être enregistrée — voir le journal.",
   "guard.showHidden": "Les scripts masqués n’ont pas pu être affichés — voir le journal.",
   "guard.shutdown": "La fermeture de ScriptDock ne s’est pas terminée correctement — voir le journal.",
   "guard.toggleHidden": "Le script n’a pas pu être masqué ni affiché — voir le journal.",

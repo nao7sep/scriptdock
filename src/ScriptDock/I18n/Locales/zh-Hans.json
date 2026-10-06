@@ -31,7 +31,6 @@
   "failure.startupData": "{path} 无法读取，ScriptDock 也无法把它移到一旁，因此没有冒着覆盖它的风险去改动，而是让它保持原样。你的脚本不受影响。请修复或移走该文件，然后重新启动 ScriptDock。",
   "failure.startupStorage": "ScriptDock 无法使用它的存储位置，因此没有打开脚本，也没有更改设置。请修复 SCRIPTDOCK_DATA_DIR 所指的位置或它的权限，然后重新启动 ScriptDock。",
   "guard.refresh": "无法刷新列表，请查看日志。",
-  "guard.savePaneSizes": "无法保存窗格尺寸，请查看日志。",
   "guard.showHidden": "无法显示隐藏的脚本，请查看日志。",
   "guard.shutdown": "退出过程未能正常结束，请查看日志。",
   "guard.toggleHidden": "无法隐藏或显示该脚本，请查看日志。",

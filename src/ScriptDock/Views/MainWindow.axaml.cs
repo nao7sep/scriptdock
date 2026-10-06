@@ -355,8 +355,7 @@ public partial class MainWindow : Window
             // Persist the stored INTENT, not the live ActualWidth/ActualHeight — those may have been
             // clamped down by a small window, and saving a clamped size would lose the user's intent.
             // Falls back to the live size only if no intent was ever established (defensive; OnLoaded
-            // always seeds it). Awaited, in order, so the window does not close until both saves have
-            // actually landed on disk.
+            // always seeds it). Awaited, in order, each within its bound.
             await vm.PersistPaneSizesAsync(
                 _recentWidthIntent ?? BodyGrid.ColumnDefinitions[2].ActualWidth,
                 _consoleHeightIntent ?? LeftPanesGrid.RowDefinitions[2].ActualHeight);
