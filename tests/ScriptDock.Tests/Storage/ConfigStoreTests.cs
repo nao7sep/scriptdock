@@ -140,6 +140,42 @@ public sealed class ConfigStoreTests : IDisposable
         Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
     }
 
+    [Theory]
+    [InlineData("""["["]""")]                 // does not compile
+    [InlineData("""["/build/",""]""")]        // empty: would match every path
+    [InlineData("""["/build/","  "]""")]      // blank
+    [InlineData("""["/build/\n/dist/"]""")]  // multiline, which cleanup would flatten into one rule
+    public void InvalidIgnorePatterns_ReadAsTheirBuiltIn_AndKeepTheOtherSets(string patterns)
+    {
+        File.WriteAllText(ConfigPath, $$"""{"formatVersion":1,"ignorePatterns":{{patterns}},"extensions":[".sh"],"hidden":["/ok"]}""");
+        var loaded = new ConfigStore().Load();
+        Assert.Equal(ConfigDefaults.BuiltInIgnorePatterns, loaded.IgnorePatterns);
+        Assert.Equal([".sh"], loaded.Extensions);
+        Assert.Equal(["/ok"], loaded.Hidden);
+    }
+
+    [Theory]
+    [InlineData("""[".sh",""]""")]            // empty
+    [InlineData("""[".s h"]""")]              // interior space
+    [InlineData("""[".sh\n.py"]""")]         // multiline, which cleanup would flatten into ".sh .py"
+    public void InvalidExtensions_ReadAsTheirBuiltIn_AndKeepTheOtherSets(string extensions)
+    {
+        File.WriteAllText(ConfigPath, $$"""{"formatVersion":1,"extensions":{{extensions}},"ignorePatterns":["/build/"],"hidden":["/ok"]}""");
+        var loaded = new ConfigStore().Load();
+        Assert.Equal([ConfigDefaults.DefaultExtension], loaded.Extensions);
+        Assert.Equal(["/build/"], loaded.IgnorePatterns);
+        Assert.Equal(["/ok"], loaded.Hidden);
+    }
+
+    [Fact]
+    public async Task InvalidIgnorePatterns_LoseTheirKeyAtTheNextSave()
+    {
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"ignorePatterns":["["],"hidden":["/ok"]}""");
+        var store = new ConfigStore();
+        await store.SaveAsync(store.Load());
+        Assert.Equal(["hidden"], ReadKeys());
+    }
+
     [Fact]
     public void BuiltInTexts_AreKeptCleaned()
     {

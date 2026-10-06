@@ -2,7 +2,6 @@ using System;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ScriptDock.I18n;
 using ScriptDock.Models;
@@ -165,19 +164,9 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     public bool AddExtension(string value)
     {
         var trimmed = value.Trim();
-        if (trimmed.Length == 0)
+        if (ConfigSets.ExtensionError(trimmed) is { } error)
         {
-            ExtensionErrorMessage = Message.Of("settings.extensionEmpty");
-            return false;
-        }
-
-        // An extension is a single token, so reject a pasted multi-token / multi-line value rather
-        // than silently forming a junk extension. This is validation, which the text-cleanup
-        // convention leaves to the app; char.IsWhiteSpace also covers a tab, a stray newline, and
-        // the full-width space (U+3000).
-        if (trimmed.Any(char.IsWhiteSpace))
-        {
-            ExtensionErrorMessage = Message.Of("settings.extensionSpaces");
+            ExtensionErrorMessage = error;
             return false;
         }
 
@@ -201,25 +190,9 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     public bool AddIgnorePattern(string value)
     {
         var trimmed = value.Trim();
-        if (trimmed.Length == 0)
+        if (ConfigSets.PatternError(trimmed) is { } error)
         {
-            PatternErrorMessage = Message.Of("settings.patternEmpty");
-            return false;
-        }
-
-        // A pattern is a single-line regex. An interior line break means a multi-line paste leaked
-        // in; reject it rather than flatten it — collapsing a newline to a space would silently
-        // change what the regex matches. Interior spaces are left alone (a regex can match a literal
-        // space in a path), so this checks only line breaks, not all whitespace.
-        if (trimmed.Contains('\n') || trimmed.Contains('\r'))
-        {
-            PatternErrorMessage = Message.Of("settings.patternMultiline");
-            return false;
-        }
-
-        if (!IsValidRegex(trimmed))
-        {
-            PatternErrorMessage = Message.Of("settings.patternInvalid", ("pattern", trimmed));
+            PatternErrorMessage = error;
             return false;
         }
 
@@ -255,17 +228,4 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     public void RemoveRootDir(string value) => RootDirs.Remove(value);
     public void RemoveExtension(string value) => Extensions.Remove(value);
     public void RemoveIgnorePattern(string value) => IgnorePatterns.Remove(value);
-
-    private static bool IsValidRegex(string pattern)
-    {
-        try
-        {
-            _ = new Regex(pattern);
-            return true;
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
-    }
 }
