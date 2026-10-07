@@ -18,6 +18,7 @@ public sealed class FakeProcessRunner : IProcessRunner
 {
     private readonly List<ScriptProcess> _active = new();
     private int _nextId = 1;
+    private bool _sealed;
 
     public List<string> StartCalls { get; } = new();
     public List<ScriptProcess> TerminateCalls { get; } = new();
@@ -56,6 +57,11 @@ public sealed class FakeProcessRunner : IProcessRunner
         return AddRunning(scriptPath);
     }
 
+    public Task<ScriptProcess?> StartAsync(string scriptPath) =>
+        Task.FromResult(_sealed ? null : Start(scriptPath));
+
+    public void SealLaunches() => _sealed = true;
+
     public Task<bool> TerminateAsync(ScriptProcess handle)
     {
         TerminateCalls.Add(handle);
@@ -67,7 +73,7 @@ public sealed class FakeProcessRunner : IProcessRunner
         RestartCalls.Add(handle);
         if (RestartGate is not null)
             await RestartGate.Task;
-        if (!RestartResult)
+        if (!RestartResult || _sealed)
             return null;
         _active.Remove(handle);
         return AddRunning(handle.ScriptPath);
@@ -86,6 +92,7 @@ public sealed class FakeProcessRunner : IProcessRunner
 
     public Task StopAllAsync()
     {
+        SealLaunches();
         StopAllCalls++;
         return StopAllGate?.Task ?? Task.CompletedTask;
     }

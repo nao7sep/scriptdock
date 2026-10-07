@@ -25,6 +25,11 @@ public interface IProcessRunner
 
     /// <summary>Launches a script. Throws when it could not be started; no run then exists.</summary>
     ScriptProcess Start(string scriptPath);
+    /// <summary>Launches off the caller thread; null when this identity is busy or launches are sealed.</summary>
+    Task<ScriptProcess?> StartAsync(string scriptPath);
+
+    /// <summary>Synchronously closes launch admission once shutdown is committed.</summary>
+    void SealLaunches();
     Task<bool> TerminateAsync(ScriptProcess handle);
 
     /// <summary>Stops and dismisses a run, then starts its script afresh: null when the old run did not

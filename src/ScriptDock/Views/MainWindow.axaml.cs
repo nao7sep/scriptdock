@@ -422,6 +422,7 @@ public partial class MainWindow : Window
     // stopped, each step within its bound, so it never holds the quit past them.
     private async Task RunQuitWorkAsync(MainWindowViewModel vm)
     {
+        vm.BeginShutdown();
         // The Records window closes first, so it cannot keep the app running and its placement is in
         // the view-state save below.
         Records?.Close();

@@ -27,14 +27,19 @@ public sealed class ScriptProcess : IDisposable
     private static readonly TimeSpan InputTimeout = TimeSpan.FromSeconds(2);
 
     public ScriptProcess(int id, string scriptPath, DateTimeOffset startedAt)
+        : this(id, scriptPath, startedAt, PathIdentity.Key(scriptPath)) { }
+
+    internal ScriptProcess(int id, string scriptPath, DateTimeOffset startedAt, string scriptKey)
     {
         Id = id;
         ScriptPath = scriptPath;
+        ScriptKey = scriptKey;
         StartedAt = startedAt;
     }
 
     public int Id { get; }
     public string ScriptPath { get; }
+    public string ScriptKey { get; }
     public DateTimeOffset StartedAt { get; }
     public RunState State { get; private set; } = RunState.Running;
     public int? ExitCode { get; private set; }

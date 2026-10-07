@@ -133,6 +133,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly Dictionary<string, List<ProcessActionErrorEntry>> _processActionErrors =
         new(PathIdentity.Comparer);
     private DispatcherTimer? _catalogResultTimer;
+    private readonly HashSet<string> _scriptActions = new(PathIdentity.Comparer);
+    private bool _quitting;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ToggleHiddenLabel))]
@@ -266,7 +268,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         await LoadRecentAsync();
         RebuildRecent();
         await ScanAsync(background: false);
-        _activationRescans = true;
+        _activationRescans = !_quitting;
     }
 
     /// <summary>
@@ -393,6 +395,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _state.WindowMaximized = maximized;
     }
 
+    public void BeginShutdown()
+    {
+        _quitting = true;
+        _runner.SealLaunches();
+        _scanCts?.Cancel();
+    }
+
     /// <summary>
     /// Stops timers and scanning, stops every running script's process tree, and waits, each within its
     /// bound, for those trees and for the output import in flight — the window only finishes closing,
@@ -400,6 +409,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// </summary>
     public Task ShutdownAsync() => GuardAsync("shutdown", Message.Of("guard.shutdown"), async () =>
     {
+        BeginShutdown();
+        Localizer.Changed -= OnLanguageChanged;
         _outputTimer?.Stop();
         _outputImportTimer?.Stop();
         _catalogResultTimer?.Stop();
@@ -494,6 +505,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         ApplyUiFont();
         if (fontChanged)
             UiFontChanged?.Invoke(this, EventArgs.Empty);
+        if (scanChanged)
+            _scanCts?.Cancel();
         if (scanChanged && _newPaths.Count > 0)
         {
             // Changing what is scanned ends every "new" flag; the next scan flags against the new scope.
@@ -536,6 +549,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // background scan (the window came back to the front) adds to the flags and says only what changed.
     private async Task ScanAsync(bool background)
     {
+        if (_quitting)
+            return;
         // Supersede any in-flight scan rather than refusing to start: a previous scan stuck on a
         // slow/unresponsive root must not disable Rescan forever. The latest scan owns IsScanning.
         _scanCts?.Cancel();
@@ -559,15 +574,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             var flags = background
                 ? ScanFlags.Background(diff, report.Found, _newPaths, _removed)
                 : ScanFlags.Full(diff);
+            var candidate = new KnownPaths { Paths = report.Found.ToList() };
+            await _knownPathsStore.SaveAsync(candidate);
+            cts.Token.ThrowIfCancellationRequested();
+
             _lastFound = report.Found;
             _newPaths = flags.NewKeys;
             _removed = flags.Removed;
-
+            _knownPaths.Paths = candidate.Paths;
             RebuildScripts();
-
-            _knownPaths.Paths = report.Found.ToList();
-            await _knownPathsStore.SaveAsync(_knownPaths);
-
             ResolveOperationalError("scan");
             if (!background || diff.Added.Count > 0 || diff.Removed.Count > 0)
                 ShowCatalogResult(ScanResultMessage(diff), transient: true);
@@ -582,6 +597,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             Log.Error("ui: rescan failed", ex);
+            if (cts.IsCancellationRequested || !ReferenceEquals(_scanCts, cts))
+                return;
             if (!background)
                 ClearCatalogResult(); // the "Scanning…" line
             ReportOperationalError("scan", Message.Of("scan.failed"));
@@ -616,7 +633,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private async Task StopEntry(RecentEntry? entry)
     {
-        if (entry?.Process is not { State: RunState.Running })
+        if (entry?.Process is not { State: RunState.Running } || _quitting)
+            return;
+        var key = entry.Process.ScriptKey;
+        if (!_scriptActions.Add(key))
             return;
 
         try
@@ -638,12 +658,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             Log.Error("ui: stop failed", ex, new { script = entry.Path });
             ReportProcessActionError(entry.Path, "stop", Message.Of("process.stopFailed"));
         }
+        finally { _scriptActions.Remove(key); }
     }
 
     [RelayCommand]
     private async Task DismissEntry(RecentEntry? entry)
     {
-        if (entry is null)
+        if (entry is null || _quitting)
+            return;
+        var key = entry.Process?.ScriptKey ?? PathIdentity.Key(entry.Path);
+        if (!_scriptActions.Add(key))
             return;
 
         try
@@ -657,6 +681,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                     "dismiss.confirm"))
                 return;
 
+            // Capture the whole shown identity before releasing the live handle's stable key.
+            var dismissedPaths = _recent.Where(r => PathIdentity.Comparer.Equals(ScriptKeyFor(r.Path), key))
+                .Select(r => r.Path).Append(entry.Path).Append(key).ToHashSet(StringComparer.Ordinal);
             // Remember the dismissed row's position so focus lands on its neighbour, not nowhere.
             var index = Recent.IndexOf(entry);
 
@@ -670,11 +697,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 _runner.Dismiss(entry.Process);
             }
 
-            await _records.AddDismissalAsync(entry.Path);
-            _recent.RemoveAll(r => PathIdentity.Same(r.Path, entry.Path));
+            await Task.WhenAll(dismissedPaths.Select(_records.AddDismissalAsync));
+            _recent.RemoveAll(r => dismissedPaths.Contains(r.Path));
             _recentVersion++;
 
-            _processActionErrors.Remove(PathIdentity.Key(entry.Path));
+            _processActionErrors.Remove(key);
             Log.Info("ui: dismiss", new { script = entry.Path });
             RebuildRecent();
 
@@ -687,6 +714,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             Log.Error("ui: dismiss failed", ex, new { script = entry.Path });
             ReportProcessActionError(entry.Path, "dismiss", Message.Of("process.dismissFailed"));
         }
+        finally { _scriptActions.Remove(key); }
     }
 
     [RelayCommand]
@@ -749,11 +777,22 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private async Task RunByPath(string path, string displayName)
     {
+        if (_quitting)
+            return;
+        var key = ScriptKeyFor(path);
+        if (!_scriptActions.Add(key))
+            return;
+        try { await RunAdmittedAsync(path, displayName, key); }
+        finally { _scriptActions.Remove(key); }
+    }
+
+    private async Task RunAdmittedAsync(string path, string displayName, string key)
+    {
         ScriptProcess? started;
         try
         {
             var running = _runner.Active.FirstOrDefault(p =>
-                PathIdentity.Same(p.ScriptPath, path) && p.State == RunState.Running);
+                PathIdentity.Comparer.Equals(p.ScriptKey, key) && p.State == RunState.Running);
 
             if (running is not null)
             {
@@ -763,7 +802,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                     Message.Of("restart.message", ("name", displayName)),
                     "restart.confirm"))
                     return;
+                if (_quitting)
+                    return;
                 started = await _runner.RestartAsync(running);
+                if (_quitting && started is null)
+                    return;
                 if (started is null)
                 {
                     ReportProcessActionError(path, "restart", Message.Of("process.restartFailed"));
@@ -775,7 +818,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             }
             else
             {
-                started = _runner.Start(path);
+                started = await _runner.StartAsync(path);
+                if (started is null)
+                    return;
             }
         }
         catch (Exception ex)
@@ -783,6 +828,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             // No run started, so nothing enters Recent: the failure shows on the script's existing
             // Recent row, or in the operational error bar when it has none.
             Log.Error("ui: run failed", ex, new { script = path });
+            if (_quitting)
+                return;
             RebuildRecent();
             if (Recent.Any(entry => PathIdentity.Same(entry.Path, path)))
             {
@@ -856,13 +903,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             _subscribed.Add(process);
         }
 
-        var selectedPath = SelectedRecentEntry?.Path;
+        var selectedKey = SelectedRecentEntry is { } selected ? selected.Process?.ScriptKey ?? ScriptKeyFor(selected.Path) : null;
 
         Recent.Clear();
         foreach (var entry in RecentListBuilder.Build(_recent, _runner.Active, BuildLabels()))
             Recent.Add(entry);
 
-        SelectedRecentEntry = selectedPath is null ? null : Recent.FirstOrDefault(e => PathIdentity.Same(e.Path, selectedPath));
+        SelectedRecentEntry = selectedKey is null ? null : Recent.FirstOrDefault(e =>
+            PathIdentity.Comparer.Equals(e.Process?.ScriptKey ?? ScriptKeyFor(e.Path), selectedKey));
         RunningCount = _runner.Active.Count(p => p.State == RunState.Running);
         OnPropertyChanged(nameof(NoRecent));
         RefreshOutput();
@@ -899,7 +947,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         var hidden = new HashSet<string>(_config.Hidden.Select(PathIdentity.Key), PathIdentity.Comparer);
         var running = new HashSet<string>(
-            _runner.Active.Where(p => p.State == RunState.Running).Select(p => PathIdentity.Key(p.ScriptPath)),
+            _runner.Active.Where(p => p.State == RunState.Running).Select(p => p.ScriptKey),
             PathIdentity.Comparer);
 
         var items = ScriptListBuilder.BuildScripts(_lastFound, _removed, hidden, _newPaths, running, BuildLabels(), ShowHidden);
@@ -1089,7 +1137,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private void ReportProcessActionError(string path, string key, Message message)
     {
-        var pathKey = PathIdentity.Key(path);
+        var pathKey = ScriptKeyFor(path);
         if (!_processActionErrors.TryGetValue(pathKey, out var errors))
         {
             errors = [];
@@ -1102,12 +1150,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         else
             errors.Add(new ProcessActionErrorEntry(key, message));
         RefreshRecentActionErrorProjection(
-            announce: SelectedRecentEntry is { } selected && PathIdentity.Same(selected.Path, path));
+            announce: SelectedRecentEntry is { } selected && PathIdentity.Comparer.Equals(selected.Process?.ScriptKey ?? ScriptKeyFor(selected.Path), pathKey));
     }
 
     private void ResolveProcessActionError(string path, string key)
     {
-        var pathKey = PathIdentity.Key(path);
+        var pathKey = ScriptKeyFor(path);
         if (_processActionErrors.TryGetValue(pathKey, out var errors))
         {
             errors.RemoveAll(error => error.Key == key);
@@ -1129,7 +1177,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private void RemoveProcessActionErrors(string path, IReadOnlyCollection<string> keys)
     {
-        var pathKey = PathIdentity.Key(path);
+        var pathKey = ScriptKeyFor(path);
         if (_processActionErrors.TryGetValue(pathKey, out var errors))
         {
             errors.RemoveAll(error => keys.Contains(error.Key));
@@ -1145,7 +1193,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         if (SelectedRecentEntry is not { } selected)
             return;
 
-        var pathKey = PathIdentity.Key(selected.Path);
+        var pathKey = selected.Process?.ScriptKey ?? ScriptKeyFor(selected.Path);
         if (_processActionErrors.TryGetValue(pathKey, out var errors) && errors.Count > 0)
         {
             errors.RemoveAt(0);
@@ -1157,7 +1205,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private void RefreshRecentActionErrorProjection(bool announce = false)
     {
-        var pathKey = SelectedRecentEntry is { } selected ? PathIdentity.Key(selected.Path) : null;
+        var pathKey = SelectedRecentEntry is { } selected ? selected.Process?.ScriptKey ?? ScriptKeyFor(selected.Path) : null;
         var errors = pathKey is not null && _processActionErrors.TryGetValue(pathKey, out var found)
             ? found
             : null;
@@ -1168,10 +1216,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         RecentActionErrorCount = errors?.Count ?? 0;
     }
 
-    private static string RunFailedKey(string path) => "run " + PathIdentity.Key(path);
+    private string ScriptKeyFor(string path) =>
+        _runner.Active.FirstOrDefault(p => p.ScriptPath == path)?.ScriptKey ?? PathIdentity.Key(path);
+
+    private string RunFailedKey(string path) => "run " + ScriptKeyFor(path);
 
     private void SelectRecentPath(string path) =>
-        SelectedRecentEntry = Recent.FirstOrDefault(entry => PathIdentity.Same(entry.Path, path));
+        SelectedRecentEntry = Recent.FirstOrDefault(entry =>
+            PathIdentity.Comparer.Equals(entry.Process?.ScriptKey ?? ScriptKeyFor(entry.Path), ScriptKeyFor(path)));
 
     private void ShowCatalogResult(Message text, bool transient = false)
     {

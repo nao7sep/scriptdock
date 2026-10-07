@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
 using System.Threading.Tasks;
 using ScriptDock.I18n;
 using ScriptDock.Models;
@@ -207,6 +208,151 @@ public sealed class MainWindowViewModelTests
         await first;
 
         Assert.Single(runner.RestartCalls); // never a second, concurrent restart of the same handle
+    }
+
+    [Fact]
+    public async Task ScriptsAndRecentShareAdmissionThroughConfirmationAndRestartSettlement()
+    {
+        var (vm, runner) = BuildVm();
+        var process = runner.AddRunning("/x/dev.command");
+        var recent = new RecentEntry(process.ScriptPath, "dev.command", process.StartedAt, process);
+        var script = new ScriptItem(process.ScriptPath);
+        var confirm = new TaskCompletionSource<bool>();
+        var confirmations = 0;
+        vm.ConfirmHandler = _ => { confirmations++; return confirm.Task; };
+        runner.RestartGate = new TaskCompletionSource();
+        var first = vm.RunScriptCommand.ExecuteAsync(script);
+        try
+        {
+            Assert.True(vm.RunOrRestartCommand.CanExecute(recent));
+            await vm.RunOrRestartCommand.ExecuteAsync(recent);
+            Assert.Equal(1, confirmations);
+            Assert.Empty(runner.RestartCalls);
+            confirm.SetResult(true);
+            // Confirm continuations run inline, so the first command now owns the held restart.
+            Assert.Single(runner.RestartCalls);
+            await vm.RunOrRestartCommand.ExecuteAsync(recent);
+            await vm.StopEntryCommand.ExecuteAsync(recent);
+            Assert.Single(runner.RestartCalls);
+            Assert.Empty(runner.TerminateCalls);
+            runner.RestartGate.SetResult();
+            await first;
+            Assert.Single(runner.Active);
+        }
+        finally
+        {
+            confirm.TrySetResult(false);
+            runner.RestartGate.TrySetResult();
+            await first;
+            await vm.ShutdownAsync();
+        }
+    }
+
+    [MacOnlyFact]
+    public async Task PhysicalScriptAndVanishedAliasShareTheOwnedRunAndCommandAdmission()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "scriptdock-command-alias-" + Guid.NewGuid());
+        var physical = Path.Combine(root, "physical");
+        var alias = Path.Combine(root, "alias");
+        Directory.CreateDirectory(physical);
+        var path = Path.Combine(physical, "run.command");
+        File.WriteAllText(path, "# fixture");
+        Directory.CreateSymbolicLink(alias, physical);
+        var (vm, runner) = BuildVm();
+        var handle = runner.AddRunning(Path.Combine(alias, "run.command"));
+        runner.RestartGate = new TaskCompletionSource();
+        vm.ConfirmHandler = _ => Task.FromResult(true);
+        Task restart = Task.CompletedTask;
+        try
+        {
+            File.Delete(alias);
+            restart = vm.RunScriptCommand.ExecuteAsync(new ScriptItem(path));
+            Assert.Same(handle, Assert.Single(runner.RestartCalls));
+            await vm.RunOrRestartCommand.ExecuteAsync(new RecentEntry(handle.ScriptPath,
+                "run.command", handle.StartedAt, handle));
+            Assert.Single(runner.RestartCalls);
+            Assert.Empty(runner.StartCalls);
+        }
+        finally
+        {
+            runner.RestartGate.TrySetResult();
+            await restart;
+            await vm.ShutdownAsync();
+            foreach (var owned in runner.Active) owned.Dispose();
+            Directory.Delete(root, true);
+        }
+    }
+
+    [MacOnlyFact]
+    public async Task DismissingAVanishedAliasDropsItsWholeShownIdentityAndDurableHistory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "scriptdock-dismiss-alias-" + Guid.NewGuid());
+        var physical = Path.Combine(root, "physical");
+        var alias = Path.Combine(root, "alias");
+        Directory.CreateDirectory(physical);
+        var path = Path.Combine(physical, "run.command");
+        File.WriteAllText(path, "# fixture");
+        Directory.CreateSymbolicLink(alias, physical);
+        var spelling = Path.Combine(alias, "run.command");
+        var records = new FakeRecordStore();
+        var (vm, runner) = BuildVm(config: new AppConfig { RootDirs = [] }, records: records);
+        ScriptProcess? handle = null;
+        vm.ConfirmHandler = _ => Task.FromResult(true);
+        try
+        {
+            await vm.RunScriptCommand.ExecuteAsync(new ScriptItem(path));
+            var earlier = Assert.Single(runner.Active);
+            earlier.Complete();
+            runner.Dismiss(earlier); // production Start removes terminal stale handles on replacement
+            await vm.RunScriptCommand.ExecuteAsync(new ScriptItem(spelling));
+            handle = Assert.Single(runner.Active);
+            Assert.Equal(2, records.Runs.Count);
+            Assert.Equal(spelling, Assert.Single(vm.Recent).Path);
+            File.Delete(alias);
+            // RecentRuns.Add collapsed the earlier spelling; durable run history still contains it.
+            var row = Assert.Single(vm.Recent);
+            Assert.Same(handle, row.Process);
+            await vm.DismissEntryCommand.ExecuteAsync(row);
+            Assert.Empty(vm.Recent);
+            Assert.Empty(runner.Active);
+            Assert.Contains(PathIdentity.Key(path), records.Dismissals);
+            Assert.Contains(spelling, records.Dismissals);
+            Assert.Empty(await records.ReadRecentAsync());
+        }
+        finally
+        {
+            await vm.ShutdownAsync();
+            handle?.Dispose();
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public async Task CommittedQuitSealsBothRunSurfacesAndPendingConfirmation()
+    {
+        var (vm, runner) = BuildVm();
+        var process = runner.AddRunning("/x/dev.command");
+        var recent = new RecentEntry(process.ScriptPath, "dev.command", process.StartedAt, process);
+        var confirm = new TaskCompletionSource<bool>();
+        vm.ConfirmHandler = _ => confirm.Task;
+        var restart = vm.RunOrRestartCommand.ExecuteAsync(recent);
+        try
+        {
+            vm.BeginShutdown(); // the close owner does this before its view-state save awaits
+            await vm.RunScriptCommand.ExecuteAsync(new ScriptItem("/x/other.command"));
+            confirm.SetResult(true);
+            await restart;
+            await vm.RunOrRestartCommand.ExecuteAsync(recent);
+            Assert.Empty(runner.StartCalls);
+            Assert.Empty(runner.RestartCalls);
+            Assert.False(vm.HasOperationalError);
+        }
+        finally
+        {
+            confirm.TrySetResult(false);
+            await restart;
+            await vm.ShutdownAsync();
+        }
     }
 
     [Fact]
