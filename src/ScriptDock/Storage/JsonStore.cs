@@ -248,7 +248,8 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
 
             if (File.Exists(_filePath))
             {
-                MacFileMetadata.Copy(_filePath, tempPath);
+                if (OperatingSystem.IsMacOS())
+                    File.SetUnixFileMode(tempPath, File.GetUnixFileMode(_filePath));
                 File.Replace(tempPath, _filePath, destinationBackupFileName: null, ignoreMetadataErrors: true);
             }
             else
