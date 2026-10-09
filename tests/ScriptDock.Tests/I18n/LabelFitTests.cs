@@ -138,6 +138,35 @@ public class LabelFitTests : WindowTest
     [InlineData("ja")]
     [InlineData("ko")]
     [InlineData("zh-Hans")]
+    public void the_discard_prompt_clips_nothing(string tag)
+    {
+        using var speaking = Localizer.Speaking(tag);
+
+        var dialog = Show(new ConfirmDialog(
+            Message.Of("dialog.discardTitle"), Message.Of("dialog.discardMessage"), "dialog.discard", "dialog.keepEditing"));
+
+        AssertNothingClipped(dialog, tag, atLeast: 2);
+        const double footerMargin = 24;
+        foreach (var button in dialog.GetVisualDescendants().OfType<Button>())
+        {
+            var left = button.TranslatePoint(new Point(0, 0), dialog)!.Value.X;
+            Assert.True(
+                left >= footerMargin - Tolerance && left + button.Bounds.Width <= ConfirmDialog.DialogWidth - footerMargin + Tolerance,
+                $"{tag}: “{button.Content}” spans {left:F0}–{left + button.Bounds.Width:F0}px in a {ConfirmDialog.DialogWidth}px dialog");
+        }
+    }
+
+    [AvaloniaTheory]
+    [InlineData("en")]
+    [InlineData("de")]
+    [InlineData("es")]
+    [InlineData("fr")]
+    [InlineData("it")]
+    [InlineData("pt-BR")]
+    [InlineData("ru")]
+    [InlineData("ja")]
+    [InlineData("ko")]
+    [InlineData("zh-Hans")]
     public void the_first_run_folder_dialog_clips_nothing(string tag)
     {
         using var speaking = Localizer.Speaking(tag);

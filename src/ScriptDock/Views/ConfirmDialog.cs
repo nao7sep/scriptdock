@@ -13,9 +13,11 @@ namespace ScriptDock.Views;
 /// </summary>
 public sealed class ConfirmDialog : DialogBase
 {
-    private ConfirmDialog(Message title, Message message, string confirmLabelKey)
+    internal const double DialogWidth = 400;
+
+    internal ConfirmDialog(Message title, Message message, string confirmLabelKey, string cancelLabelKey = "common.cancel")
     {
-        Width = 400;
+        Width = DialogWidth;
         // A dialog's own words are rendered once, as it is built: it is modal, so the language cannot
         // change while it is up, and its title and message carry values the catalogue fills in.
         Title = Localizer.Of(title);
@@ -29,7 +31,7 @@ public sealed class ConfirmDialog : DialogBase
 
         var buttons = SetButtons(
         [
-            new DialogButton("common.cancel", "cancel") { IsDefault = true },
+            new DialogButton(cancelLabelKey, "cancel") { IsDefault = true },
             new DialogButton(confirmLabelKey, "confirm", DialogButtonKind.Danger),
         ]);
 
@@ -41,11 +43,13 @@ public sealed class ConfirmDialog : DialogBase
     /// <summary>
     /// Shows a modal destructive confirmation owned by <paramref name="owner"/>. Returns true
     /// only if the user chooses the destructive action; Cancel, Escape, and window close all
-    /// resolve to false, so the promise always settles on the safe path.
+    /// resolve to false, so the promise always settles on the safe path. The safe button reads Cancel unless
+    /// <paramref name="cancelLabelKey"/> names it more plainly, as the discard prompt's Keep editing does.
     /// </summary>
-    public static async Task<bool> ConfirmDestructiveAsync(Window owner, Message title, Message message, string confirmLabelKey)
+    public static async Task<bool> ConfirmDestructiveAsync(
+        Window owner, Message title, Message message, string confirmLabelKey, string cancelLabelKey = "common.cancel")
     {
-        var dialog = new ConfirmDialog(title, message, confirmLabelKey);
+        var dialog = new ConfirmDialog(title, message, confirmLabelKey, cancelLabelKey);
         await dialog.ShowBoundedAsync(owner);
         return dialog.Confirmed;
     }
