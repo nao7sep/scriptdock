@@ -27,7 +27,10 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
     public const string FileName = "records.sqlite3";
 
     private static readonly TimeSpan FlushWait = TimeSpan.FromSeconds(2);
-    private static readonly TimeSpan CloseWait = TimeSpan.FromSeconds(5);
+    // The close runs after the window is gone while the single-instance lock is still held, so it stays
+    // short: a quick relaunch should not find ScriptDock "already running". What it cuts off is diagnostics.
+    private static readonly TimeSpan CloseWait = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan WindowReadCloseWait = TimeSpan.FromMilliseconds(250);
 
     // Every table carries the session (one process launch, by its start time) and the time of its record.
     // A run is named by its session and in-session run id; its output and the log lines about it carry the
@@ -286,7 +289,7 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
         lock (_windowGate)
         {
             _windowQueue?.CompleteAdding();
-            if (_windowReader?.Join(CloseWait) == true)
+            if (_windowReader?.Join(WindowReadCloseWait) == true)
                 _windowConnection?.Dispose();
         }
     }
