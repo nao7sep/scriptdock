@@ -82,6 +82,8 @@
   },
   "quit.quitAnyway": "Quit anyway",
   "quit.retry": "Retry",
+  "quit.savingMessage": "Your latest change to the settings or to the list of hidden scripts is still being saved. If you quit now, it may not be saved.",
+  "quit.savingTitle": "Settings still being saved",
   "quit.title": "Quit ScriptDock",
   "quit.unsavedMessage": "Your latest change to the settings or to the list of hidden scripts could not be saved. If you quit now, it will be lost.",
   "quit.unsavedTitle": "Settings not saved",

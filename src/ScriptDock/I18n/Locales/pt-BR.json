@@ -84,6 +84,8 @@
   },
   "quit.quitAnyway": "Encerrar mesmo assim",
   "quit.retry": "Tentar novamente",
+  "quit.savingMessage": "Sua última alteração nas configurações ou na lista de scripts ocultos ainda está sendo salva. Se você encerrar agora, ela pode não ser salva.",
+  "quit.savingTitle": "Configurações ainda sendo salvas",
   "quit.title": "Encerrar o ScriptDock",
   "quit.unsavedMessage": "Não foi possível salvar sua última alteração nas configurações ou na lista de scripts ocultos. Se você encerrar agora, ela será perdida.",
   "quit.unsavedTitle": "Configurações não salvas",

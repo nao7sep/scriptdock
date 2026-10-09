@@ -84,6 +84,8 @@
   },
   "quit.quitAnyway": "Salir de todos modos",
   "quit.retry": "Reintentar",
+  "quit.savingMessage": "Tu último cambio en la configuración o en la lista de scripts ocultos aún se está guardando. Si sales ahora, puede que no se guarde.",
+  "quit.savingTitle": "La configuración aún se está guardando",
   "quit.title": "Salir de ScriptDock",
   "quit.unsavedMessage": "No se pudo guardar tu último cambio en la configuración o en la lista de scripts ocultos. Si sales ahora, se perderá.",
   "quit.unsavedTitle": "Configuración no guardada",

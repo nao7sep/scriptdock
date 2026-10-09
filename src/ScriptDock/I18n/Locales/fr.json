@@ -84,6 +84,8 @@
   },
   "quit.quitAnyway": "Quitter quand même",
   "quit.retry": "Réessayer",
+  "quit.savingMessage": "Votre dernière modification des paramètres ou de la liste des scripts masqués est encore en cours d’enregistrement. Si vous quittez maintenant, elle risque de ne pas être enregistrée.",
+  "quit.savingTitle": "Paramètres en cours d’enregistrement",
   "quit.title": "Quitter ScriptDock",
   "quit.unsavedMessage": "Votre dernière modification des paramètres ou de la liste des scripts masqués n’a pas pu être enregistrée. Si vous quittez maintenant, elle sera perdue.",
   "quit.unsavedTitle": "Paramètres non enregistrés",

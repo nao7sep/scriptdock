@@ -82,6 +82,8 @@
   },
   "quit.quitAnyway": "Trotzdem beenden",
   "quit.retry": "Erneut versuchen",
+  "quit.savingMessage": "Ihre letzte Änderung an den Einstellungen oder an der Liste der ausgeblendeten Skripte wird noch gespeichert. Wenn Sie ScriptDock jetzt beenden, wird sie möglicherweise nicht gespeichert.",
+  "quit.savingTitle": "Einstellungen werden noch gespeichert",
   "quit.title": "ScriptDock beenden",
   "quit.unsavedMessage": "Ihre letzte Änderung an den Einstellungen oder an der Liste der ausgeblendeten Skripte konnte nicht gespeichert werden. Wenn Sie ScriptDock jetzt beenden, geht sie verloren.",
   "quit.unsavedTitle": "Einstellungen nicht gespeichert",

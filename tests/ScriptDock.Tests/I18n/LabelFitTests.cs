@@ -107,6 +107,8 @@ public class LabelFitTests : WindowTest
     {
         using var speaking = Localizer.Speaking(tag);
 
+        // The still-saving variant changes only the title and message.
+        AssertNothingClipped(Show(new UnsavedSettingsQuitDialog(stillSaving: true)), tag, atLeast: 3);
         var dialog = Show(new UnsavedSettingsQuitDialog());
 
         // Its message wraps; its three button labels do not.

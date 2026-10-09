@@ -447,7 +447,7 @@ public partial class MainWindow : Window
             UnsavedQuitChoice choice;
             try
             {
-                choice = await UnsavedSettingsQuitDialog.AskAsync(this);
+                choice = await UnsavedSettingsQuitDialog.AskAsync(this, vm.SettingsStillSavingAtQuit);
             }
             catch (Exception ex)
             {

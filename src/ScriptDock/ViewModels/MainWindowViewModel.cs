@@ -356,8 +356,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// <paramref name="retry"/> it saves that change again first. False when the change did not land: its
     /// write failed, or was still running at the bound.
     /// </summary>
+    /// <summary>True when the last <see cref="SettingsSavedForQuitAsync"/> returned false because the write
+    /// was still running at its bound: its outcome is unknown, not failed.</summary>
+    public bool SettingsStillSavingAtQuit { get; private set; }
+
     public async Task<bool> SettingsSavedForQuitAsync(bool retry = false)
     {
+        SettingsStillSavingAtQuit = false;
         var write = _configWrite;
         if (!retry && write.IsCompleted)
             return true; // landed, or failed before the quit and was reported where the change was made
@@ -373,6 +378,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             Log.Warn("quit: the settings change was still being saved at its bound",
                 new { boundMs = QuitSettingsWriteBound.TotalMilliseconds });
+            SettingsStillSavingAtQuit = true;
             return false;
         }
         catch (Exception ex)

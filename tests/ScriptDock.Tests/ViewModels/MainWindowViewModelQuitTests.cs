@@ -167,6 +167,7 @@ public sealed class MainWindowViewModelQuitTests : IAsyncLifetime
         gate.SetException(new IOException("disk full (test)"));
 
         Assert.False(await saved);
+        Assert.False(vm.SettingsStillSavingAtQuit); // failed, not still running
         Assert.False(await apply);
     }
 
@@ -198,6 +199,7 @@ public sealed class MainWindowViewModelQuitTests : IAsyncLifetime
 
         _clock.Advance(Tick);
         Assert.False(await saved);
+        Assert.True(vm.SettingsStillSavingAtQuit); // its outcome is unknown, so the question says it is still saving
     }
 
     [Fact]

@@ -80,6 +80,8 @@
   },
   "quit.quitAnyway": "保存せずに終了",
   "quit.retry": "再試行",
+  "quit.savingMessage": "設定または非表示のスクリプトの一覧への最後の変更を、まだ保存しています。今終了すると、この変更は保存されない可能性があります。",
+  "quit.savingTitle": "設定を保存しています",
   "quit.title": "ScriptDock を終了",
   "quit.unsavedMessage": "設定または非表示のスクリプトの一覧への最後の変更を保存できませんでした。今終了すると、この変更は失われます。",
   "quit.unsavedTitle": "設定が保存されていません",

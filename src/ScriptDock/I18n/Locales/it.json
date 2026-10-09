@@ -84,6 +84,8 @@
   },
   "quit.quitAnyway": "Esci comunque",
   "quit.retry": "Riprova",
+  "quit.savingMessage": "L’ultima modifica alle impostazioni o all’elenco degli script nascosti è ancora in fase di salvataggio. Se esci ora, potrebbe non essere salvata.",
+  "quit.savingTitle": "Impostazioni ancora in salvataggio",
   "quit.title": "Esci da ScriptDock",
   "quit.unsavedMessage": "Non è stato possibile salvare l’ultima modifica alle impostazioni o all’elenco degli script nascosti. Se esci ora, andrà persa.",
   "quit.unsavedTitle": "Impostazioni non salvate",
