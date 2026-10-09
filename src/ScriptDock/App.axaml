@@ -55,7 +55,8 @@
                     <SolidColorBrush x:Key="ButtonBrush" Color="#E3ECEF"/>
                     <SolidColorBrush x:Key="ButtonHoverBrush" Color="#D6E3E8"/>
                         <SolidColorBrush x:Key="ButtonPressedBrush" Color="#C8D9DF"/>
-                    <SolidColorBrush x:Key="ButtonBorderBrush" Color="#BCCDD4"/>
+                    <!-- A control edge: 2.1–2.3 against the app background, panels and chips (interface-styling-conventions, 2.0–2.5). -->
+                    <SolidColorBrush x:Key="ButtonBorderBrush" Color="#9EACB2"/>
                     <SolidColorBrush x:Key="ButtonDisabledBrush" Color="#EAF1F3"/>
                     <SolidColorBrush x:Key="ButtonDisabledBorderBrush" Color="#D3DFE3"/>
                     <!-- A field's outline under the pointer, one step firmer than its resting FieldBorder. -->
@@ -119,7 +120,7 @@
                     <SolidColorBrush x:Key="ButtonBrush" Color="#1C2E35"/>
                     <SolidColorBrush x:Key="ButtonHoverBrush" Color="#233941"/>
                         <SolidColorBrush x:Key="ButtonPressedBrush" Color="#2A444D"/>
-                    <SolidColorBrush x:Key="ButtonBorderBrush" Color="#34505A"/>
+                    <SolidColorBrush x:Key="ButtonBorderBrush" Color="#3E5962"/>
                     <SolidColorBrush x:Key="ButtonDisabledBrush" Color="#16252B"/>
                     <SolidColorBrush x:Key="ButtonDisabledBorderBrush" Color="#243840"/>
                     <SolidColorBrush x:Key="FieldHoverBorderBrush" Color="#83A0AA"/>
