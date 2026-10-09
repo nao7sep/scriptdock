@@ -397,11 +397,11 @@ internal static class MacMenuBar
         foreach (var action in EditActions)
         {
             if (!AddMethod(viewClass, action, s_editAction, ActionMethodTypes))
-                Log.Info("ui: the macOS view already answers an Edit action", new { action });
+                Log.Debug("ui: the macOS view already answers an Edit action", new { action });
         }
 
         if (!AddMethod(viewClass, "validateMenuItem:", s_validateEditItem, BoolMethodTypes))
-            Log.Info("ui: the macOS view already validates menu items");
+            Log.Debug("ui: the macOS view already validates menu items");
     }
 
     private static void OnAppAction(IntPtr self, IntPtr selector, IntPtr sender)

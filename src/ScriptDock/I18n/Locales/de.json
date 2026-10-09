@@ -111,7 +111,7 @@
   "records.kindScanReport": "Scanbericht",
   "records.launch": "Sitzung",
   "records.level": "Stufe",
-  "records.levelAttention": "Benötigt Aufmerksamkeit",
+  "records.levelAttention": "Warnungen und Fehler",
   "records.levelDebug": "Debug",
   "records.levelError": "Fehler",
   "records.levelInfo": "Info",

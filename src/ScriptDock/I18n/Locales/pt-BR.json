@@ -113,7 +113,7 @@
   "records.kindScanReport": "Relatório de exame",
   "records.launch": "Sessão",
   "records.level": "Nível",
-  "records.levelAttention": "Requer atenção",
+  "records.levelAttention": "Avisos e erros",
   "records.levelDebug": "Depuração",
   "records.levelError": "Erro",
   "records.levelInfo": "Informação",

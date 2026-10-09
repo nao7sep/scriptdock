@@ -115,7 +115,7 @@
   "records.kindScanReport": "Отчёт о сканировании",
   "records.launch": "Сеанс",
   "records.level": "Уровень",
-  "records.levelAttention": "Требует внимания",
+  "records.levelAttention": "Предупреждения и ошибки",
   "records.levelDebug": "Отладка",
   "records.levelError": "Ошибка",
   "records.levelInfo": "Информация",

@@ -113,7 +113,7 @@
   "records.kindScanReport": "Rapporto di scansione",
   "records.launch": "Sessione",
   "records.level": "Livello",
-  "records.levelAttention": "Richiede attenzione",
+  "records.levelAttention": "Avvisi ed errori",
   "records.levelDebug": "Debug",
   "records.levelError": "Errore",
   "records.levelInfo": "Info",

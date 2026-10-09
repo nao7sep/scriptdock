@@ -67,7 +67,7 @@ internal static class BackgroundTextInput
 
             field.RaiseEvent(new TextInputEventArgs { RoutedEvent = InputElement.TextInputEvent, Text = e.Text });
             e.Handled = true;
-            Log.Info("ui: text that reached a background window went to its text field", new { length = e.Text.Length });
+            Log.Debug("ui: text that reached a background window went to its text field", new { length = e.Text.Length });
         }
         catch (Exception ex)
         {
