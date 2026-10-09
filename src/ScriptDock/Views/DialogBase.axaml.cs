@@ -45,11 +45,19 @@ public sealed record DialogButton(string LabelKey, string Tag, DialogButtonKind 
 /// <see cref="HasUnsavedChanges"/> is intercepted to confirm discarding the draft. Commit
 /// closes, owner close, app shutdown, and OS shutdown never block.
 /// </remarks>
+/// <remarks>
+/// While a commit runs (<see cref="TryCommit"/>), the dialog is busy (modal-dialog-conventions): its
+/// content and buttons are disabled and the user's own dismissals — Escape and the close button — are
+/// ignored, so input typed meanwhile cannot be lost by the close that follows, a second commit cannot
+/// overlap the first, and a discard cannot close the dialog over a commit that still lands. Owner close,
+/// app shutdown and OS shutdown still close it; the app's quit waits for that commit itself.
+/// </remarks>
 public partial class DialogBase : Window
 {
     private readonly HashSet<Button> _commitButtons = [];
     private Control? _initialFocusControl;
     private bool _bypassCloseGuard;
+    private bool _committing;
 
     /// <summary>Tag of the button the user activated, or <c>null</c> if the dialog was dismissed.</summary>
     public string? ResultTag { get; private set; }
@@ -176,18 +184,33 @@ public partial class DialogBase : Window
     {
         // Escape is just another dismiss path — route it through the close guard rather than
         // closing directly, so a dirty dialog still gets its discard confirmation.
-        if (e.Key == Key.Escape)
+        if (e.Key == Key.Escape && !_committing)
             Close();
     }
 
     private async void OnButtonClick(object? sender, RoutedEventArgs e)
     {
-        if (sender is not Button button)
+        if (sender is not Button button || _committing)
             return;
 
         var tag = button.Tag as string;
-        if (_commitButtons.Contains(button) && (tag is null || !await TryCommit(tag)))
-            return;
+        if (_commitButtons.Contains(button))
+        {
+            if (tag is null)
+                return;
+            bool committed;
+            SetBusy(true);
+            try
+            {
+                committed = await TryCommit(tag);
+            }
+            finally
+            {
+                SetBusy(false);
+            }
+            if (!committed)
+                return;
+        }
 
         ResultTag = tag;
         if (_commitButtons.Contains(button))
@@ -196,8 +219,22 @@ public partial class DialogBase : Window
         Close();
     }
 
+    private void SetBusy(bool busy)
+    {
+        _committing = busy;
+        DialogContent.IsEnabled = !busy;
+        ButtonPanel.IsEnabled = !busy;
+    }
+
     private async void OnClosing(object? sender, WindowClosingEventArgs e)
     {
+        // The user's own close waits for a commit in flight; other closes go ahead (see the remarks).
+        if (_committing && e.CloseReason == WindowCloseReason.WindowClosing)
+        {
+            e.Cancel = true;
+            return;
+        }
+
         if (!DialogCloseGuard.ShouldConfirmDiscard(e.CloseReason, _bypassCloseGuard, HasUnsavedChanges))
             return;
 
