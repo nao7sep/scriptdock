@@ -107,6 +107,8 @@ public sealed class RecordsWindowTests : WindowTest
         splitter.RaiseEvent(new VectorEventArgs { RoutedEvent = Thumb.DragCompletedEvent, Vector = new Vector(90, 0) });
         Dispatcher.UIThread.RunJobs();
 
+        // The fake store saves on a pool thread, as the real one does.
+        Assert.True(System.Threading.SpinWait.SpinUntil(() => _stateStore.SaveCount > 0, TimeSpan.FromSeconds(5)));
         Assert.Equal(470, _stateStore.Value.RecordsListWidth);
         Assert.Equal(470, window.ListWidthIntent);
     }
