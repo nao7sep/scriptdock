@@ -127,6 +127,27 @@ public class LabelFitTests : WindowTest
         }
     }
 
+    [AvaloniaTheory]
+    [InlineData("en")]
+    [InlineData("de")]
+    [InlineData("es")]
+    [InlineData("fr")]
+    [InlineData("it")]
+    [InlineData("pt-BR")]
+    [InlineData("ru")]
+    [InlineData("ja")]
+    [InlineData("ko")]
+    [InlineData("zh-Hans")]
+    public void the_first_run_folder_dialog_clips_nothing(string tag)
+    {
+        using var speaking = Localizer.Speaking(tag);
+
+        var dialog = Show(new FirstRunFolderDialog());
+
+        // Its message wraps; its two button labels do not.
+        AssertNothingClipped(dialog, tag, atLeast: 2);
+    }
+
     private static void AssertNothingClipped(Visual root, string tag, int atLeast)
     {
         var clipped = new List<string>();

@@ -457,6 +457,23 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public SettingsDialogViewModel CreateSettingsDraft() => new(_config);
 
+    /// <summary>True while there is no folder to scan, so nothing can be listed: the launch asks for one.</summary>
+    public bool NeedsScanFolder => _config.RootDirs.Count == 0;
+
+    /// <summary>
+    /// First-run setup: adds the folder the user chose as a scan folder through the ordinary settings save,
+    /// then scans it. False when the save failed; nothing changed then.
+    /// </summary>
+    public async Task<bool> AddFirstScanFolderAsync(string path)
+    {
+        var draft = CreateSettingsDraft();
+        draft.AddPickedRootDir(path);
+        if (!await TryApplySettingsAsync(draft))
+            return false;
+        await ScanAsync(background: false);
+        return true;
+    }
+
     /// <summary>
     /// The computer's own languages, in order, as they were read at launch. System resolves against
     /// these, so it cannot mean one language at launch and another after a change in Settings.

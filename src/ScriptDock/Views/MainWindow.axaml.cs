@@ -9,6 +9,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using ScriptDock.Controls;
 using ScriptDock.Models;
@@ -292,6 +293,34 @@ public partial class MainWindow : Window
 
     // The quit's work, started once by whichever quit reaches it first.
     private Task? _quitWork;
+
+    /// <summary>
+    /// First-run setup (config-sets-conventions): with no folder to scan, ask for one in a single step and
+    /// scan it. Not Now writes nothing, so the question returns at the next launch while there is still no
+    /// folder; Settings can add folders at any time.
+    /// </summary>
+    internal async Task AskForFirstScanFolderAsync()
+    {
+        if (ViewModel is not { NeedsScanFolder: true } vm || !await FirstRunFolderDialog.AskAsync(this))
+            return;
+
+        try
+        {
+            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = Localizer.T("settings.pickRootTitle"),
+            });
+            if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } path)
+                return;
+            if (!await vm.AddFirstScanFolderAsync(path))
+                await NoticeDialog.ShowAsync(this, Message.Of("firstRun.title"), Message.Of("settings.saveFailed"));
+        }
+        catch (Exception ex)
+        {
+            Log.Error("ui: first-run folder choice failed", ex);
+            await NoticeDialog.ShowAsync(this, Message.Of("firstRun.title"), FailurePresentation.RootPicker(ex));
+        }
+    }
 
     // Every quit path closes the main window: the menu's Quit and Cmd+Q and the Dock's Quit through the
     // lifetime, the window's own close, and the operating system ending the session

@@ -132,6 +132,7 @@ public partial class App : Application
                         I18n.Message.Of("startup.recordsUnavailableTitle"),
                         FailurePresentation.RecordsUnavailable(records.FilePath));
                 }
+                await mainWindow.AskForFirstScanFolderAsync();
             };
         }
 

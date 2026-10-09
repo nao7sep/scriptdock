@@ -489,6 +489,47 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task FirstScanFolder_IsSavedAsARootAndScanned()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "scriptdock-first-run-" + Guid.NewGuid());
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, "hello" + ConfigDefaults.DefaultExtension), "# fixture");
+        var config = new AppConfig();
+        var configStore = new FakeConfigStore { Value = config };
+        var vm = new MainWindowViewModel(
+            configStore, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeRecordStore(), config, new AppState(), new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+        try
+        {
+            Assert.True(vm.NeedsScanFolder);
+
+            Assert.True(await vm.AddFirstScanFolderAsync(root));
+
+            Assert.Equal([root], configStore.LastSaved!.RootDirs);
+            Assert.False(vm.NeedsScanFolder);
+            Assert.Contains(vm.Scripts, script => Path.GetFileName(script.Path) == "hello" + ConfigDefaults.DefaultExtension);
+        }
+        finally
+        {
+            await vm.ShutdownAsync();
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public async Task FirstScanFolder_WhoseSaveFails_ChangesNothing()
+    {
+        var config = new AppConfig();
+        var configStore = new FakeConfigStore { Value = config, ThrowOnSave = true };
+        var vm = new MainWindowViewModel(
+            configStore, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeRecordStore(), config, new AppState(), new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+
+        Assert.False(await vm.AddFirstScanFolderAsync("/scripts"));
+
+        Assert.True(vm.NeedsScanFolder);
+        Assert.Empty(config.RootDirs);
+    }
+
+    [Fact]
     public async Task SettingsSaveFailure_RemainsOwnedByDialogAndDoesNotPublishGlobalError()
     {
         var config = new AppConfig { RootDirs = [] };
