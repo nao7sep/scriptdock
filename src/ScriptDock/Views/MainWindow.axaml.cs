@@ -444,7 +444,19 @@ public partial class MainWindow : Window
             if (_shutdownSaved)
                 return false; // the session ended meanwhile and took the quit over
 
-            switch (await UnsavedSettingsQuitDialog.AskAsync(this))
+            UnsavedQuitChoice choice;
+            try
+            {
+                choice = await UnsavedSettingsQuitDialog.AskAsync(this);
+            }
+            catch (Exception ex)
+            {
+                // A question that cannot be shown cancels the quit; waiting is never consent to discard.
+                Log.Error("quit: the unsaved-settings question could not be shown; staying open", ex);
+                return false;
+            }
+
+            switch (choice)
             {
                 case UnsavedQuitChoice.Retry:
                     retry = true;
@@ -551,6 +563,13 @@ public partial class MainWindow : Window
                 Message.Of("quit.title"),
                 Message.Of("quit.message", ("count", vm.RunningCount)),
                 "quit.confirm");
+        }
+        catch (Exception ex)
+        {
+            // A question that cannot be shown cancels the quit rather than stopping scripts unasked
+            // (unsaved-edits-conventions, Quitting).
+            Log.Error("quit: the stop-running-scripts question could not be shown; staying open", ex);
+            return false;
         }
         finally
         {
