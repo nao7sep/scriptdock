@@ -1239,12 +1239,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private void ResolveProcessActionError(string path, string key)
     {
         var pathKey = ScriptKeyFor(path);
-        if (_processActionErrors.TryGetValue(pathKey, out var errors))
-        {
-            errors.RemoveAll(error => error.Key == key);
-            if (errors.Count == 0)
-                _processActionErrors.Remove(pathKey);
-        }
+        // Resolving an error that is not there changes nothing, so it must not re-render the row's error
+        // and silence an announcement still due: a deferred output read resolves "read-output" late.
+        if (!_processActionErrors.TryGetValue(pathKey, out var errors) || errors.RemoveAll(error => error.Key == key) == 0)
+            return;
+        if (errors.Count == 0)
+            _processActionErrors.Remove(pathKey);
         RefreshRecentActionErrorProjection();
     }
 
