@@ -109,7 +109,8 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
     {
         Session = TimestampConventions.IsoMillis(sessionStartedAt);
         FilePath = Path.Combine(directory, FileName);
-        FallbackPath = Path.Combine(directory, "logs", TimestampConventions.FileStampMillis(sessionStartedAt) + ".log");
+        // Seconds suffice: one instance runs at a time, and a relaunch within the same second appends.
+        FallbackPath = Path.Combine(directory, "logs", TimestampConventions.FileStamp(sessionStartedAt) + ".log");
 
         SqliteConnection? connection = null;
         try

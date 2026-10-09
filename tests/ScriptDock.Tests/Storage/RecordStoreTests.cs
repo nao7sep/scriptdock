@@ -148,7 +148,8 @@ public sealed class RecordStoreTests : IDisposable
         await Assert.ThrowsAnyAsync<Exception>(() => records.AddRunAsync(Run(1, "/runs/1.log")));
         records.Flush();
 
-        Assert.Equal(Path.Combine(_dir, "logs", "20261002-030405-678-utc.log"), records.FallbackPath);
+        Assert.True(records.DatabaseUnavailable);
+        Assert.Equal(Path.Combine(_dir, "logs", "20261002-030405-utc.log"), records.FallbackPath);
         var text = File.ReadAllText(records.FallbackPath);
         Assert.Contains("could not open the database", text);
         Assert.Contains("{\"message\":\"kept\"}", text);

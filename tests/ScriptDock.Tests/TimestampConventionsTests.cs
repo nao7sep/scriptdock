@@ -32,10 +32,4 @@ public sealed class TimestampConventionsTests
     {
         Assert.Equal("20260617-001541-utc", TimestampConventions.FileStamp(Jst));
     }
-
-    [Fact]
-    public void FileStampMillis_RendersCompactUtcTokenWithMillisAndUtcMarker()
-    {
-        Assert.Equal("20260617-001541-123-utc", TimestampConventions.FileStampMillis(Jst));
-    }
 }

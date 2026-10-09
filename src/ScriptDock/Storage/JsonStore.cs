@@ -34,7 +34,7 @@ namespace ScriptDock.Storage;
 /// <remarks>
 /// The store imposes no ordering on the value it receives. If on-disk ordering
 /// matters (diff stability, hand-editing), the caller sorts a copy before
-/// <see cref="Save"/>.
+/// <see cref="SaveAsync"/>.
 /// </remarks>
 /// <remarks>
 /// <see cref="SaveAsync"/> queues each write on a single chained task per store, so writes to one
@@ -87,8 +87,6 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         Log.Info("store: no existing data, using defaults", new { label = _label });
         return new T();
     }
-
-    public void Save(T value) => SaveAsync(value).GetAwaiter().GetResult();
 
     public Task SaveAsync(T value)
     {
@@ -213,7 +211,7 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         var directory = Path.GetDirectoryName(filePath) ?? string.Empty;
         var stem = Path.GetFileNameWithoutExtension(filePath);
         var quarantinePath = Path.Combine(
-            directory, $"{stem}-{TimestampConventions.FileStampMillis(DateTimeOffset.UtcNow)}.invalid");
+            directory, $"{stem}-{TimestampConventions.FileStamp(DateTimeOffset.UtcNow)}.invalid");
 
         try
         {

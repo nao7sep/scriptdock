@@ -11,9 +11,6 @@ public interface IJsonStore<T> where T : class, new()
 {
     T Load();
 
-    /// <summary>Blocking save, for the startup path (before the window exists) and tests.</summary>
-    void Save(T value);
-
     /// <summary>
     /// Queues the write and returns a task that completes when it lands. A caller mutates its own
     /// shared document object in place and calls this on the UI thread, so the JSON snapshot is

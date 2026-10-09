@@ -184,14 +184,14 @@ public sealed class BackupStoreTests : IDisposable
     }
 
     [Fact]
-    public void JsonStoreSave_RecordsThroughTheChokePoint_AfterTheRenameLands()
+    public async Task JsonStoreSave_RecordsThroughTheChokePoint_AfterTheRenameLands()
     {
         // The end-to-end wire: a managed-text save through JsonStore's single atomic-write choke point
         // records the exact bytes it wrote, at the file's full absolute path, strictly after the rename.
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
         var docPath = Path.Combine(_root, "doc.json");
 
-        store.Save(new SampleDoc { Name = "one" });
+        await store.SaveAsync(new SampleDoc { Name = "one" });
 
         var onDisk = File.ReadAllBytes(docPath);
         var rows = RowsFor(docPath);
@@ -224,14 +224,14 @@ public sealed class BackupStoreTests : IDisposable
     }
 
     [Fact]
-    public void JsonStoreSave_RepeatedIdenticalSaves_Dedup_ButAChangeRecordsANewVersion()
+    public async Task JsonStoreSave_RepeatedIdenticalSaves_Dedup_ButAChangeRecordsANewVersion()
     {
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
         var docPath = Path.Combine(_root, "doc.json");
 
-        store.Save(new SampleDoc { Name = "one" });
-        store.Save(new SampleDoc { Name = "one" }); // no real change — deduped
-        store.Save(new SampleDoc { Name = "two" }); // a real change — recorded
+        await store.SaveAsync(new SampleDoc { Name = "one" });
+        await store.SaveAsync(new SampleDoc { Name = "one" }); // no real change — deduped
+        await store.SaveAsync(new SampleDoc { Name = "two" }); // a real change — recorded
 
         Assert.Equal(2, RowsFor(docPath).Count);
     }

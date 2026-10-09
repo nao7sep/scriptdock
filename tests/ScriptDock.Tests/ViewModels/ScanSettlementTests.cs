@@ -125,7 +125,6 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         private readonly Channel<Save> _submitted = Channel.CreateUnbounded<Save>();
         private readonly List<Save> _owned = [];
         public KnownPaths Load() => new();
-        public void Save(KnownPaths value) => throw new NotSupportedException();
         public Task SaveAsync(KnownPaths value)
         {
             var save = new Save(value, new TaskCompletionSource());

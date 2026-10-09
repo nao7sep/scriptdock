@@ -72,10 +72,10 @@ public sealed class JsonStoreTests : IDisposable
         fileName == BackupStore.FileName + "-shm";
 
     [Fact]
-    public void SaveThenLoad_RoundTripsValue()
+    public async Task SaveThenLoad_RoundTripsValue()
     {
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
-        store.Save(new SampleDoc { Name = "x", Kind = SampleKind.SecondChoice, Items = ["a", "b"] });
+        await store.SaveAsync(new SampleDoc { Name = "x", Kind = SampleKind.SecondChoice, Items = ["a", "b"] });
 
         var loaded = store.Load();
 
@@ -98,56 +98,56 @@ public sealed class JsonStoreTests : IDisposable
     }
 
     [Fact]
-    public void Save_UnchangedContent_LeavesTheFileUntouched()
+    public async Task Save_UnchangedContent_LeavesTheFileUntouched()
     {
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
-        store.Save(new SampleDoc { Name = "one" });
+        await store.SaveAsync(new SampleDoc { Name = "one" });
         var earlier = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         File.SetLastWriteTimeUtc(PathOf("doc.json"), earlier);
 
-        store.Save(new SampleDoc { Name = "one" });
+        await store.SaveAsync(new SampleDoc { Name = "one" });
 
         Assert.Equal(earlier, File.GetLastWriteTimeUtc(PathOf("doc.json")));
     }
 
     [Fact]
-    public void Save_ComparesAgainstTheFileOnDisk_SoAnOutsideEditIsReplaced()
+    public async Task Save_ComparesAgainstTheFileOnDisk_SoAnOutsideEditIsReplaced()
     {
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
-        store.Save(new SampleDoc { Name = "one" });
+        await store.SaveAsync(new SampleDoc { Name = "one" });
         var saved = File.ReadAllText(PathOf("doc.json"));
         File.WriteAllText(PathOf("doc.json"), saved.Replace("one", "edited"));
 
-        store.Save(new SampleDoc { Name = "one" });
+        await store.SaveAsync(new SampleDoc { Name = "one" });
 
         Assert.Equal(saved, File.ReadAllText(PathOf("doc.json")));
     }
 
     [MacOnlyFact]
     [SupportedOSPlatform("macos")]
-    public void Save_Changed_KeepsTheFilesPermissionMode()
+    public async Task Save_Changed_KeepsTheFilesPermissionMode()
     {
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
-        store.Save(new SampleDoc { Name = "one" });
+        await store.SaveAsync(new SampleDoc { Name = "one" });
         var path = PathOf("doc.json");
         const UnixFileMode restricted = UnixFileMode.UserRead | UnixFileMode.UserWrite;
         File.SetUnixFileMode(path, restricted);
 
-        store.Save(new SampleDoc { Name = "two" });
+        await store.SaveAsync(new SampleDoc { Name = "two" });
 
         Assert.Equal("two", store.Load().Name);
         Assert.Equal(restricted, File.GetUnixFileMode(path));
     }
 
     [Fact]
-    public void Load_CorruptPrimary_ReturnsDefault()
+    public async Task Load_CorruptPrimary_ReturnsDefault()
     {
         // The .bak sidecar is retired: an unreadable live file is quarantined aside (see the
         // dedicated quarantine tests below) rather than a sidecar being consulted; earlier content
         // is recovered, if ever needed, from the quarantine file or backups.sqlite3.
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
-        store.Save(new SampleDoc { Name = "one" });
-        store.Save(new SampleDoc { Name = "two" });
+        await store.SaveAsync(new SampleDoc { Name = "one" });
+        await store.SaveAsync(new SampleDoc { Name = "two" });
 
         File.WriteAllText(PathOf("doc.json"), "{ not valid json");
 
@@ -159,15 +159,15 @@ public sealed class JsonStoreTests : IDisposable
     }
 
     [Fact]
-    public void Load_CorruptFile_QuarantinesTheOriginalAndReturnsDefault()
+    public async Task Load_CorruptFile_QuarantinesTheOriginalAndReturnsDefault()
     {
         // Present-but-corrupt is never touched by the create-if-absent first-run path and must
         // never be left in place for a later Save to silently overwrite (the storage-path
         // conventions' forbidden path). The storage layer moves it aside instead, so it survives
         // as diagnostic debris, and defaults proceed from here.
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
-        store.Save(new SampleDoc { Name = "one" });
-        store.Save(new SampleDoc { Name = "two" });
+        await store.SaveAsync(new SampleDoc { Name = "one" });
+        await store.SaveAsync(new SampleDoc { Name = "two" });
 
         const string corruptContent = "{ not valid json";
         File.WriteAllText(PathOf("doc.json"), corruptContent);
@@ -180,15 +180,15 @@ public sealed class JsonStoreTests : IDisposable
         var quarantined = Directory.EnumerateFiles(_root, "doc-*.invalid").ToList();
         Assert.Single(quarantined);
 
-        // <stem>-<millisecond-utc-stamp>.invalid — the derived-filename grammar.
-        Assert.Matches(@"^doc-\d{8}-\d{6}-\d{3}-utc\.invalid$", Path.GetFileName(quarantined[0]));
+        // <stem>-<second-utc-stamp>.invalid — the derived-filename grammar.
+        Assert.Matches(@"^doc-\d{8}-\d{6}-utc\.invalid$", Path.GetFileName(quarantined[0]));
 
         // A plain rename: the original bytes are preserved exactly, not copied or rewritten.
         Assert.Equal(corruptContent, File.ReadAllText(quarantined[0]));
     }
 
     [Fact]
-    public void Save_AfterQuarantine_RecreatesTheLiveFileAndLeavesTheQuarantineAlone()
+    public async Task Save_AfterQuarantine_RecreatesTheLiveFileAndLeavesTheQuarantineAlone()
     {
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
         File.WriteAllText(PathOf("doc.json"), "{ not valid json");
@@ -198,7 +198,7 @@ public sealed class JsonStoreTests : IDisposable
         var quarantinePath = Directory.EnumerateFiles(_root, "doc-*.invalid").Single();
         var quarantinedContentBefore = File.ReadAllText(quarantinePath);
 
-        store.Save(new SampleDoc { Name = "fresh" });
+        await store.SaveAsync(new SampleDoc { Name = "fresh" });
 
         // First-run materialization recreates the live file at the original path...
         Assert.True(File.Exists(PathOf("doc.json")));
@@ -243,7 +243,7 @@ public sealed class JsonStoreTests : IDisposable
     }
 
     [Fact]
-    public void Load_UnreadableRebuildableFile_ReturnsDefaultWithoutQuarantineOrNotice()
+    public async Task Load_UnreadableRebuildableFile_ReturnsDefaultWithoutQuarantineOrNotice()
     {
         File.WriteAllText(PathOf("doc.json"), "{ not valid json");
         QuarantineJournal.Drain();
@@ -255,7 +255,7 @@ public sealed class JsonStoreTests : IDisposable
         Assert.Empty(Directory.EnumerateFiles(_root, "doc-*.invalid"));
         Assert.Empty(QuarantineJournal.Drain());
 
-        store.Save(new SampleDoc { Name = "rebuilt" });
+        await store.SaveAsync(new SampleDoc { Name = "rebuilt" });
 
         Assert.Equal("rebuilt", store.Load().Name);
     }
@@ -310,22 +310,22 @@ public sealed class JsonStoreTests : IDisposable
     }
 
     [Fact]
-    public void Save_FirstTime_CreatesLiveFileButNoBakSidecar()
+    public async Task Save_FirstTime_CreatesLiveFileButNoBakSidecar()
     {
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
 
-        store.Save(new SampleDoc());
+        await store.SaveAsync(new SampleDoc());
 
         Assert.True(File.Exists(PathOf("doc.json")));
         Assert.False(File.Exists(PathOf("doc.json.bak")));
     }
 
     [Fact]
-    public void Save_SecondTime_WritesNewContentAndStillNoBakSidecar()
+    public async Task Save_SecondTime_WritesNewContentAndStillNoBakSidecar()
     {
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
-        store.Save(new SampleDoc { Name = "one" });
-        store.Save(new SampleDoc { Name = "two" });
+        await store.SaveAsync(new SampleDoc { Name = "one" });
+        await store.SaveAsync(new SampleDoc { Name = "two" });
 
         var liveJson = File.ReadAllText(PathOf("doc.json"));
 
@@ -335,13 +335,13 @@ public sealed class JsonStoreTests : IDisposable
     }
 
     [Fact]
-    public void Save_LeavesOnlyTheLiveFileInTheRoot()
+    public async Task Save_LeavesOnlyTheLiveFileInTheRoot()
     {
         // Locks the retirement: repeated saves produce exactly one file — no .bak, no leftover .tmp.
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
-        store.Save(new SampleDoc { Name = "one" });
-        store.Save(new SampleDoc { Name = "two" });
-        store.Save(new SampleDoc { Name = "three" });
+        await store.SaveAsync(new SampleDoc { Name = "one" });
+        await store.SaveAsync(new SampleDoc { Name = "two" });
+        await store.SaveAsync(new SampleDoc { Name = "three" });
 
         var files = Directory.EnumerateFiles(_root)
             .Select(Path.GetFileName)
@@ -352,11 +352,11 @@ public sealed class JsonStoreTests : IDisposable
     }
 
     [Fact]
-    public void Save_LeavesNoTempFiles()
+    public async Task Save_LeavesNoTempFiles()
     {
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
-        store.Save(new SampleDoc());
-        store.Save(new SampleDoc { Name = "two" });
+        await store.SaveAsync(new SampleDoc());
+        await store.SaveAsync(new SampleDoc { Name = "two" });
 
         var temps = Directory.EnumerateFiles(_root, "*.tmp").ToList();
 
@@ -385,10 +385,10 @@ public sealed class JsonStoreTests : IDisposable
     }
 
     [Fact]
-    public void Save_WritesCamelCasePropertiesAndSnakeCaseEnums()
+    public async Task Save_WritesCamelCasePropertiesAndSnakeCaseEnums()
     {
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
-        store.Save(new SampleDoc { Name = "x", Kind = SampleKind.SecondChoice });
+        await store.SaveAsync(new SampleDoc { Name = "x", Kind = SampleKind.SecondChoice });
 
         var json = File.ReadAllText(PathOf("doc.json"));
 
