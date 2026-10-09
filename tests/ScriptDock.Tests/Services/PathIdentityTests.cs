@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using ScriptDock.Services;
+using ScriptDock.Tests.Fakes;
 using Xunit;
 
 namespace ScriptDock.Tests.Services;
@@ -26,6 +27,21 @@ public sealed class PathIdentityTests : IDisposable
         Directory.CreateSymbolicLink(alias, physical.FullName);
 
         Assert.True(PathIdentity.Same(script, Path.Combine(alias, "run.command")));
+    }
+
+    [WindowsOnlyFact]
+    public void Same_ResolvesAncestorJunctionAliases()
+    {
+        var physical = Directory.CreateDirectory(Path.Combine(_root, "physical"));
+        var script = Path.Combine(physical.FullName, "run.ps1");
+        File.WriteAllText(script, "exit 0");
+        var alias = Path.Combine(_root, "alias");
+        WindowsJunction.Create(alias, physical.FullName);
+        try
+        {
+            Assert.True(PathIdentity.Same(script, Path.Combine(alias, "run.ps1")));
+        }
+        finally { Directory.Delete(alias); }
     }
 
     [Fact]

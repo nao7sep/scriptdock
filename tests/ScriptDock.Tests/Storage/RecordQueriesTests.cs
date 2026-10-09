@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -265,6 +267,52 @@ public sealed class RecordQueriesTests : IDisposable
 
         Assert.Equal(Session, sources.CurrentSession);
         Assert.Equal([Session, "2026-10-01T09:00:00.000Z", "2026-10-01T03:00:00.000Z"], sources.Sessions);
+    }
+
+    [Fact]
+    public async Task A_held_window_search_does_not_hold_writes_or_the_recent_list()
+    {
+        using var records = await Seeded();
+        await Page(records, RecordsQuery.All); // Open the production reader before instrumenting it.
+        // Test-only access avoids a runtime hook or widening the store's API. Override SQLite's LIKE
+        // on this connection to hold the actual public search while its read transaction is live.
+        var field = typeof(RecordStore).GetField("_windowConnection", BindingFlags.Instance | BindingFlags.NonPublic);
+        var connection = Assert.IsType<SqliteConnection>(field?.GetValue(records));
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        connection.CreateFunction<string, string, string, bool>("like", (_, _, _) =>
+        {
+            entered.TrySetResult();
+            release.Wait();
+            return true;
+        });
+        var search = Page(records, RecordsQuery.All with { Search = "held", Kind = RecordKind.Run });
+        Task? write = null;
+        Task? dismissal = null;
+        Task<IReadOnlyList<RecentRun>>? recentRead = null;
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
+            write = records.AddRunAsync(Run(8, "/code/new/dev.command"));
+            await write.WaitAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
+            dismissal = records.AddDismissalAsync("/code/a/dev.command");
+            await dismissal.WaitAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
+            recentRead = records.ReadRecentAsync();
+            var recent = await recentRead.WaitAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
+
+            Assert.Contains(recent, row => row.Path == "/code/new/dev.command");
+            Assert.DoesNotContain(recent, row => row.Path == "/code/a/dev.command");
+            Assert.False(search.IsCompleted); // Progress above happened while the SQL read was held.
+        }
+        finally
+        {
+            release.Set();
+            await search;
+            if (write is not null) await write;
+            if (dismissal is not null) await dismissal;
+            if (recentRead is not null) await recentRead;
+            connection.CreateFunction<string, string, string, bool>("like", null);
+        }
     }
 
     [Fact]

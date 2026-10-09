@@ -1,8 +1,11 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using ScriptDock;
 using ScriptDock.Services;
+using ScriptDock.Tests.Fakes;
 using Xunit;
 
 namespace ScriptDock.Tests.Services;
@@ -119,6 +122,44 @@ public sealed class ScriptScannerTests : IDisposable
         // Found once, via the real directory only — the symlink is not followed (no loop, no dup).
         Assert.Single(report.Found, p => Path.GetFileName(p) == "x.command");
         Assert.DoesNotContain(report.Found, p => p.Contains($"{Path.DirectorySeparatorChar}link{Path.DirectorySeparatorChar}"));
+    }
+
+    [WindowsOnlyFact]
+    public void Scan_DoesNotDescendJunctions()
+    {
+        Touch("real/x.ps1");
+        var alias = Path.Combine(_root, "link");
+        WindowsJunction.Create(alias, Path.Combine(_root, "real"));
+        try
+        {
+            var report = new ScriptScanner().Scan([_root], [".ps1"], [], TestContext.Current.CancellationToken);
+            Assert.Equal(Path.Combine(_root, "real", "x.ps1"), Assert.Single(report.Found));
+        }
+        finally { Directory.Delete(alias); }
+    }
+
+    [WindowsOnlyFact]
+    public void Scan_RecordsAnAclDeniedFolderAndKeepsGoing()
+    {
+        if (!OperatingSystem.IsWindows()) return; // The attribute and analyzer recognize different guards.
+        Touch("ok/x.ps1");
+        Touch("locked/y.ps1");
+        var locked = new DirectoryInfo(Path.Combine(_root, "locked"));
+        var original = locked.GetAccessControl();
+        var denied = locked.GetAccessControl();
+        using var identity = WindowsIdentity.GetCurrent();
+        denied.AddAccessRule(new FileSystemAccessRule(identity.User!, FileSystemRights.ListDirectory, AccessControlType.Deny));
+        try
+        {
+            locked.SetAccessControl(denied);
+            // Prove the fixture denied enumeration, rather than passing without testing that boundary.
+            Assert.Throws<UnauthorizedAccessException>(() => Directory.GetFileSystemEntries(locked.FullName));
+            var report = new ScriptScanner().Scan([_root], [".ps1"], [], TestContext.Current.CancellationToken);
+            Assert.Contains(Path.Combine(_root, "ok", "x.ps1"), report.Found);
+            Assert.Contains(locked.FullName, report.Inaccessible);
+            Assert.DoesNotContain(Path.Combine(locked.FullName, "y.ps1"), report.Found);
+        }
+        finally { locked.SetAccessControl(original); }
     }
 
     [MacOnlyFact]

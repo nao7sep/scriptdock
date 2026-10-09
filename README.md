@@ -16,7 +16,8 @@ Prebuilt builds for **macOS (Apple Silicon)** and **Windows (x64)** are on the [
 ## Requirements
 
 - **macOS** (Apple Silicon) or **Windows (x64)** to run a prebuilt download.
-- **.NET 10 SDK** only if you build from source; the prebuilt downloads need nothing installed.
+- **PowerShell (`pwsh`) on PATH** on Windows, for every script type including `.bat` and `.cmd`.
+- **.NET 10 SDK** only if you build from source; the prebuilt downloads include the .NET runtime.
 - ScriptDock **owns the scripts it starts**, each as a child process. A run ends when its script exits; whatever a script hands to the system, such as an app opened with `open -n`, runs on its own. Quitting ScriptDock **stops every running script** after asking, and a restart-while-running kills the whole process tree, so dev servers free their ports.
 
 ScriptDock supervises the shell process tree it launches while that tree remains attached. A script that deliberately daemonizes, double-forks, or otherwise escapes that tree is outside ScriptDock's supervision boundary; manage such a background service with its own service manager.

@@ -15,7 +15,7 @@ namespace ScriptDock.Tests.Services;
 
 /// <summary>
 /// Integration tests for the runner: they launch real processes through the login shell with
-/// output redirected to a per-run file, so they run on macOS only. They cover the
+/// output redirected to a per-run file, on the platform each shell belongs to. They cover the
 /// launch + file-capture path, a clean exit, and process-tree termination of a long-running
 /// script. The runs directory is injected so these never touch the real <c>~/.scriptdock</c>.
 /// </summary>
@@ -96,6 +96,90 @@ public sealed class ProcessRunnerTests : IDisposable
         Assert.Equal(RunState.Exited, handle.State);
         Assert.Equal(7, handle.ExitCode);
         Assert.Contains("windows-output", handle.ReadOutput());
+    }
+
+    [WindowsOnlyFact]
+    public async Task Start_WindowsReportsAThrownScriptAsFailure()
+    {
+        var script = Path.Combine(_dir, "throws.ps1");
+        File.WriteAllText(script, "throw 'script-failed'\n");
+        var runner = new ProcessRunner(_runsDir);
+        using var handle = runner.Start(script);
+        try
+        {
+            Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+            Assert.Equal(RunState.Exited, handle.State);
+            Assert.NotNull(handle.ExitCode);
+            Assert.NotEqual(0, handle.ExitCode);
+            Assert.Contains(handle.ReadOutput(), line => line.Contains("script-failed"));
+        }
+        finally { await runner.TerminateAsync(handle); }
+    }
+
+    [WindowsOnlyFact]
+    public async Task Start_WindowsBatchPathTakesPercentTokensLiterally()
+    {
+        // PATH is defined on Windows, so cmd expansion would point somewhere other than this fixture.
+        var directory = Directory.CreateDirectory(Path.Combine(_dir, "%PATH%"));
+        var script = Path.Combine(directory.FullName, "exit-code.bat");
+        File.WriteAllText(script, "@echo off\r\necho literal-batch-path\r\nexit /b 7\r\n");
+        var runner = new ProcessRunner(_runsDir);
+        using var handle = runner.Start(script);
+        try
+        {
+            Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+            Assert.Equal(7, handle.ExitCode);
+            Assert.Contains("literal-batch-path", handle.ReadOutput());
+        }
+        finally { await runner.TerminateAsync(handle); }
+    }
+
+    [WindowsOnlyFact]
+    public async Task Start_WindowsReadHostReceivesConsoleInput()
+    {
+        var script = Path.Combine(_dir, "input.ps1");
+        File.WriteAllText(script, "$line = Read-Host\nWrite-Output \"got:$line\"\n");
+        var runner = new ProcessRunner(_runsDir);
+        using var handle = runner.Start(script);
+        try
+        {
+            Assert.True(await handle.SendInputAsync("hello-stdin"));
+            Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+            Assert.Contains(handle.ReadOutput(), line => line.Contains("got:hello-stdin"));
+        }
+        finally { await runner.TerminateAsync(handle); }
+    }
+
+    [WindowsOnlyFact]
+    public async Task Terminate_WindowsStopsAnAttachedChild()
+    {
+        var pidFile = Path.Combine(_dir, "child.pid");
+        var script = Path.Combine(_dir, "parent.ps1");
+        File.WriteAllText(script,
+            "$child = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', 'Start-Sleep 300' -NoNewWindow -PassThru\n" +
+            $"[System.IO.File]::WriteAllText('{pidFile.Replace("'", "''")}', [string]$child.Id)\n" +
+            "$child.WaitForExit()\n");
+        var runner = new ProcessRunner(_runsDir);
+        using var handle = runner.Start(script);
+        int? child = null;
+        try
+        {
+            child = ReadPid(pidFile);
+            Assert.True(IsAlive(child.Value));
+            Assert.True(await runner.TerminateAsync(handle));
+            Assert.Equal(RunState.Terminated, handle.State);
+            Assert.True(GoneWithin(child.Value, TimeSpan.FromSeconds(20)));
+        }
+        finally
+        {
+            await runner.TerminateAsync(handle);
+            if (child is { } pid && IsAlive(pid))
+            {
+                using var process = Process.GetProcessById(pid);
+                process.Kill(entireProcessTree: true);
+                Assert.True(process.WaitForExit(20_000));
+            }
+        }
     }
 
     [MacOnlyFact]
