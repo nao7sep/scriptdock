@@ -65,7 +65,9 @@ public sealed class MainWindowViewModelRunnerTests : IDisposable
         var work = Path.Combine(_dir, "work");
         Directory.CreateDirectory(work);
         var path = Path.Combine(work, "sleeper.command");
-        File.WriteAllText(path, "#!/usr/bin/env bash\nsleep 60\n");
+        var ready = Path.Combine(_dir, "ready");
+        // The script says it is running before the folder moves; moved earlier, the shell finds no script.
+        File.WriteAllText(path, $"#!/usr/bin/env bash\ntouch '{ready}'\nsleep 60\n");
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         var item = new ScriptItem(path) { DisplayName = "sleeper" };
@@ -73,6 +75,8 @@ public sealed class MainWindowViewModelRunnerTests : IDisposable
         await vm.RunScriptCommand.ExecuteAsync(item);
         var first = Assert.Single(runner.Active);
         var lastRan = Assert.Single(vm.Recent).LastRanAt;
+
+        Assert.True(System.Threading.SpinWait.SpinUntil(() => File.Exists(ready), TimeSpan.FromSeconds(10)));
 
         // The running script keeps its folder under the new name; the restart has no folder to run in.
         Directory.Move(work, Path.Combine(_dir, "moved"));
