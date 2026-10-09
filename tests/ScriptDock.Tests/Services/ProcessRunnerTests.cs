@@ -168,14 +168,23 @@ public sealed class ProcessRunnerTests : IDisposable
         var runner = new ProcessRunner(_runsDir);
 
         var handle = runner.Start(script);
+        try
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(20);
+            while (!handle.ReadOutput().Contains("started") && DateTime.UtcNow < deadline)
+                Thread.Sleep(50);
+            Assert.Contains("started", handle.ReadOutput());
 
-        var deadline = DateTime.UtcNow.AddSeconds(20);
-        while (!handle.ReadOutput().Contains("started") && DateTime.UtcNow < deadline)
-            Thread.Sleep(50);
-        Assert.Contains("started", handle.ReadOutput());
-
-        Assert.True(await runner.TerminateAsync(handle));
-        Assert.Equal(RunState.Terminated, handle.State);
+            Assert.True(await runner.TerminateAsync(handle));
+            Assert.Equal(RunState.Terminated, handle.State);
+        }
+        finally
+        {
+            // A failed assertion must not leave the sleeper running in a folder Dispose deletes.
+            handle.Process?.Kill(entireProcessTree: true);
+            handle.WaitForExit(TimeSpan.FromSeconds(20));
+            handle.Dispose();
+        }
     }
 
     [MacOnlyFact]

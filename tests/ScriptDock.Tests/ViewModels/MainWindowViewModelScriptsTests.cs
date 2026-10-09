@@ -24,13 +24,18 @@ namespace ScriptDock.Tests.ViewModels;
 /// position-neighbour when the selected script vanishes (hidden while "Show hidden" is off).
 /// Joins the SCRIPTDOCK_DATA_DIR collection so anything the view model resolves under the storage root
 /// lands in a temp directory and the suite never touches the real <c>~/.scriptdock</c>.
+/// The class owns every view model a test builds and shuts each down at the end, so no timer, scan or
+/// language-change subscription outlives its test.
 /// </summary>
 [Collection(StorageRootEnvironment.CollectionName)]
-public sealed class MainWindowViewModelScriptsTests : IDisposable
+public sealed class MainWindowViewModelScriptsTests : IAsyncLifetime
 {
+    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(5);
+
     private readonly string _root;          // scanned for scripts
     private readonly string _home;          // SCRIPTDOCK_DATA_DIR
     private readonly string? _previousHome;
+    private readonly List<MainWindowViewModel> _vms = [];
 
     public MainWindowViewModelScriptsTests()
     {
@@ -44,11 +49,33 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, _home);
     }
 
-    public void Dispose()
+    public ValueTask InitializeAsync() => ValueTask.CompletedTask;
+
+    public async ValueTask DisposeAsync()
     {
-        Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, _previousHome);
-        try { Directory.Delete(Path.GetDirectoryName(_root)!, recursive: true); }
-        catch { /* best-effort cleanup */ }
+        try
+        {
+            // Shutting down again after a test already did is harmless; one that never did still holds
+            // its timers and stays subscribed to Localizer.Changed, so a later test's language change
+            // would rebuild it.
+            foreach (var vm in _vms)
+            {
+                await vm.ShutdownAsync().WaitAsync(Bound, TestContext.Current.CancellationToken);
+                await vm.ActivationScan.WaitAsync(Bound, TestContext.Current.CancellationToken);
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, _previousHome);
+            try { Directory.Delete(Path.GetDirectoryName(_root)!, recursive: true); }
+            catch { /* best-effort cleanup */ }
+        }
+    }
+
+    private MainWindowViewModel Own(MainWindowViewModel vm)
+    {
+        _vms.Add(vm);
+        return vm;
     }
 
     private void Touch(string name) => File.WriteAllText(Path.Combine(_root, name), "#");
@@ -59,12 +86,12 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
     {
         var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
         state ??= new AppState();
-        var vm = new MainWindowViewModel(
+        var vm = Own(new MainWindowViewModel(
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
             new FakeJsonStore<KnownPaths>(),
             new FakeRecordStore(),
-            config, state, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+            config, state, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner()));
         await vm.RescanCommand.ExecuteAsync(null);
         return vm;
     }
@@ -80,12 +107,12 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         var runner = new FakeProcessRunner();
         var state = new AppState();
         var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
-        var vm = new MainWindowViewModel(
+        var vm = Own(new MainWindowViewModel(
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
             new FakeJsonStore<KnownPaths>(),
             records,
-            config, state, new KnownPaths(), new ScriptScanner(), runner);
+            config, state, new KnownPaths(), new ScriptScanner(), runner));
 
         await vm.InitializeAsync();
 
@@ -159,9 +186,9 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         Touch("b.command");
         var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
         var configStore = new FakeConfigStore { Value = config, ThrowOnSave = true };
-        var vm = new MainWindowViewModel(
+        var vm = Own(new MainWindowViewModel(
             configStore, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeRecordStore(),
-            config, new AppState(), new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+            config, new AppState(), new KnownPaths(), new ScriptScanner(), new FakeProcessRunner()));
         await vm.RescanCommand.ExecuteAsync(null);
 
         await vm.ToggleHiddenCommand.ExecuteAsync(vm.Scripts.Single(s => Name(s) == "b.command"));
@@ -213,12 +240,12 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         Touch("b.command");
         var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
         var state = new AppState();
-        var vm = new MainWindowViewModel(
+        var vm = Own(new MainWindowViewModel(
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
             new FakeJsonStore<KnownPaths>(),
             new FakeRecordStore(),
-            config, state, new KnownPaths { Paths = [] }, new ScriptScanner(), new FakeProcessRunner());
+            config, state, new KnownPaths { Paths = [] }, new ScriptScanner(), new FakeProcessRunner()));
         await vm.RescanCommand.ExecuteAsync(null);
         Assert.All(vm.Scripts, s => Assert.True(s.IsNew));
 
@@ -242,12 +269,12 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         var store = AppStores.KnownPaths();
         var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
         var state = new AppState();
-        var vm = new MainWindowViewModel(
+        var vm = Own(new MainWindowViewModel(
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
             store,
             new FakeRecordStore(),
-            config, state, store.Load(), new ScriptScanner(), new FakeProcessRunner());
+            config, state, store.Load(), new ScriptScanner(), new FakeProcessRunner()));
         await vm.RescanCommand.ExecuteAsync(null);
         return vm;
     }
@@ -316,12 +343,12 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         var state = new AppState();
         var records = new FakeRecordStore();
         var clock = new FakeTimeProvider();
-        var vm = new MainWindowViewModel(
+        var vm = Own(new MainWindowViewModel(
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
             new FakeJsonStore<KnownPaths>(),
             records,
-            config, state, known ?? new KnownPaths(), new ScriptScanner(), new FakeProcessRunner()) { Time = clock };
+            config, state, known ?? new KnownPaths(), new ScriptScanner(), new FakeProcessRunner()) { Time = clock });
         return (vm, records, clock);
     }
 
@@ -425,12 +452,12 @@ public sealed class MainWindowViewModelScriptsTests : IDisposable
         Touch("a.command");
         var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
         var state = new AppState();
-        var vm = new MainWindowViewModel(
+        var vm = Own(new MainWindowViewModel(
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
             new FakeJsonStore<KnownPaths>(),
             new FakeRecordStore(),
-            config, state, new KnownPaths { Paths = [] }, new ScriptScanner(), new FakeProcessRunner());
+            config, state, new KnownPaths { Paths = [] }, new ScriptScanner(), new FakeProcessRunner()));
         await vm.RescanCommand.ExecuteAsync(null);
 
         var font = vm.CreateSettingsDraft();

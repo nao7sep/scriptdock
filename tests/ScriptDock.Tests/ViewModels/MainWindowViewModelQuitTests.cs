@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using ScriptDock.Models;
@@ -12,31 +13,70 @@ namespace ScriptDock.Tests.ViewModels;
 /// <summary>
 /// The quit's own steps, each within its bound on a controlled clock (unsaved-edits-conventions,
 /// Quitting): view state never holds a quit, a step that stalls ends at its bound, and a settings change
-/// the user made is waited for and reported when it did not land.
+/// the user made is waited for and reported when it did not land. Every gate a test opens is released,
+/// the work it started awaited, and each view model shut down at the end, so nothing stays pending after it.
 /// </summary>
-public sealed class MainWindowViewModelQuitTests
+public sealed class MainWindowViewModelQuitTests : IAsyncLifetime
 {
     private static readonly TimeSpan Tick = TimeSpan.FromMilliseconds(1);
+    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(5);
 
     private readonly FakeTimeProvider _clock = new();
     private readonly FakeConfigStore _configStore = new();
     private readonly FakeJsonStore<AppState> _stateStore = new();
     private readonly FakeProcessRunner _runner = new();
+    private readonly List<TaskCompletionSource> _gates = [];
+    private readonly List<Task> _work = [];
+    private readonly List<MainWindowViewModel> _vms = [];
 
-    private MainWindowViewModel NewVm() => new(
-        _configStore, _stateStore, new FakeJsonStore<KnownPaths>(), new FakeRecordStore(),
-        _configStore.Value, _stateStore.Value, new KnownPaths(), new ScriptScanner(), _runner)
+    public ValueTask InitializeAsync() => ValueTask.CompletedTask;
+
+    public async ValueTask DisposeAsync()
     {
-        Time = _clock,
-    };
+        // A gate the test settled keeps its outcome; one left open (a stall at its bound) lands now, so the
+        // work waiting on it can finish.
+        foreach (var gate in _gates)
+            gate.TrySetResult();
+        await Task.WhenAll(_work).WaitAsync(Bound, TestContext.Current.CancellationToken);
+
+        // Shutting down again after a test already did is harmless; one that never did is still
+        // subscribed to Localizer.Changed.
+        foreach (var vm in _vms)
+            await vm.ShutdownAsync().WaitAsync(Bound, TestContext.Current.CancellationToken);
+    }
+
+    private TaskCompletionSource Gate()
+    {
+        var gate = new TaskCompletionSource();
+        _gates.Add(gate);
+        return gate;
+    }
+
+    private T Track<T>(T work) where T : Task
+    {
+        _work.Add(work);
+        return work;
+    }
+
+    private MainWindowViewModel NewVm()
+    {
+        var vm = new MainWindowViewModel(
+            _configStore, _stateStore, new FakeJsonStore<KnownPaths>(), new FakeRecordStore(),
+            _configStore.Value, _stateStore.Value, new KnownPaths(), new ScriptScanner(), _runner)
+        {
+            Time = _clock,
+        };
+        _vms.Add(vm);
+        return vm;
+    }
 
     [Fact]
     public async Task A_stalled_view_state_save_ends_at_its_bound_and_shows_nothing()
     {
-        _stateStore.SaveGate = new TaskCompletionSource();
+        _stateStore.SaveGate = Gate();
         var vm = NewVm();
 
-        var save = vm.PersistPaneSizesAsync(420, 240);
+        var save = Track(vm.PersistPaneSizesAsync(420, 240));
         _clock.Advance(MainWindowViewModel.QuitStateSaveBound - Tick);
         Assert.False(save.IsCompleted);
 
@@ -59,10 +99,10 @@ public sealed class MainWindowViewModelQuitTests
     [Fact]
     public async Task Scripts_still_dying_hold_the_quit_only_until_their_bound()
     {
-        _runner.StopAllGate = new TaskCompletionSource();
+        _runner.StopAllGate = Gate();
         var vm = NewVm();
 
-        var shutdown = vm.ShutdownAsync();
+        var shutdown = Track(vm.ShutdownAsync());
         _clock.Advance(MainWindowViewModel.QuitStopScriptsBound - Tick);
         Assert.False(shutdown.IsCompleted);
 
@@ -75,11 +115,11 @@ public sealed class MainWindowViewModelQuitTests
     // Applies a settings change whose save stays running until the test settles the returned gate.
     private TaskCompletionSource ApplyWithSaveRunning(MainWindowViewModel vm, out Task<bool> apply)
     {
-        var gate = new TaskCompletionSource();
+        var gate = Gate();
         _configStore.SaveGate = gate;
         var draft = vm.CreateSettingsDraft();
         draft.UiFontFamily = "Helvetica";
-        apply = vm.TryApplySettingsAsync(draft);
+        apply = Track(vm.TryApplySettingsAsync(draft));
         return gate;
     }
 
@@ -109,7 +149,7 @@ public sealed class MainWindowViewModelQuitTests
         var vm = NewVm();
         var gate = ApplyWithSaveRunning(vm, out var apply);
 
-        var saved = vm.SettingsSavedForQuitAsync();
+        var saved = Track(vm.SettingsSavedForQuitAsync());
         Assert.False(saved.IsCompleted);
         gate.SetResult();
 
@@ -123,7 +163,7 @@ public sealed class MainWindowViewModelQuitTests
         var vm = NewVm();
         var gate = ApplyWithSaveRunning(vm, out var apply);
 
-        var saved = vm.SettingsSavedForQuitAsync();
+        var saved = Track(vm.SettingsSavedForQuitAsync());
         gate.SetException(new IOException("disk full (test)"));
 
         Assert.False(await saved);
@@ -133,12 +173,12 @@ public sealed class MainWindowViewModelQuitTests
     [Fact]
     public async Task A_hide_whose_write_fails_during_the_quit_stops_it()
     {
-        var gate = new TaskCompletionSource();
+        var gate = Gate();
         _configStore.SaveGate = gate;
         var vm = NewVm();
-        var hide = vm.ToggleHiddenCommand.ExecuteAsync(new ScriptItem("/x/a.command") { DisplayName = "a" });
+        var hide = Track(vm.ToggleHiddenCommand.ExecuteAsync(new ScriptItem("/x/a.command") { DisplayName = "a" }));
 
-        var saved = vm.SettingsSavedForQuitAsync();
+        var saved = Track(vm.SettingsSavedForQuitAsync());
         gate.SetException(new IOException("disk full (test)"));
         await hide;
 
@@ -152,7 +192,7 @@ public sealed class MainWindowViewModelQuitTests
         var vm = NewVm();
         ApplyWithSaveRunning(vm, out _);
 
-        var saved = vm.SettingsSavedForQuitAsync();
+        var saved = Track(vm.SettingsSavedForQuitAsync());
         _clock.Advance(MainWindowViewModel.QuitSettingsWriteBound - Tick);
         Assert.False(saved.IsCompleted);
 
@@ -165,7 +205,7 @@ public sealed class MainWindowViewModelQuitTests
     {
         var vm = NewVm();
         var gate = ApplyWithSaveRunning(vm, out var apply);
-        var saved = vm.SettingsSavedForQuitAsync();
+        var saved = Track(vm.SettingsSavedForQuitAsync());
         gate.SetException(new IOException("disk full (test)"));
         Assert.False(await saved);
         Assert.False(await apply);
