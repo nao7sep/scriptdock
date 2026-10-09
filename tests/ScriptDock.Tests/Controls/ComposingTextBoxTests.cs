@@ -157,11 +157,16 @@ public sealed class ComposingTextBoxTests : WindowTest
         var client = InputMethodClient(box);
         var cursorChanges = 0;
         client.CursorRectangleChanged += (_, _) => cursorChanges++;
+        var before = client.CursorRectangle;
 
         client.SetPreeditText("にほん", 2);
+        // Since Avalonia 12.1.3 the caret is measured on the layout that holds the preedit text, so the
+        // notification comes with the next layout pass, carrying the moved rectangle.
+        Dispatcher.UIThread.RunJobs();
 
         Assert.Equal("にほん", presenter.PreeditText);
         Assert.True(cursorChanges > 0);
+        Assert.True(client.CursorRectangle.X > before.X);
     }
 
     [AvaloniaFact]
