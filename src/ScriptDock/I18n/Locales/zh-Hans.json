@@ -24,7 +24,9 @@
   },
   "error.dismiss": "关闭错误提示",
   "failure.newerStore": "{path} 是由较新版本的 ScriptDock 保存的，当前版本无法读取。ScriptDock 让该文件保持原样，没有打开脚本，也没有更改设置。请改用较新版本，或者修复或移走该文件，然后重新启动 ScriptDock。",
+  "failure.keptSettings": "{path} 中的部分设置无法使用：{keys}。ScriptDock 暂时对这些设置使用内置值，并在文件中保留已存储的值不变。请在文件中更正它们，或在“设置”中选择新的值来替换。",
   "failure.recoveredData": "有一个设置文件无法读取，ScriptDock 已将它保留为 {path}，并改用默认设置启动。你的脚本未受影响。请在“设置”中重新选择你的设置；保留的副本中记录了原来的设置。",
+  "failure.recordsUnavailable": "无法打开 {path}，因此 ScriptDock 在本次会话中不会记录运行历史，“最近运行”和“日志”可能为空。该文件保持不变。请修复或移动该文件，然后重新启动 ScriptDock。",
   "failure.rootPicker": "无法打开文件夹选择器。你的根目录没有变化；请重新尝试添加目录。",
   "failure.scriptStart": "无法启动该脚本。请在会话日志中查看详情，然后重试。",
   "failure.scriptStartPermission": "无法启动该脚本。请确认 ScriptDock 能够运行它，然后重试。",
@@ -197,6 +199,8 @@
   "shortcuts.toggleHidden": "在列表中显示或隐藏已隐藏的脚本",
   "startup.failedTitle": "ScriptDock 无法启动",
   "startup.settingsResetTitle": "有一个设置文件已被重置",
+  "startup.settingsKeptTitle": "部分设置无法使用",
+  "startup.recordsUnavailableTitle": "未记录运行历史",
   "status.hiddenCount": {
     "other": "{count} 个已隐藏"
   },

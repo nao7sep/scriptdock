@@ -18,7 +18,7 @@ public sealed class FailurePresentationTests
         {
             FailurePresentation.StartupStorage(),
             FailurePresentation.StartupData("/x/config.json"),
-            FailurePresentation.RecoveredData("/x/config-20260101-000000-000.invalid"),
+            FailurePresentation.RecoveredData("/x/config-20260101-000000-utc.invalid"),
             FailurePresentation.RootPicker(error),
             FailurePresentation.ScriptStart(error),
         };
@@ -38,11 +38,30 @@ public sealed class FailurePresentationTests
     [Fact]
     public void RecoveryNoticesNameTheActualFile()
     {
-        const string preserved = "/Users/me/.scriptdock/config-20260101-000000-000.invalid";
+        const string preserved = "/Users/me/.scriptdock/config-20260101-000000-utc.invalid";
         const string halted = "/Users/me/.scriptdock/config.json";
 
         Assert.Contains(preserved, English.Of(FailurePresentation.RecoveredData(preserved)), StringComparison.Ordinal);
         Assert.StartsWith(halted + " could not be read", English.Of(FailurePresentation.StartupData(halted)), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void KeptSettingsNoticeNamesTheFileAndEveryKeptKey()
+    {
+        const string path = "/Users/me/.scriptdock/config.json";
+
+        var text = English.Of(FailurePresentation.KeptSettings(path, ["extensions", "future"]));
+
+        Assert.Contains(path, text, StringComparison.Ordinal);
+        Assert.Contains("extensions, future", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RecordsNoticeNamesTheDatabase()
+    {
+        const string path = "/Users/me/.scriptdock/records.sqlite3";
+
+        Assert.StartsWith(path + " could not be opened", English.Of(FailurePresentation.RecordsUnavailable(path)), StringComparison.Ordinal);
     }
 
     [Fact]

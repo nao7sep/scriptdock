@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -67,9 +68,10 @@ public partial class App : Application
             // that cannot be set aside.
             MainWindowViewModel viewModel;
             Func<RecordsWindowViewModel> recordsViewModel;
+            IReadOnlyList<string> keptSettings;
             try
             {
-                (viewModel, recordsViewModel) = CreateViewModels();
+                (viewModel, recordsViewModel, keptSettings) = CreateViewModels();
             }
             catch (NewerFormatVersionException ex)
             {
@@ -115,6 +117,20 @@ public partial class App : Application
                         mainWindow,
                         I18n.Message.Of("startup.settingsResetTitle"),
                         FailurePresentation.RecoveredData(quarantined));
+                }
+                if (keptSettings.Count > 0)
+                {
+                    await Views.NoticeDialog.ShowAsync(
+                        mainWindow,
+                        I18n.Message.Of("startup.settingsKeptTitle"),
+                        FailurePresentation.KeptSettings(ConfigStore.FilePath, keptSettings));
+                }
+                if (Records is RecordStore { DatabaseUnavailable: true } records)
+                {
+                    await Views.NoticeDialog.ShowAsync(
+                        mainWindow,
+                        I18n.Message.Of("startup.recordsUnavailableTitle"),
+                        FailurePresentation.RecordsUnavailable(records.FilePath));
                 }
             };
         }
@@ -166,7 +182,7 @@ public partial class App : Application
     /// <c>state.json</c>, the last scan's paths in <c>known-paths.json</c>, what
     /// happened in <c>records.sqlite3</c>. Absent config sets use live built-ins without writing.
     /// </summary>
-    private static (MainWindowViewModel Main, Func<RecordsWindowViewModel> Records) CreateViewModels()
+    private static (MainWindowViewModel Main, Func<RecordsWindowViewModel> Records, IReadOnlyList<string> KeptSettings) CreateViewModels()
     {
         var configStore = new ConfigStore();
         var stateStore = AppStores.State();
@@ -192,6 +208,6 @@ public partial class App : Application
         };
         // The Records window reads the same records and keeps its placement in the same view state.
         var reader = records as IRecordReader ?? throw new InvalidOperationException("The records cannot be read.");
-        return (main, () => new RecordsWindowViewModel(reader, stateStore, state));
+        return (main, () => new RecordsWindowViewModel(reader, stateStore, state), configStore.KeptKeys);
     }
 }

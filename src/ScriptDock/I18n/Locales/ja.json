@@ -24,7 +24,9 @@
   },
   "error.dismiss": "エラーを消去",
   "failure.newerStore": "{path} は新しいバージョンの ScriptDock で保存されたため、このバージョンでは読み取れません。ファイルは変更せずにそのまま残し、スクリプトを開くことも設定を変更することもしていません。新しいバージョンを使用するか、ファイルを修復または移動してから、ScriptDock を起動し直してください。",
+  "failure.keptSettings": "{path} の一部の設定を使用できません: {keys}。これらには組み込みの値を使用し、保存されている値はファイル内にそのまま残します。ファイルで修正するか、「設定」で新しい値を選んで置き換えてください。",
   "failure.recoveredData": "設定ファイルを読み取れなかったため、ScriptDock はそのファイルを {path} に退避したうえで、代わりに初期設定で起動しました。スクリプトには影響ありません。「設定」で設定を選び直してください。以前の設定は退避したファイルで確認できます。",
+  "failure.recordsUnavailable": "{path} を開けなかったため、このセッションでは ScriptDock は実行履歴を記録しません。「最近の実行」と「ログ」が空になる場合があります。ファイルは変更せずに残しています。ファイルを修復または移動してから、ScriptDock を起動し直してください。",
   "failure.rootPicker": "フォルダ選択画面を開けませんでした。ルートディレクトリは変更されていません。もう一度ディレクトリを追加してみてください。",
   "failure.scriptStart": "スクリプトを開始できませんでした。詳細はセッションログを確認してから、もう一度お試しください。",
   "failure.scriptStartPermission": "スクリプトを開始できませんでした。ScriptDock がそのスクリプトを実行できるか確認してから、もう一度お試しください。",
@@ -197,6 +199,8 @@
   "shortcuts.toggleHidden": "非表示のスクリプトを一覧に表示するかどうかを切り替えます",
   "startup.failedTitle": "ScriptDock を起動できませんでした",
   "startup.settingsResetTitle": "設定ファイルが初期化されました",
+  "startup.settingsKeptTitle": "一部の設定を使用できません",
+  "startup.recordsUnavailableTitle": "実行履歴が記録されていません",
   "status.hiddenCount": {
     "other": "非表示 {count} 件"
   },

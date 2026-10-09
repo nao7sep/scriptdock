@@ -26,7 +26,9 @@
   },
   "error.dismiss": "Descartar erro",
   "failure.newerStore": "{path} foi salvo por uma versão mais recente do ScriptDock, e esta versão não consegue lê-lo. O ScriptDock manteve o arquivo sem alterações e não abriu scripts nem alterou configurações. Use a versão mais recente, ou repare ou mova o arquivo e inicie o ScriptDock novamente.",
+  "failure.keptSettings": "Algumas configurações em {path} não puderam ser usadas: {keys}. O ScriptDock usa os valores integrados para elas e mantém os valores salvos inalterados no arquivo. Corrija-as no arquivo ou escolha novos valores em Configurações para substituí-las.",
   "failure.recoveredData": "Um arquivo de configurações não pôde ser lido, então o ScriptDock o preservou como {path} e iniciou com os valores padrão no lugar dele. Seus scripts não foram alterados. Escolha suas configurações novamente em Configurações; a cópia preservada mostra como elas eram.",
+  "failure.recordsUnavailable": "Não foi possível abrir {path}, então o ScriptDock não está registrando o histórico de execuções nesta sessão, e Recentes e Registros podem ficar vazios. O arquivo não foi alterado. Repare-o ou mova-o e inicie o ScriptDock novamente.",
   "failure.rootPicker": "Não foi possível abrir o seletor de pastas. Seus diretórios raiz não foram alterados; tente adicionar um diretório novamente.",
   "failure.scriptStart": "Não foi possível iniciar o script. Consulte o log da sessão para ver os detalhes e tente novamente.",
   "failure.scriptStartPermission": "Não foi possível iniciar o script. Verifique se o ScriptDock pode executá-lo e tente novamente.",
@@ -207,6 +209,8 @@
   "shortcuts.toggleHidden": "Mostrar ou ocultar os scripts ocultos na lista",
   "startup.failedTitle": "O ScriptDock não pôde ser iniciado",
   "startup.settingsResetTitle": "Um arquivo de configurações foi redefinido",
+  "startup.settingsKeptTitle": "Algumas configurações não puderam ser usadas",
+  "startup.recordsUnavailableTitle": "O histórico de execuções não está sendo registrado",
   "status.hiddenCount": {
     "one": "{count} oculto",
     "many": "{count} de ocultos",

@@ -25,7 +25,9 @@
   },
   "error.dismiss": "Fehler schließen",
   "failure.newerStore": "{path} wurde mit einer neueren ScriptDock-Version gespeichert und kann von dieser Version nicht gelesen werden. ScriptDock hat die Datei unverändert gelassen und weder Skripte geöffnet noch Einstellungen geändert. Verwenden Sie die neuere Version oder reparieren oder verschieben Sie die Datei und starten Sie ScriptDock erneut.",
+  "failure.keptSettings": "Einige Einstellungen in {path} können nicht verwendet werden: {keys}. ScriptDock verwendet dafür die integrierten Werte und lässt die gespeicherten Werte in der Datei unverändert. Korrigieren Sie sie in der Datei oder wählen Sie unter „Einstellungen“ neue Werte, um sie zu ersetzen.",
   "failure.recoveredData": "Eine Einstellungsdatei war nicht lesbar. ScriptDock hat sie als {path} aufbewahrt und stattdessen mit den Standardwerten gestartet. Ihre Skripte sind unverändert. Legen Sie Ihre Einstellungen unter „Einstellungen“ erneut fest; die aufbewahrte Kopie zeigt, wie sie waren.",
+  "failure.recordsUnavailable": "{path} konnte nicht geöffnet werden. ScriptDock zeichnet in dieser Sitzung daher keinen Ausführungsverlauf auf, und „Verlauf“ und „Protokoll“ können leer sein. Die Datei wurde unverändert gelassen. Reparieren oder verschieben Sie sie und starten Sie ScriptDock erneut.",
   "failure.rootPicker": "Die Ordnerauswahl konnte nicht geöffnet werden. Ihre Stammverzeichnisse sind unverändert; versuchen Sie erneut, ein Verzeichnis hinzuzufügen.",
   "failure.scriptStart": "Das Skript konnte nicht gestartet werden. Einzelheiten finden Sie im Sitzungsprotokoll; versuchen Sie es dann erneut.",
   "failure.scriptStartPermission": "Das Skript konnte nicht gestartet werden. Prüfen Sie, ob ScriptDock es ausführen darf, und versuchen Sie es erneut.",
@@ -202,6 +204,8 @@
   "shortcuts.toggleHidden": "Ausgeblendete Skripte in der Liste anzeigen oder verbergen",
   "startup.failedTitle": "ScriptDock konnte nicht gestartet werden",
   "startup.settingsResetTitle": "Eine Einstellungsdatei wurde zurückgesetzt",
+  "startup.settingsKeptTitle": "Einige Einstellungen können nicht verwendet werden",
+  "startup.recordsUnavailableTitle": "Der Ausführungsverlauf wird nicht aufgezeichnet",
   "status.hiddenCount": {
     "one": "{count} ausgeblendet",
     "other": "{count} ausgeblendet"

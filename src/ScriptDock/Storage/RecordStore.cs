@@ -151,6 +151,11 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
     /// <summary>This session's plain text file for entries the database could not take.</summary>
     public string FallbackPath { get; }
 
+    /// <summary>True when the database could not be opened this session (other than a newer version's,
+    /// which stops startup instead): the file is left as it is, every entry goes to
+    /// <see cref="FallbackPath"/>, and the app says so once.</summary>
+    public bool DatabaseUnavailable => _connection is null;
+
     /// <summary>Queues one log line; <paramref name="line"/> is the whole event, the other values its envelope.</summary>
     internal void AddLog(string time, string level, string message, string line) =>
         Post(connection => Execute(connection,

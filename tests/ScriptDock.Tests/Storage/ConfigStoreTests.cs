@@ -74,16 +74,17 @@ public sealed class ConfigStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Dialog_WritesEverySetThatDiffersAndDropsUnknownKeys()
+    public async Task Dialog_WritesEverySetThatDiffers_KeepsUnknownKeysAndDropsRetiredOnes()
     {
-        // Retired process settings are among the keys a save drops.
+        // The retired process settings are dropped; keys this version does not know are kept unchanged.
         File.WriteAllText(ConfigPath, """{"formatVersion":1,"hidden":["/hidden"],"extensions":[],"version":1,"unknown":true,"killProcessesOnClose":true,"recaptureProcessesOnLaunch":false}""");
         var store = new ConfigStore();
         var config = store.Load();
         var vm = NewViewModel(store, config);
         var draft = new SettingsDialogViewModel(config) { Theme = ThemePreference.Dark };
         Assert.True(await vm.TryApplySettingsAsync(draft));
-        Assert.Equal(["extensions", "hidden", "theme"], ReadKeys());
+        Assert.Equal(["extensions", "hidden", "theme", "unknown", "version"], ReadKeys());
+        Assert.Equal("true", ReadRaw("unknown"));
         Assert.Empty(store.Load().Extensions);
         Assert.Equal(["/hidden"], store.Load().Hidden);
     }
@@ -116,11 +117,31 @@ public sealed class ConfigStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task InvalidSet_LosesItsKeyAtTheNextSave()
+    public async Task InvalidSet_IsKeptUnchangedAtTheNextSave()
     {
         File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[null,".sh"],"theme":"future","hidden":["/ok"]}""");
         var store = new ConfigStore();
         var config = store.Load();
+        Assert.Equal(["extensions", "theme"], store.KeptKeys.Order());
+        config.Hidden.Add("/new");
+        await store.SaveAsync(config);
+        Assert.Equal(["extensions", "hidden", "theme"], ReadKeys());
+        Assert.Equal("""[null,".sh"]""", ReadRaw("extensions"));
+        Assert.Equal("\"future\"", ReadRaw("theme"));
+    }
+
+    [Fact]
+    public async Task InvalidSet_IsReplacedOnceTheUserSavesANewValue()
+    {
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[null,".sh"],"hidden":["/ok"]}""");
+        var store = new ConfigStore();
+        var config = store.Load();
+        config.Extensions = [".py"];
+        await store.SaveAsync(config);
+        Assert.Equal("""[".py"]""", ReadRaw("extensions"));
+
+        // Replaced for good: a later save that returns the set to its built-in removes it.
+        config.Extensions = [ConfigDefaults.DefaultExtension];
         await store.SaveAsync(config);
         Assert.Equal(["hidden"], ReadKeys());
     }
@@ -168,12 +189,13 @@ public sealed class ConfigStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task InvalidIgnorePatterns_LoseTheirKeyAtTheNextSave()
+    public async Task InvalidIgnorePatterns_AreKeptUnchangedAtTheNextSave()
     {
         File.WriteAllText(ConfigPath, """{"formatVersion":1,"ignorePatterns":["["],"hidden":["/ok"]}""");
         var store = new ConfigStore();
         await store.SaveAsync(store.Load());
-        Assert.Equal(["hidden"], ReadKeys());
+        Assert.Equal(["hidden", "ignorePatterns"], ReadKeys());
+        Assert.Equal("""["["]""", ReadRaw("ignorePatterns"));
     }
 
     [Fact]
@@ -213,6 +235,13 @@ public sealed class ConfigStoreTests : IDisposable
 
     private static MainWindowViewModel NewViewModel(ConfigStore store, AppConfig config) =>
         new(store, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeRecordStore(), config, new AppState(), new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+
+    // One stored value, compactly, as the file holds it.
+    private string ReadRaw(string key)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(ConfigPath));
+        return JsonSerializer.Serialize(document.RootElement.GetProperty(key));
+    }
 
     // The sets the file holds; the format version beside them is the store's own.
     private string[] ReadKeys()

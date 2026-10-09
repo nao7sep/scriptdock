@@ -25,7 +25,9 @@
   },
   "error.dismiss": "Dismiss error",
   "failure.newerStore": "{path} was saved by a newer version of ScriptDock, and this version cannot read it. ScriptDock left the file unchanged and has not opened scripts or changed settings. Use the newer version, or repair or move the file, then start ScriptDock again.",
+  "failure.keptSettings": "Some settings in {path} could not be used: {keys}. ScriptDock is using the built-in values for these and keeps the stored values unchanged in the file. Correct them in the file, or choose new values in Settings to replace them.",
   "failure.recoveredData": "A settings file was unreadable, so ScriptDock preserved it as {path} and started with defaults in its place. Your scripts are untouched. Choose your settings again in Settings; the preserved copy shows what they were.",
+  "failure.recordsUnavailable": "{path} could not be opened, so ScriptDock is not recording run history in this session, and Recent and Records may be empty. The file was left unchanged. Repair or move it, then start ScriptDock again.",
   "failure.rootPicker": "The folder picker could not be opened. Your root directories are unchanged; try adding a directory again.",
   "failure.scriptStart": "The script could not be started. Check the session log for details, then try again.",
   "failure.scriptStartPermission": "The script could not be started. Check that ScriptDock can run it, then try again.",
@@ -202,6 +204,8 @@
   "shortcuts.toggleHidden": "Show or hide the hidden scripts in the list",
   "startup.failedTitle": "ScriptDock could not start",
   "startup.settingsResetTitle": "A settings file was reset",
+  "startup.settingsKeptTitle": "Some settings could not be used",
+  "startup.recordsUnavailableTitle": "Run history is not being recorded",
   "status.hiddenCount": {
     "one": "{count} hidden",
     "other": "{count} hidden"

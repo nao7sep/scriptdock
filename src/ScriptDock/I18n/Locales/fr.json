@@ -26,7 +26,9 @@
   },
   "error.dismiss": "Ignorer l’erreur",
   "failure.newerStore": "{path} a été enregistré par une version plus récente de ScriptDock, et cette version ne peut pas le lire. ScriptDock a laissé le fichier tel quel et n’a ni ouvert de scripts ni modifié de paramètres. Utilisez la version plus récente, ou réparez ou déplacez le fichier, puis relancez ScriptDock.",
+  "failure.keptSettings": "Certains paramètres de {path} n’ont pas pu être utilisés\u00a0: {keys}. ScriptDock utilise pour eux les valeurs intégrées et laisse les valeurs enregistrées inchangées dans le fichier. Corrigez-les dans le fichier, ou choisissez de nouvelles valeurs dans les Paramètres pour les remplacer.",
   "failure.recoveredData": "Un fichier de paramètres était illisible\u00a0: ScriptDock l’a conservé sous {path} et a démarré avec les valeurs par défaut à sa place. Vos scripts sont intacts. Choisissez de nouveau vos paramètres dans les Paramètres\u00a0; la copie conservée indique ce qu’ils étaient.",
+  "failure.recordsUnavailable": "{path} n’a pas pu être ouvert\u00a0: ScriptDock n’enregistre donc pas l’historique des exécutions pendant cette session, et Récents et Journal peuvent être vides. Le fichier n’a pas été modifié. Réparez-le ou déplacez-le, puis redémarrez ScriptDock.",
   "failure.rootPicker": "Le sélecteur de dossier n’a pas pu être ouvert. Vos répertoires racines sont inchangés\u00a0; essayez d’ajouter un répertoire à nouveau.",
   "failure.scriptStart": "Le script n’a pas pu être démarré. Consultez le journal de session pour en savoir plus, puis réessayez.",
   "failure.scriptStartPermission": "Le script n’a pas pu être démarré. Vérifiez que ScriptDock a le droit de l’exécuter, puis réessayez.",
@@ -207,6 +209,8 @@
   "shortcuts.toggleHidden": "Afficher ou masquer les scripts masqués dans la liste",
   "startup.failedTitle": "ScriptDock n’a pas pu démarrer",
   "startup.settingsResetTitle": "Un fichier de paramètres a été réinitialisé",
+  "startup.settingsKeptTitle": "Certains paramètres n’ont pas pu être utilisés",
+  "startup.recordsUnavailableTitle": "L’historique des exécutions n’est pas enregistré",
   "status.hiddenCount": {
     "one": "{count} masqué",
     "many": "{count} de masqués",
