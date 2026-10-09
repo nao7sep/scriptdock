@@ -43,6 +43,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private ISet<string> _newPaths = new HashSet<string>(StringComparer.Ordinal);
     private IReadOnlyList<string> _removed = [];
 
+    // The "new" flags Run ended while the latest scan was saving its known paths; that scan's flags
+    // leave them ended.
+    private HashSet<string> _flagsEndedDuringScan = new(PathIdentity.Comparer);
+
     // The Recent list as read from the run and dismissal records, kept current in memory as each run or
     // dismissal is recorded. The version moves with every such change, so a read that a change overtook
     // is read again.
@@ -573,6 +577,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _scanCts?.Cancel();
         var cts = new CancellationTokenSource();
         _scanCts = cts;
+        var flagsEnded = new HashSet<string>(PathIdentity.Comparer);
+        _flagsEndedDuringScan = flagsEnded;
 
         IsScanning = true;
         if (!background)
@@ -588,12 +594,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             ScanReportLog.Write(_records, report);
 
             var diff = ScanDiff.Compute(report.Found, _knownPaths.Paths);
-            var flags = background
-                ? ScanFlags.Background(diff, report.Found, _newPaths, _removed)
-                : ScanFlags.Full(diff);
             var candidate = new KnownPaths { Paths = report.Found.ToList() };
             await _knownPathsStore.SaveAsync(candidate);
             cts.Token.ThrowIfCancellationRequested();
+
+            // From the flags as they are now the save has settled, not as they were before it.
+            var flags = background
+                ? ScanFlags.Background(diff, report.Found, _newPaths, _removed)
+                : ScanFlags.Full(diff);
+            flags.NewKeys.ExceptWith(flagsEnded);
 
             _lastFound = report.Found;
             _newPaths = flags.NewKeys;
@@ -863,7 +872,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         ResolveOperationalError(RunFailedKey(path));
 
         // Running a script ends its "new" flag at once; otherwise the flag lasts until the next full scan.
-        if (_newPaths.Remove(PathIdentity.Key(path)))
+        var flagKey = PathIdentity.Key(path);
+        _flagsEndedDuringScan.Add(flagKey);
+        if (_newPaths.Remove(flagKey))
             RebuildScripts();
 
         _recent = RecentRuns.Add(_recent, path, started.StartedAt);

@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using ScriptDock.Models;
 using ScriptDock.Services;
 using ScriptDock.Storage;
@@ -36,12 +38,56 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         Directory.Delete(_root, true);
     }
 
-    private MainWindowViewModel Build()
+    private MainWindowViewModel Build(TimeProvider? time = null)
     {
         var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
         return _vm = new MainWindowViewModel(new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState>(), _store, new FakeRecordStore(), config, new AppState(),
-            _known, new ScriptScanner(), new FakeProcessRunner());
+            _known, new ScriptScanner(), new FakeProcessRunner()) { Time = time ?? TimeProvider.System };
+    }
+
+    private static ScriptFlag FlagOf(MainWindowViewModel vm, string name) =>
+        vm.Scripts.Single(script => Path.GetFileName(script.Path) == name).Flag;
+
+    [AvaloniaFact]
+    public async Task RunDuringAFullScansSave_KeepsItsNewFlagEnded()
+    {
+        var path = Path.Combine(_root, "a.command");
+        File.WriteAllText(path, "# fixture");
+        var vm = Build();
+        var scan = Track(vm.RescanCommand.ExecuteAsync(null));
+        var held = await _store.NextAsync();
+
+        await vm.RunScriptCommand.ExecuteAsync(new ScriptItem(path));
+        held.Settled.SetResult();
+        await scan.WaitAsync(Bound, TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(ScriptFlag.New, FlagOf(vm, "a.command"));
+    }
+
+    [AvaloniaFact]
+    public async Task RunDuringABackgroundScansSave_KeepsItsNewFlagEnded()
+    {
+        var a = Path.Combine(_root, "a.command");
+        File.WriteAllText(a, "# fixture");
+        var clock = new FakeTimeProvider();
+        var vm = Build(clock);
+        var initial = Track(vm.InitializeAsync());
+        (await _store.NextAsync()).Settled.SetResult();
+        await initial.WaitAsync(Bound, TestContext.Current.CancellationToken);
+        Assert.Equal(ScriptFlag.New, FlagOf(vm, "a.command"));
+
+        File.WriteAllText(Path.Combine(_root, "b.command"), "# fixture");
+        vm.OnWindowActivated();
+        clock.Advance(MainWindowViewModel.ActivationRescanDelay);
+        Dispatcher.UIThread.RunJobs();
+        var held = await _store.NextAsync();
+        await vm.RunScriptCommand.ExecuteAsync(new ScriptItem(a));
+        held.Settled.SetResult();
+        await vm.ActivationScan.WaitAsync(Bound, TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(ScriptFlag.New, FlagOf(vm, "a.command"));
+        Assert.Equal(ScriptFlag.New, FlagOf(vm, "b.command"));
     }
 
     private Task Track(Task task) { _work.Add(task); return task; }
