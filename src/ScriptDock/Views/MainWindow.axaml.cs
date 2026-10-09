@@ -114,6 +114,21 @@ public partial class MainWindow : Window
             // ActualWidth/ActualHeight (the size the drag produced) and store it as the new intent.
             RecentSplitter.AddHandler(Thumb.DragCompletedEvent, OnRecentSplitterDragCompleted);
             ConsoleSplitter.AddHandler(Thumb.DragCompletedEvent, OnConsoleSplitterDragCompleted);
+            // The pane sizes a key sets are intents like a drag's, saved with the view state at quit.
+            SplitterKeyboard.Attach(RecentSplitter, Avalonia.Layout.Orientation.Horizontal, paneBefore: false,
+                () => (BodyGrid.ColumnDefinitions[2].Width.Value, BodyGrid.ColumnDefinitions[2].MinWidth, MaxRecentWidth()),
+                width =>
+                {
+                    _recentWidthIntent = width;
+                    ClampPanesToWindow();
+                });
+            SplitterKeyboard.Attach(ConsoleSplitter, Avalonia.Layout.Orientation.Vertical, paneBefore: false,
+                () => (LeftPanesGrid.RowDefinitions[2].Height.Value, LeftPanesGrid.RowDefinitions[2].MinHeight, MaxConsoleHeight()),
+                height =>
+                {
+                    _consoleHeightIntent = height;
+                    ClampPanesToWindow();
+                });
 
             // The Recent column and console row are fixed pixel sizes that don't track the window, so
             // derive their display size from the intent on load and on every resize (ClampPanesToWindow):
@@ -252,26 +267,32 @@ public partial class MainWindow : Window
         if (_recentWidthIntent is { } recentIntent)
         {
             var recentColumn = BodyGrid.ColumnDefinitions[2];
-            var maxRecent = WindowMetrics.MaxRecentWidth(
-                Math.Max(LayoutRoot.Bounds.Width, LayoutRoot.MinWidth), BodyGrid.ColumnDefinitions[0].MinWidth, recentColumn.MinWidth);
             recentColumn.Width = new GridLength(
-                WindowMetrics.DisplayFromIntent(recentIntent, recentColumn.MinWidth, maxRecent), GridUnitType.Pixel);
+                WindowMetrics.DisplayFromIntent(recentIntent, recentColumn.MinWidth, MaxRecentWidth()), GridUnitType.Pixel);
         }
 
         if (_consoleHeightIntent is { } consoleIntent)
         {
             var consoleRow = LeftPanesGrid.RowDefinitions[2];
-            var maxConsole = WindowMetrics.MaxConsoleHeight(
-                Math.Max(LayoutRoot.Bounds.Height, LayoutRoot.MinHeight),
-                LeftPanesGrid.RowDefinitions[0].MinHeight,
-                consoleRow.MinHeight,
-                _headerChromeHeight,
-                _statusChromeHeight,
-                _operationalErrorChromeHeight);
             consoleRow.Height = new GridLength(
-                WindowMetrics.DisplayFromIntent(consoleIntent, consoleRow.MinHeight, maxConsole), GridUnitType.Pixel);
+                WindowMetrics.DisplayFromIntent(consoleIntent, consoleRow.MinHeight, MaxConsoleHeight()), GridUnitType.Pixel);
         }
     }
+
+    private double MaxRecentWidth() =>
+        WindowMetrics.MaxRecentWidth(
+            Math.Max(LayoutRoot.Bounds.Width, LayoutRoot.MinWidth),
+            BodyGrid.ColumnDefinitions[0].MinWidth,
+            BodyGrid.ColumnDefinitions[2].MinWidth);
+
+    private double MaxConsoleHeight() =>
+        WindowMetrics.MaxConsoleHeight(
+            Math.Max(LayoutRoot.Bounds.Height, LayoutRoot.MinHeight),
+            LeftPanesGrid.RowDefinitions[0].MinHeight,
+            LeftPanesGrid.RowDefinitions[2].MinHeight,
+            _headerChromeHeight,
+            _statusChromeHeight,
+            _operationalErrorChromeHeight);
 
     // A real user drag of the Recent column splitter just finished: the resulting ActualWidth is the
     // size the user wants, so record it as the new intent. This is the ONLY place the intent changes

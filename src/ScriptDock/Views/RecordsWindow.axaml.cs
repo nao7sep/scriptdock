@@ -55,6 +55,15 @@ public partial class RecordsWindow : Window
                 ClampListToWindow();
         };
         ListSplitter.AddHandler(Thumb.DragCompletedEvent, OnListSplitterDragCompleted);
+        SplitterKeyboard.Attach(ListSplitter, Avalonia.Layout.Orientation.Horizontal, paneBefore: true,
+            () => (RecordsLayout.DisplayListWidth(_listWidthIntent, ShellWindowWidth),
+                RecordsLayout.ListMinWidth, RecordsLayout.MaxListWidth(ShellWindowWidth)),
+            width =>
+            {
+                _listWidthIntent = RecordsLayout.ClampListWidth(width);
+                ClampListToWindow();
+            },
+            () => _ = ViewModel?.CommitListWidthAsync(_listWidthIntent));
         RecordsList.TemplateApplied += (_, e) => AttachListScroll(e.NameScope.Find<ScrollViewer>("PART_ScrollViewer"));
         RecordsList.AddHandler(KeyDownEvent, OnListKeyDown, RoutingStrategies.Tunnel);
         Closing += OnClosing;
@@ -120,9 +129,11 @@ public partial class RecordsWindow : Window
     }
 
     // The shell fills the window inside its margin, so its width is what the window gives the panes.
+    private double ShellWindowWidth => Math.Max(Shell.Bounds.Width + 2 * RecordsLayout.Margin, MinWidth);
+
     private void ClampListToWindow() =>
         ListColumn.Width = new GridLength(
-            RecordsLayout.DisplayListWidth(_listWidthIntent, Math.Max(Shell.Bounds.Width + 2 * RecordsLayout.Margin, MinWidth)),
+            RecordsLayout.DisplayListWidth(_listWidthIntent, ShellWindowWidth),
             GridUnitType.Pixel);
 
     // Only a drag that ends saves the width; a resize never does (window-conventions).

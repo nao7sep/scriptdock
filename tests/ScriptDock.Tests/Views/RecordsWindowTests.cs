@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
@@ -108,6 +109,34 @@ public sealed class RecordsWindowTests : WindowTest
 
         Assert.Equal(470, _stateStore.Value.RecordsListWidth);
         Assert.Equal(470, window.ListWidthIntent);
+    }
+
+    [AvaloniaFact]
+    public void The_list_splitter_takes_the_keyboard_and_saves_once_per_key()
+    {
+        var window = Show(new RecordsWindow { DataContext = NewViewModel(), Width = 1200, Height = 700 });
+        var splitter = window.GetVisualDescendants().OfType<GridSplitter>().Single();
+
+        foreach (var _ in new[] { 1, 2 }) // a held key repeats its press, then releases once
+            splitter.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Right });
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(RecordsLayout.ListDefaultWidth + 32, window.ListWidthIntent);
+        Assert.Equal(0, _stateStore.SaveCount);
+
+        splitter.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = Key.Right });
+        Dispatcher.UIThread.RunJobs();
+        // The fake store saves on a pool thread, as the real one does.
+        Assert.True(System.Threading.SpinWait.SpinUntil(() => _stateStore.SaveCount > 0, TimeSpan.FromSeconds(5)));
+        Assert.Equal(1, _stateStore.SaveCount);
+        Assert.Equal(RecordsLayout.ListDefaultWidth + 32, _stateStore.Value.RecordsListWidth);
+
+        // The keyboard's width is the intent, so a resize away and back keeps it.
+        window.Width = 900;
+        Dispatcher.UIThread.RunJobs();
+        window.Width = 1200;
+        Dispatcher.UIThread.RunJobs();
+        var grid = window.GetVisualDescendants().OfType<Grid>().Single(grid => grid.Name == "Shell");
+        Assert.Equal(RecordsLayout.ListDefaultWidth + 32, grid.ColumnDefinitions[0].ActualWidth);
     }
 
     [AvaloniaFact]

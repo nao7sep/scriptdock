@@ -223,6 +223,14 @@
                 </FocusAdornerTemplate>
             </Setter>
         </Style>
+        <!-- A splitter takes the arrow keys, so it shows where focus is the same way. -->
+        <Style Selector="GridSplitter">
+            <Setter Property="FocusAdorner">
+                <FocusAdornerTemplate>
+                    <Border Classes="focusRing" Classes.inactive="{Binding !$parent[Window].IsActive}"/>
+                </FocusAdornerTemplate>
+            </Setter>
+        </Style>
         <Style Selector="Border.focusRing">
             <Setter Property="BorderThickness" Value="2"/>
             <Setter Property="BorderBrush" Value="{DynamicResource FocusRingBrush}"/>
