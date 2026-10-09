@@ -20,8 +20,10 @@ public static class RecentListBuilder
     public static IReadOnlyList<RecentEntry> Build(
         IReadOnlyList<RecentRun> recents,
         IReadOnlyList<ScriptProcess> active,
-        IReadOnlyDictionary<string, string> labels)
+        IReadOnlyDictionary<string, string> labels,
+        Func<string, string>? key = null)
     {
+        key ??= PathIdentity.Key;
         var byPath = active
             .GroupBy(p => p.ScriptKey, PathIdentity.Comparer)
             .ToDictionary(
@@ -33,10 +35,10 @@ public static class RecentListBuilder
         var seen = new HashSet<string>(PathIdentity.Comparer);
         foreach (var run in recents) // RecentRuns keeps this newest-first
         {
-            var key = active.FirstOrDefault(p => p.ScriptPath == run.Path)?.ScriptKey ?? PathIdentity.Key(run.Path);
-            if (!seen.Add(key))
+            var runKey = active.FirstOrDefault(p => p.ScriptPath == run.Path)?.ScriptKey ?? key(run.Path);
+            if (!seen.Add(runKey))
                 continue;
-            byPath.TryGetValue(key, out var process);
+            byPath.TryGetValue(runKey, out var process);
             entries.Add(new RecentEntry(run.Path, ScriptLabels.LabelFor(labels, run.Path), run.RanAt, process, run.End));
         }
 

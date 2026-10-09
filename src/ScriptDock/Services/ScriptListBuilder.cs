@@ -22,11 +22,13 @@ public static class ScriptListBuilder
         ISet<string> newPaths,
         ISet<string> runningPaths,
         IReadOnlyDictionary<string, string> labels,
-        bool showHidden)
+        bool showHidden,
+        Func<string, string>? key = null)
     {
+        key ??= PathIdentity.Key;
         var items = new List<ScriptItem>();
-        static bool ContainsIdentity(ISet<string> paths, string path) =>
-            paths.Contains(path) || paths.Contains(PathIdentity.Key(path));
+        bool ContainsIdentity(ISet<string> paths, string path) =>
+            paths.Contains(path) || paths.Contains(key(path));
 
         // Build every tile through one factory so a new ScriptItem field can't be set on the found
         // path and forgotten on the removed one — the only difference between the two is the flag.

@@ -43,6 +43,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private ISet<string> _newPaths = new HashSet<string>(StringComparer.Ordinal);
     private IReadOnlyList<string> _removed = [];
 
+    // Path identities for the interface thread; scans refresh them off it.
+    private readonly PathKeyCache _keys = new();
+
     // The "new" flags Run ended while the latest scan was saving its known paths; that scan's flags
     // leave them ended.
     private HashSet<string> _flagsEndedDuringScan = new(PathIdentity.Comparer);
@@ -588,20 +591,31 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             var roots = _config.RootDirs.ToList();
             var extensions = _config.Extensions.ToList();
             var patterns = _config.IgnorePatterns.ToList();
+            var known = _knownPaths.Paths?.ToList();
+            var otherPaths = _config.Hidden.Concat(_recent.Select(run => run.Path)).ToList();
 
-            var report = await Task.Run(() => _scanner.Scan(roots, extensions, patterns, cts.Token), cts.Token);
+            // Everything that asks the filesystem runs here, off the interface thread: the scan, its
+            // diff against the known paths and the path identities the window's lists read.
+            var (report, diff) = await Task.Run(() =>
+            {
+                var found = _scanner.Scan(roots, extensions, patterns, cts.Token);
+                _keys.Refresh(found.Found.Concat(otherPaths));
+                return (found, ScanDiff.Compute(found.Found, known));
+            }, cts.Token);
             cts.Token.ThrowIfCancellationRequested(); // a newer scan superseded us between completion and here
             ScanReportLog.Write(_records, report);
 
-            var diff = ScanDiff.Compute(report.Found, _knownPaths.Paths);
             var candidate = new KnownPaths { Paths = report.Found.ToList() };
             await _knownPathsStore.SaveAsync(candidate);
             cts.Token.ThrowIfCancellationRequested();
 
             // From the flags as they are now the save has settled, not as they were before it.
-            var flags = background
-                ? ScanFlags.Background(diff, report.Found, _newPaths, _removed)
-                : ScanFlags.Full(diff);
+            var shownNew = _newPaths.ToList();
+            var shownRemoved = _removed;
+            var flags = await Task.Run(() => background
+                ? ScanFlags.Background(diff, report.Found, shownNew, shownRemoved)
+                : ScanFlags.Full(diff));
+            cts.Token.ThrowIfCancellationRequested();
             flags.NewKeys.ExceptWith(flagsEnded);
 
             _lastFound = report.Found;
@@ -943,7 +957,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         var selectedKey = SelectedRecentEntry is { } selected ? selected.Process?.ScriptKey ?? ScriptKeyFor(selected.Path) : null;
 
         Recent.Clear();
-        foreach (var entry in RecentListBuilder.Build(_recent, _runner.Active, BuildLabels()))
+        foreach (var entry in RecentListBuilder.Build(_recent, _runner.Active, BuildLabels(), _keys.Key))
             Recent.Add(entry);
 
         SelectedRecentEntry = selectedKey is null ? null : Recent.FirstOrDefault(e =>
@@ -982,12 +996,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private void RebuildScripts(bool selectNeighbourIfGone = false)
     {
-        var hidden = new HashSet<string>(_config.Hidden.Select(PathIdentity.Key), PathIdentity.Comparer);
+        var hidden = new HashSet<string>(_config.Hidden.Select(_keys.Key), PathIdentity.Comparer);
         var running = new HashSet<string>(
             _runner.Active.Where(p => p.State == RunState.Running).Select(p => p.ScriptKey),
             PathIdentity.Comparer);
 
-        var items = ScriptListBuilder.BuildScripts(_lastFound, _removed, hidden, _newPaths, running, BuildLabels(), ShowHidden);
+        var items = ScriptListBuilder.BuildScripts(_lastFound, _removed, hidden, _newPaths, running, BuildLabels(), ShowHidden, _keys.Key);
 
         // Capture the selection before the rebuild discards the old item instances, so the user's
         // place survives a rebuild (a new scan, a hide/show toggle, or a running-dot refresh).
@@ -1003,14 +1017,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         // Setting SelectedScript drives both the ListBox selection and the Hide/Show button label.
         var restored = selectedPath is null
             ? null
-            : Scripts.FirstOrDefault(s => PathIdentity.Same(s.Path, selectedPath));
+            : Scripts.FirstOrDefault(s => _keys.Same(s.Path, selectedPath));
         if (restored is null && selectNeighbourIfGone && selectedIndex >= 0 && Scripts.Count > 0)
             restored = Scripts[Math.Min(selectedIndex, Scripts.Count - 1)];
         SelectedScript = restored;
 
         // Status-bar facts: total found, and how many of those are hidden.
         ScriptCount = _lastFound.Count;
-        HiddenCount = _lastFound.Count(path => hidden.Contains(PathIdentity.Key(path)));
+        HiddenCount = _lastFound.Count(path => hidden.Contains(_keys.Key(path)));
         OnPropertyChanged(nameof(NoScripts));
     }
 
@@ -1065,28 +1079,60 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private ScriptProcess? _renderedOutputProcess;
     private IReadOnlyList<string>? _renderedOutputLines;
 
-    private void RefreshOutput()
+    // The selected run's output is read off the interface thread, one read at a time; a refresh asked for
+    // while one runs is folded into one more pass, and a read whose run is no longer selected is dropped.
+    private bool _outputReading;
+    private bool _outputRefreshAgain;
+
+    private void RefreshOutput() => _ = RefreshOutputAsync();
+
+    private async Task RefreshOutputAsync()
     {
+        if (_outputReading)
+        {
+            _outputRefreshAgain = true;
+            return;
+        }
+
+        _outputReading = true;
         try
         {
-            var process = SelectedRecentEntry?.Process;
-            var lines = process?.ReadOutput();
-            if (SelectedRecentEntry is { } selected)
-                ResolveProcessActionError(selected.Path, "read-output");
+            do
+            {
+                _outputRefreshAgain = false;
+                var selected = SelectedRecentEntry;
+                var process = selected?.Process;
+                try
+                {
+                    var lines = process is null ? null : await Task.Run(process.ReadOutput);
+                    if (!ReferenceEquals(SelectedRecentEntry, selected))
+                    {
+                        _outputRefreshAgain = true;
+                        continue;
+                    }
+                    if (selected is not null)
+                        ResolveProcessActionError(selected.Path, "read-output");
 
-            // Cache hit: same run, same (reference-identical) tail as last render — nothing to redo.
-            if (ReferenceEquals(process, _renderedOutputProcess) && ReferenceEquals(lines, _renderedOutputLines))
-                return;
+                    // Cache hit: same run, same (reference-identical) tail as last render — nothing to redo.
+                    if (ReferenceEquals(process, _renderedOutputProcess) && ReferenceEquals(lines, _renderedOutputLines))
+                        continue;
 
-            _renderedOutputProcess = process;
-            _renderedOutputLines = lines;
-            SelectedOutput = lines is null ? string.Empty : string.Join(Environment.NewLine, lines);
+                    _renderedOutputProcess = process;
+                    _renderedOutputLines = lines;
+                    SelectedOutput = lines is null ? string.Empty : string.Join(Environment.NewLine, lines);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn("ui: refresh output failed", ex);
+                    if (SelectedRecentEntry is { } current)
+                        ReportProcessActionError(current.Path, "read-output", Message.Of("process.readOutputFailed"));
+                }
+            }
+            while (_outputRefreshAgain);
         }
-        catch (Exception ex)
+        finally
         {
-            Log.Warn("ui: refresh output failed", ex);
-            if (SelectedRecentEntry is { } selected)
-                ReportProcessActionError(selected.Path, "read-output", Message.Of("process.readOutputFailed"));
+            _outputReading = false;
         }
     }
 
@@ -1254,7 +1300,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     }
 
     private string ScriptKeyFor(string path) =>
-        _runner.Active.FirstOrDefault(p => p.ScriptPath == path)?.ScriptKey ?? PathIdentity.Key(path);
+        _runner.Active.FirstOrDefault(p => p.ScriptPath == path)?.ScriptKey ?? _keys.Key(path);
 
     private string RunFailedKey(string path) => "run " + ScriptKeyFor(path);
 
