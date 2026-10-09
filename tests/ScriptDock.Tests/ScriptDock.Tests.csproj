@@ -17,11 +17,11 @@
          Microsoft.Testing.Extensions.CodeCoverage was incompatible with the
          Microsoft.Testing.Platform version that xunit.v3 3.2.2 pins, so Coverlet is
          used instead. -->
-    <PackageReference Include="coverlet.collector" Version="10.0.1">
+    <PackageReference Include="coverlet.collector" Version="10.1.0">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <!-- Avalonia.Headless.XUnit 12.1.2 calls xUnit 3.2.2 discovery internals and fails
          discovery under xUnit 4. Keep this pair until Avalonia publishes compatible integration. -->
     <PackageReference Include="xunit.v3" Version="3.2.2" />
