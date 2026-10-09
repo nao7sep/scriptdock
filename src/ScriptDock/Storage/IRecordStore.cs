@@ -15,6 +15,11 @@ public interface IRecordStore
     /// <summary>This process launch, by its start time, as every record written now carries it.</summary>
     string Session { get; }
 
+    /// <summary>True when the database could not be opened this session. Every write then lands in the
+    /// fallback file and faults; the app has already said once that run history is not being recorded,
+    /// so callers carry on rather than reporting each write.</summary>
+    bool DatabaseUnavailable => false;
+
     /// <summary>Records a started run.</summary>
     Task AddRunAsync(RunRecord run);
 

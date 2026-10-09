@@ -17,6 +17,7 @@ public sealed class FakeRecordStore : IRecordStore
 {
     public string Session { get; set; } = "2026-01-01T00:00:00.000Z";
     public bool ThrowOnWrite { get; set; }
+    public bool DatabaseUnavailable { get; set; }
     public List<RunRecord> Runs { get; } = [];
     public List<RunEnd> RunEnds { get; } = [];
     public List<string> Dismissals { get; } = [];

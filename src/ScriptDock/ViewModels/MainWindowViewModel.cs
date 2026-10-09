@@ -723,7 +723,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 _runner.Dismiss(entry.Process);
             }
 
-            await Task.WhenAll(dismissedPaths.Select(_records.AddDismissalAsync));
+            try
+            {
+                await Task.WhenAll(dismissedPaths.Select(_records.AddDismissalAsync));
+            }
+            catch (Exception) when (_records.DatabaseUnavailable)
+            {
+                // Kept in the fallback file; the dismissal holds for this session, as the startup notice said.
+            }
             _recent.RemoveAll(r => dismissedPaths.Contains(r.Path));
             _recentVersion++;
 
@@ -886,7 +893,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             Log.Error("ui: record run failed", ex, new { script = path });
-            ReportProcessActionError(path, "recent-history", Message.Of("process.historyFailed"));
+            // With the database unavailable, the startup notice already said run history is not recorded.
+            if (!_records.DatabaseUnavailable)
+                ReportProcessActionError(path, "recent-history", Message.Of("process.historyFailed"));
         }
         RebuildRecent();
 

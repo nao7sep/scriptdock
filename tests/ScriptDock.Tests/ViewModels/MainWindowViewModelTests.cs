@@ -103,6 +103,22 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task DismissEntry_WithTheRecordsUnavailable_StillRemovesTheEntryForTheSession()
+    {
+        var records = RecordsWithRuns("/x/done.command");
+        var (vm, _) = BuildVm(records: records);
+        await vm.LoadRecentAsync();
+        records.ThrowOnWrite = true;
+        records.DatabaseUnavailable = true;
+        var entry = new RecentEntry("/x/done.command", "done.command", DateTimeOffset.UtcNow, process: null);
+
+        await vm.DismissEntryCommand.ExecuteAsync(entry);
+
+        Assert.Empty(vm.Recent);
+        Assert.Equal(0, vm.RecentActionErrorCount);
+    }
+
+    [Fact]
     public async Task DismissEntry_RunningEntry_DeclinedConfirm_KeepsItAndDoesNotTerminate()
     {
         var records = RecordsWithRuns("/x/live.command");
