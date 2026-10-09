@@ -99,6 +99,12 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
     private readonly Thread _owner;
     private readonly SqliteConnection? _connection;
     private readonly object _fallbackGate = new();
+
+    // The Records window's reader, started on its first read.
+    private readonly object _windowGate = new();
+    private BlockingCollection<Action>? _windowQueue;
+    private Thread? _windowReader;
+    private SqliteConnection? _windowConnection;
     private int _disposed;
 
     /// <summary>Opens (or creates) the database in <paramref name="directory"/> for the session that started
@@ -232,14 +238,17 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
             return found;
         });
 
+    // The Records window's reads run on their own thread over a read-only connection, so a long search
+    // never holds up the writes, the Recent list or the quit's flush queued behind it; WAL lets a reader
+    // and the writer work side by side.
     public Task<RecordsPage> ReadRecordsPageAsync(RecordsQuery query) =>
-        Read(connection => RecordQueries.ReadPage(connection, query));
+        WindowRead(connection => RecordQueries.ReadPage(connection, query));
 
     public Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id) =>
-        Read(connection => RecordQueries.ReadDetail(connection, kind, id));
+        WindowRead(connection => RecordQueries.ReadDetail(connection, kind, id));
 
     public Task<RecordSources> ReadRecordSourcesAsync() =>
-        Read(connection => new RecordSources(Session, RecordQueries.ReadSessions(connection)));
+        WindowRead(connection => new RecordSources(Session, RecordQueries.ReadSessions(connection)));
 
     public Task AddRunOutputAsync(RunRecord run, byte[] output) =>
         Write(connection =>
@@ -273,6 +282,75 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
         _queue.CompleteAdding();
         if (_owner.Join(CloseWait))
             _connection?.Dispose();
+
+        lock (_windowGate)
+        {
+            _windowQueue?.CompleteAdding();
+            if (_windowReader?.Join(CloseWait) == true)
+                _windowConnection?.Dispose();
+        }
+    }
+
+    private Task<T> WindowRead<T>(Func<SqliteConnection, T> read)
+    {
+        var done = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // A read still sees every write queued before it; the writer never waits for a read.
+        var writesBefore = new ManualResetEventSlim();
+        if (!TryQueue(writesBefore.Set))
+            writesBefore.Set();
+
+        void Run()
+        {
+            try
+            {
+                writesBefore.Wait();
+                writesBefore.Dispose();
+                _windowConnection ??= OpenWindowConnection();
+                done.SetResult(read(_windowConnection));
+            }
+            catch (Exception ex)
+            {
+                done.SetException(ex);
+            }
+        }
+
+        lock (_windowGate)
+        {
+            if (Volatile.Read(ref _disposed) == 1)
+            {
+                done.SetException(new ObjectDisposedException(nameof(RecordStore)));
+                return done.Task;
+            }
+            if (_windowQueue is null)
+            {
+                var queue = new BlockingCollection<Action>();
+                _windowQueue = queue;
+                _windowReader = new Thread(() =>
+                {
+                    foreach (var operation in queue.GetConsumingEnumerable())
+                        operation();
+                }) { IsBackground = true, Name = "records window" };
+                _windowReader.Start();
+            }
+            _windowQueue.Add(Run);
+        }
+        return done.Task;
+    }
+
+    private SqliteConnection OpenWindowConnection()
+    {
+        if (_connection is null)
+            throw new InvalidOperationException("The records database is not open.");
+
+        var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = FilePath,
+            Mode = SqliteOpenMode.ReadOnly,
+        }.ToString());
+        connection.Open();
+        Execute(connection, "PRAGMA busy_timeout = 1000;");
+        return connection;
     }
 
     private void Own()
