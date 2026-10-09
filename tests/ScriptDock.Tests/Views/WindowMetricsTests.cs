@@ -34,14 +34,39 @@ public sealed class WindowMetricsTests
     [Fact]
     public void WindowGeometry_AllowsNegativeCoordinatesOnAConnectedDisplay()
     {
-        Avalonia.PixelRect[] workingAreas =
+        (Avalonia.PixelRect, double)[] screens =
         [
-            new(0, 0, 1920, 1080),
-            new(-1600, 40, 1600, 1000),
+            (new(0, 0, 1920, 1080), 1),
+            (new(-1600, 40, 1600, 1000), 1),
         ];
 
         Assert.True(WindowMetrics.CanRestoreWindowGeometry(
-            -1400, 120, 1100, 720, workingAreas));
+            -1400, 120, 1100, 720, screens));
+    }
+
+    [Theory]
+    [InlineData(1919, 1079, 1.0, false)] // only a corner left on screen: the reported bug
+    [InlineData(1801, 100, 1.0, false)]  // 119 DIP of title bar showing
+    [InlineData(1800, 100, 1.0, true)]   // 120 DIP showing
+    [InlineData(100, 1033, 1.0, false)]  // title band 47 DIP above the bottom
+    [InlineData(100, 1032, 1.0, true)]   // 48 DIP
+    [InlineData(100, -1, 1.0, false)]    // title bar above the working area
+    [InlineData(-7, 100, 1.0, true)]     // flush left on Windows, past the invisible resize border
+    [InlineData(1681, 100, 2.0, false)]  // at scale 2 the grab is 240 px
+    [InlineData(1680, 100, 2.0, true)]
+    public void WindowGeometry_NeedsAGrabbableTitleBar(int x, int y, double scale, bool expected)
+    {
+        Assert.Equal(expected, WindowMetrics.CanRestoreWindowGeometry(
+            x, y, 1100, 720, [(new Avalonia.PixelRect(0, 0, 1920, 1080), scale)]));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(double.NaN)]
+    public void WindowGeometry_RejectsAnUnusableScale(double scale)
+    {
+        Assert.False(WindowMetrics.CanRestoreWindowGeometry(
+            100, 100, 1100, 720, [(new Avalonia.PixelRect(0, 0, 1920, 1080), scale)]));
     }
 
     [Theory]
@@ -56,7 +81,7 @@ public sealed class WindowMetricsTests
         int? x, int? y, double? width, double? height)
     {
         Assert.False(WindowMetrics.CanRestoreWindowGeometry(
-            x, y, width, height, [new Avalonia.PixelRect(0, 0, 1920, 1080)]));
+            x, y, width, height, [(new Avalonia.PixelRect(0, 0, 1920, 1080), 1.0)]));
     }
 
     [Theory]

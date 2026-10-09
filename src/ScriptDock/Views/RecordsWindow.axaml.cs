@@ -94,7 +94,8 @@ public partial class RecordsWindow : Window
             RecalculateMinimums();
             if (ViewModel is not { } vm
                 || !Screens.All.Any(screen => WindowMetrics.CanRestoreWindowGeometry(
-                    vm.WindowPositionX, vm.WindowPositionY, vm.WindowWidth, vm.WindowHeight, [screen.WorkingArea])))
+                    vm.WindowPositionX, vm.WindowPositionY, vm.WindowWidth, vm.WindowHeight,
+                    [(screen.WorkingArea, screen.Scaling)])))
                 return;
 
             WindowStartupLocation = WindowStartupLocation.Manual;

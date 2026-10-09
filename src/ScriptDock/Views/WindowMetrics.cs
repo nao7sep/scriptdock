@@ -27,9 +27,20 @@ public static class WindowMetrics
             ? Avalonia.Controls.WindowState.Maximized
             : Avalonia.Controls.WindowState.Normal;
 
+    // A restored window must be usable or recoverable by ordinary interaction (window-conventions): its
+    // title bar lies within one screen's working area, with enough of it showing to grab and drag.
+    // 120 DIP is a comfortable grab on any title bar; 48 DIP covers the title band on both platforms.
+    private const double MinimumGrabWidth = 120;
+    private const double TitleBandHeight = 48;
+
+    /// <summary>
+    /// Whether a saved placement can be restored: the position is in physical pixels and the size in
+    /// DIPs, so each working area comes with its screen's scale. Otherwise the caller uses the designed
+    /// default placement.
+    /// </summary>
     public static bool CanRestoreWindowGeometry(
         int? x, int? y, double? width, double? height,
-        IEnumerable<Avalonia.PixelRect> workingAreas)
+        IEnumerable<(Avalonia.PixelRect Area, double Scale)> screens)
     {
         if (x is not { } savedX || y is not { } savedY
             || width is not > 0 || height is not > 0
@@ -38,10 +49,18 @@ public static class WindowMetrics
             return false;
         }
 
-        return workingAreas.Any(area =>
-            area.Width > 0 && area.Height > 0
-            && savedX >= area.X && savedX < (long)area.X + area.Width
-            && savedY >= area.Y && savedY < (long)area.Y + area.Height);
+        return screens.Any(screen =>
+        {
+            var (area, scale) = screen;
+            if (area.Width <= 0 || area.Height <= 0 || scale <= 0 || !double.IsFinite(scale))
+                return false;
+
+            var widthPx = width.Value * scale;
+            var visible = Math.Min((double)savedX + widthPx, (long)area.X + area.Width) - Math.Max(savedX, area.X);
+            return visible >= Math.Min(widthPx, MinimumGrabWidth * scale)
+                && savedY >= area.Y
+                && savedY <= (long)area.Y + area.Height - TitleBandHeight * scale;
+        });
     }
 
     public static bool IsMaximizedGeometry(
