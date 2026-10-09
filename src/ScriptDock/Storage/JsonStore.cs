@@ -28,8 +28,8 @@ namespace ScriptDock.Storage;
 /// </remarks>
 /// <remarks>
 /// The app's single managed-text atomic-write choke point, and so the one place the
-/// data-backup hook lives: each recorded store feeds <see cref="BackupStore"/>
-/// (<c>~/.scriptdock/backups.sqlite3</c>) strictly after its rename lands.
+/// data-backup hook lives: each recorded store hands <see cref="BackupStore"/>
+/// (<c>~/.scriptdock/backups.sqlite3</c>) its bytes strictly after its rename lands.
 /// </remarks>
 /// <remarks>
 /// The store imposes no ordering on the value it receives. If on-disk ordering
@@ -238,8 +238,8 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
     // The data-backup record fires strictly AFTER the rename lands. Recording before the rename would
     // risk a "backup of a save that never happened": if the rename then failed, the history would hold a
     // version that never reached disk. So: rename lands, *then* record the exact bytes just written — the
-    // same buffer already in hand, never a re-read of the file. The record is best-effort and silent; it
-    // never throws back into this write and never affects the save's success (see BackupStore.Record).
+    // same buffer already in hand, never a re-read of the file. Record only queues the bytes for the
+    // history's own thread, so the history never delays this save or affects its success.
     private void WriteAtomically(byte[] bytes)
     {
         // <stem>-<discriminator>.tmp, in the same directory as the live file — per the
@@ -270,8 +270,6 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         }
 
         // After the rename: the file is exactly where it belongs, so record the bytes we just wrote.
-        // Best-effort — Record catches, logs once, and swallows every failure, so a backup problem can
-        // never break the save that already succeeded above.
         if (_recordBackups)
             BackupStore.Record(_filePath, bytes);
     }

@@ -342,6 +342,7 @@ public sealed class JsonStoreTests : IDisposable
         await store.SaveAsync(new SampleDoc { Name = "one" });
         await store.SaveAsync(new SampleDoc { Name = "two" });
         await store.SaveAsync(new SampleDoc { Name = "three" });
+        BackupStore.Flush(); // the history records on its own thread; let it settle before listing
 
         var files = Directory.EnumerateFiles(_root)
             .Select(Path.GetFileName)

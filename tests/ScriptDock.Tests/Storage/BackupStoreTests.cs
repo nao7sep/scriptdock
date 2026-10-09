@@ -12,14 +12,11 @@ using Xunit;
 namespace ScriptDock.Tests.Storage;
 
 /// <summary>
-/// Pins the write-through data-backup store (<see cref="BackupStore"/>) against a throwaway
-/// <c>SCRIPTDOCK_DATA_DIR</c> — the one relocation seam, used the same way in tests and production. These
-/// touch a real SQLite file on purpose: the whole point of the feature is a byte-identical on-disk copy,
-/// which a fake would not exercise. What is locked here: the <c>content</c> BLOB is byte-identical
-/// (including a CR/LF and a non-UTF-8 byte, proving it is raw bytes and not decoded text);
-/// <c>written_at_utc</c> is the serialized ISO-8601-ms data value and NOT the filename stamp; dedup skips
-/// an unchanged re-save while a changed save and a revert each insert a row; and the store is best-effort
-/// — an injected open failure produces no throw and leaves the caller's save untouched.
+/// Pins the backup history (<see cref="BackupStore"/>) against a throwaway <c>SCRIPTDOCK_DATA_DIR</c>, on a
+/// real SQLite file, since the point is a byte-identical copy. Locked here: the <c>content</c> BLOB is the
+/// exact bytes; <c>written_at_utc</c> is the serialized ISO-8601-ms value; each path keeps one row per
+/// session, replaced by later saves, and a session's first save of content already held writes nothing;
+/// a save never waits for the history; and an unusable store neither throws nor breaks the save.
 /// </summary>
 [Collection(StorageRootEnvironment.CollectionName)]
 public sealed class BackupStoreTests : IDisposable
@@ -48,12 +45,13 @@ public sealed class BackupStoreTests : IDisposable
 
     private string StoreFile => Path.Combine(_root, BackupStore.FileName);
 
-    private sealed record Row(string Path, byte[] Content, string Sha256, long ByteSize, string WrittenAtUtc);
+    private sealed record Row(string Path, byte[] Content, string Sha256, long ByteSize, string WrittenAtUtc, string? Session);
 
     /// <summary>Reads every recorded row for a path, oldest first — a direct DB read so the assertion does
     /// not depend on any public read API the feature deliberately does not expose.</summary>
     private List<Row> RowsFor(string path)
     {
+        BackupStore.Flush();
         var rows = new List<Row>();
         using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
@@ -64,7 +62,7 @@ public sealed class BackupStoreTests : IDisposable
 
         using var command = connection.CreateCommand();
         command.CommandText =
-            "SELECT path, content, content_sha256, byte_size, written_at_utc " +
+            "SELECT path, content, content_sha256, byte_size, written_at_utc, session_id " +
             "FROM backups WHERE path = $path ORDER BY id ASC";
         command.Parameters.AddWithValue("$path", path);
 
@@ -77,7 +75,8 @@ public sealed class BackupStoreTests : IDisposable
                 content,
                 reader.GetString(2),
                 reader.GetInt64(3),
-                reader.GetString(4)));
+                reader.GetString(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5)));
         }
 
         return rows;
@@ -119,63 +118,70 @@ public sealed class BackupStoreTests : IDisposable
     }
 
     [Fact]
-    public void Record_UnchangedResave_IsDeduped_NoNewRow()
+    public void Record_InOneSession_KeepsOneRowWithTheLatestContent()
     {
         var path = Path.Combine(_root, "doc.json");
-        byte[] bytes = [10, 20, 30];
-
-        BackupStore.Record(path, bytes);
-        BackupStore.Record(path, bytes); // identical content — must be skipped
-        BackupStore.Record(path, bytes); // still identical
-
-        Assert.Single(RowsFor(path));
-    }
-
-    [Fact]
-    public void Record_ChangedSave_InsertsANewRow()
-    {
-        var path = Path.Combine(_root, "doc.json");
+        BackupStore.Session = "s1";
 
         BackupStore.Record(path, [1]);
-        BackupStore.Record(path, [1, 2]); // different content
+        BackupStore.Record(path, [1, 2]);
+        BackupStore.Record(path, [1, 2, 3]);
 
-        var rows = RowsFor(path);
-        Assert.Equal(2, rows.Count);
-        Assert.Equal([1], rows[0].Content);
-        Assert.Equal([1, 2], rows[1].Content);
+        var row = Assert.Single(RowsFor(path));
+        Assert.Equal([1, 2, 3], row.Content);
+        Assert.Equal("s1", row.Session);
     }
 
     [Fact]
-    public void Record_Revert_InsertsANewRow_DifferingFromTheImmediatelyPrecedingRow()
+    public void Record_EachSession_AddsItsOwnRow_AndLeavesEarlierSessionsAlone()
     {
         var path = Path.Combine(_root, "doc.json");
-        byte[] original = [1, 1, 1];
-        byte[] edited = [2, 2, 2];
-
-        BackupStore.Record(path, original); // v1
-        BackupStore.Record(path, edited);   // v2 — a real edit
-        BackupStore.Record(path, original); // revert to v1's content: differs from v2, so recorded
+        BackupStore.Session = "s1";
+        BackupStore.Record(path, [1]);
+        BackupStore.Session = "s2";
+        BackupStore.Record(path, [2]);
+        BackupStore.Record(path, [3]);
 
         var rows = RowsFor(path);
-        Assert.Equal(3, rows.Count);
-        Assert.Equal(original, rows[2].Content);
+        Assert.Equal(["s1", "s2"], rows.ConvertAll(row => row.Session));
+        Assert.Equal([1], rows[0].Content);
+        Assert.Equal([3], rows[1].Content);
     }
 
     [Fact]
-    public void Record_PerPathDedup_TracksEachPathIndependently()
+    public void Record_SessionsFirstSaveOfContentAlreadyHeld_WritesNothing()
+    {
+        var path = Path.Combine(_root, "doc.json");
+        BackupStore.Session = "s1";
+        BackupStore.Record(path, [7, 7]);
+        BackupStore.Session = "s2";
+        BackupStore.Record(path, [7, 7]);
+
+        Assert.Equal("s1", Assert.Single(RowsFor(path)).Session);
+    }
+
+    [Fact]
+    public void Record_KeepsEachPathApart()
     {
         var a = Path.Combine(_root, "a.json");
         var b = Path.Combine(_root, "b.json");
-        byte[] same = [7, 7, 7];
 
-        // Same content under two different paths must record once per path (dedup is per path, not global).
-        BackupStore.Record(a, same);
-        BackupStore.Record(b, same);
-        BackupStore.Record(a, same); // dedup skip for a
-        BackupStore.Record(b, same); // dedup skip for b
+        BackupStore.Record(a, [7, 7, 7]);
+        BackupStore.Record(b, [7, 7, 7]);
 
         Assert.Single(RowsFor(a));
         Assert.Single(RowsFor(b));
+    }
+
+    [Fact]
+    public void Record_WhenTheSessionIsEnding_IsSkipped()
+    {
+        var path = Path.Combine(_root, "doc.json");
+        BackupStore.Abandon();
+        BackupStore.Record(path, [1]);
+        BackupStore.Close();
+
+        Assert.False(File.Exists(StoreFile));
     }
 
     public sealed class SampleDoc
@@ -224,16 +230,42 @@ public sealed class BackupStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task JsonStoreSave_RepeatedIdenticalSaves_Dedup_ButAChangeRecordsANewVersion()
+    public async Task JsonStoreSave_KeepsTheSessionsLatestVersion()
     {
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
         var docPath = Path.Combine(_root, "doc.json");
 
         await store.SaveAsync(new SampleDoc { Name = "one" });
-        await store.SaveAsync(new SampleDoc { Name = "one" }); // no real change — deduped
-        await store.SaveAsync(new SampleDoc { Name = "two" }); // a real change — recorded
+        await store.SaveAsync(new SampleDoc { Name = "two" });
 
-        Assert.Equal(2, RowsFor(docPath).Count);
+        Assert.Equal(File.ReadAllBytes(docPath), Assert.Single(RowsFor(docPath)).Content);
+    }
+
+    [Fact]
+    public async Task JsonStoreSave_DoesNotWaitForTheHistory()
+    {
+        // Another connection holds the history locked, so recording waits out its busy timeout; the save
+        // still completes at once, and the row lands once the lock is gone.
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var docPath = Path.Combine(_root, "doc.json");
+        await store.SaveAsync(new SampleDoc { Name = "one" });
+        BackupStore.Flush();
+
+        using (var holder = new SqliteConnection($"Data Source={StoreFile};Pooling=False"))
+        {
+            holder.Open();
+            using (var lockIt = holder.CreateCommand())
+            {
+                lockIt.CommandText = "BEGIN EXCLUSIVE;";
+                lockIt.ExecuteNonQuery();
+            }
+
+            // Well inside the history's 1 s busy timeout, which a save inside the history's wait would exceed.
+            await store.SaveAsync(new SampleDoc { Name = "two" })
+                .WaitAsync(TimeSpan.FromMilliseconds(500), TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(File.ReadAllBytes(docPath), Assert.Single(RowsFor(docPath)).Content);
     }
 
     [Fact]

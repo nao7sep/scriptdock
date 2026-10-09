@@ -255,11 +255,33 @@ public sealed class FormatVersionTests : IDisposable
             INSERT INTO backups (path, content, content_sha256, byte_size, written_at_utc) VALUES ('/old.json', x'00', 'x', 1, '2026-07-08T00:00:00.000Z');
             """);
 
+        BackupStore.Session = "now";
         BackupStore.Record(PathOf("doc.json"), [1]);
         BackupStore.Close();
 
+        // Format 1's rows stay as earlier history, without a session.
         Assert.Equal(FormatVersions.Backups, UserVersion(BackupStore.StoreFile));
-        Assert.Equal(2L, Scalar(BackupStore.StoreFile, "SELECT COUNT(*) FROM backups"));
+        Assert.Equal(1L, Scalar(BackupStore.StoreFile, "SELECT COUNT(*) FROM backups WHERE path = '/old.json' AND session_id IS NULL"));
+        Assert.Equal(1L, Scalar(BackupStore.StoreFile, "SELECT COUNT(*) FROM backups WHERE session_id = 'now'"));
+    }
+
+    [Fact]
+    public void Backups_AtFormatOne_GainSessionsAndKeepTheirRows()
+    {
+        Execute(BackupStore.StoreFile, """
+            CREATE TABLE backups (id INTEGER PRIMARY KEY, path TEXT NOT NULL, content BLOB NOT NULL, content_sha256 TEXT NOT NULL, byte_size INTEGER NOT NULL, written_at_utc TEXT NOT NULL);
+            CREATE INDEX idx_backups_path_id ON backups (path, id);
+            INSERT INTO backups (path, content, content_sha256, byte_size, written_at_utc) VALUES ('/a.json', x'01', 'a', 1, '2026-10-06T00:00:00.000Z');
+            INSERT INTO backups (path, content, content_sha256, byte_size, written_at_utc) VALUES ('/a.json', x'02', 'b', 1, '2026-10-07T00:00:00.000Z');
+            PRAGMA user_version = 1;
+            """);
+
+        BackupStore.Session = "now";
+        BackupStore.Record("/a.json", [3]);
+        BackupStore.Close();
+
+        Assert.Equal(FormatVersions.Backups, UserVersion(BackupStore.StoreFile));
+        Assert.Equal(3L, Scalar(BackupStore.StoreFile, "SELECT COUNT(*) FROM backups WHERE path = '/a.json'"));
     }
 
     [Fact]
@@ -278,10 +300,12 @@ public sealed class FormatVersionTests : IDisposable
     [Fact]
     public void Backups_CurrentVersion_RoundTrips()
     {
+        BackupStore.Session = "first";
         BackupStore.Record(PathOf("doc.json"), [1]);
         BackupStore.Close();
         Assert.Equal(FormatVersions.Backups, UserVersion(BackupStore.StoreFile));
 
+        BackupStore.Session = "second";
         BackupStore.Record(PathOf("doc.json"), [2]);
         BackupStore.Close();
 

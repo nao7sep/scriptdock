@@ -68,6 +68,8 @@ sealed class Program
         }
         Log.Start(records);
         App.Records = records;
+        // One session id for the launch, so its backup rows and run records match.
+        BackupStore.Session = records.Session;
         var clean = true;
         try
         {
@@ -95,11 +97,16 @@ sealed class Program
         }
         finally
         {
+            // An ordinary quit gives the backup history a short bound to record the last saves; when the
+            // system ends the session, the history was told to skip them and this returns at once.
+            BackupStore.Shutdown(BackupDrainBound);
             Log.Info("shutdown", new { clean });
             Log.Shutdown();
             records.Dispose();
         }
     }
+
+    private static readonly TimeSpan BackupDrainBound = TimeSpan.FromMilliseconds(500);
 
     // Avalonia configuration, don't remove; also used by visual designer.
     public static AppBuilder BuildAvaloniaApp()

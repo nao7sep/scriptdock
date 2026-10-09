@@ -14,6 +14,7 @@ using ScriptDock.Controls;
 using ScriptDock.Models;
 using ScriptDock.I18n;
 using ScriptDock.Services;
+using ScriptDock.Storage;
 using ScriptDock.ViewModels;
 
 namespace ScriptDock.Views;
@@ -413,6 +414,8 @@ public partial class MainWindow : Window
     // question; a settings change that did not land is logged.
     private async Task EndSessionAsync(MainWindowViewModel vm)
     {
+        // The backup history is best effort; the session ending does not wait for it.
+        BackupStore.Abandon();
         if (!await vm.SettingsSavedForQuitAsync())
             Log.Error("quit: the session ended with the settings change unsaved");
         await (_quitWork ??= RunQuitWorkAsync(vm));

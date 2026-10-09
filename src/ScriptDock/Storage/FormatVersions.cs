@@ -19,6 +19,7 @@ public static class FormatVersions
     /// <summary><c>records.sqlite3</c>.</summary>
     public const int Records = 1;
 
-    /// <summary><c>backups.sqlite3</c>.</summary>
-    public const int Backups = 1;
+    /// <summary><c>backups.sqlite3</c>. Format 2 added <c>session_id</c>, one row per file per session; format 1
+    /// kept a row for every changed save.</summary>
+    public const int Backups = 2;
 }
