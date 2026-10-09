@@ -23,7 +23,7 @@ ScriptDock supervises the shell process tree it launches while that tree remains
 
 ## Run from source
 
-Run `scripts/run-dev.command` (double-click in Finder, or run it from a shell) — the fastest way to try it. ScriptDock uses built-in settings until you change them; its config file is created only when you save a changed setting. Add your project root directory (e.g. `~/code`) and adjust extensions and ignore patterns from the Settings dialog, then Rescan.
+Run `scripts/run-dev.command` (double-click in Finder, or run it from a shell) — the fastest way to try it. On first launch it asks for the folder that holds your scripts (e.g. `~/code`) and scans it; add more root directories or adjust extensions and ignore patterns from the Settings dialog. ScriptDock uses built-in settings until you change them; its config file is created only when you save a changed setting.
 
 For the production-faithful build — an ad-hoc-signed `ScriptDock.app` you can keep in your Dock — run `scripts/rebuild.command`.
 
