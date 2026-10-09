@@ -149,12 +149,23 @@ public sealed class FormatVersionTests : IDisposable
         Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
     }
 
-    [Fact]
-    public void KnownPaths_NullMembers_AreDropped()
+    [Theory]
+    [InlineData("""["/a.command",null]""")]
+    [InlineData("""["/a.command",1]""")]
+    public void KnownPaths_WithAMemberThatIsNotAPath_AreNoBaseline(string paths)
     {
-        File.WriteAllText(PathOf(AppPaths.KnownPathsFileName), """{"formatVersion":1,"paths":["/a.command",null,"/b.command"]}""");
+        File.WriteAllText(PathOf(AppPaths.KnownPathsFileName), $$"""{"formatVersion":1,"paths":{{paths}}}""");
 
-        Assert.Equal(["/a.command", "/b.command"], AppStores.KnownPaths().Load().Paths);
+        Assert.Null(AppStores.KnownPaths().Load().Paths);
+        Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
+    }
+
+    [Fact]
+    public void KnownPaths_WithAnEmptyList_AreABaseline()
+    {
+        File.WriteAllText(PathOf(AppPaths.KnownPathsFileName), """{"formatVersion":1,"paths":[]}""");
+
+        Assert.Equal([], AppStores.KnownPaths().Load().Paths!);
     }
 
     [Fact]

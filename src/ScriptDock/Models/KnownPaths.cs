@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using ScriptDock.Storage;
 
 namespace ScriptDock.Models;
@@ -15,5 +16,12 @@ public sealed class KnownPaths : IJsonNormalizable
     /// an empty one, so "no list" and "an empty list" stay apart.</summary>
     public List<string>? Paths { get; set; }
 
-    public void NormalizeAfterLoad() => Paths = Paths?.OfType<string>().ToList() ?? [];
+    /// <summary>A list with a missing or non-string member is not a baseline to flag against: the file is
+    /// unreadable, so it is rebuilt and the next scan flags nothing. A missing list reads as empty.</summary>
+    public void NormalizeAfterLoad()
+    {
+        if (Paths?.Any(path => path is null) == true)
+            throw new JsonException("known-paths.json holds a member that is not a path.");
+        Paths ??= [];
+    }
 }

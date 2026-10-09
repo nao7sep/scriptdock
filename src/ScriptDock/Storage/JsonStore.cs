@@ -265,8 +265,16 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         }
         finally
         {
-            if (File.Exists(tempPath))
-                File.Delete(tempPath);
+            // A temp file left behind is harmless; failing to remove it must not hide the write's own failure.
+            try
+            {
+                if (File.Exists(tempPath))
+                    File.Delete(tempPath);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("store: could not remove a temp file", ex, new { label = _label, path = tempPath });
+            }
         }
 
         // After the rename: the file is exactly where it belongs, so record the bytes we just wrote.
