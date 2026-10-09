@@ -275,20 +275,32 @@ public sealed class JsonStoreTests : IDisposable
     }
 
     [Fact]
-    public void Load_TakesTheMarkerOutBeforeTheDocumentIsRead()
+    public async Task Load_TakesTheMarkerOutBeforeTheDocumentIsRead()
     {
         // A dictionary-shaped document, like config.json's sets, never sees the store's own key.
         var store = new JsonStore<Dictionary<string, int>>("doc.json", "doc", formatVersion: 1);
-        store.Save(new Dictionary<string, int> { ["a"] = 1 });
+        await store.SaveAsync(new Dictionary<string, int> { ["a"] = 1 });
 
         Assert.Equal(["a"], store.Load().Keys);
     }
 
+    [Fact]
+    public void Load_ObjectWithoutTheMarker_ReadsAsFormatOne()
+    {
+        // Builds before the markers, v0.1.0 included, wrote the same shapes without one.
+        const string json = """{"name":"x"}""";
+        File.WriteAllText(PathOf("doc.json"), json);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+
+        Assert.Equal("x", store.Load().Name);
+        Assert.Equal(json, File.ReadAllText(PathOf("doc.json")));
+        Assert.Empty(Directory.EnumerateFiles(_root, "doc-*.invalid"));
+    }
+
     [Theory]
-    [InlineData("""{"name":"x"}""")]
     [InlineData("null")]
     [InlineData("[]")]
-    public void Load_DocumentWithoutTheMarker_IsUnreadable(string json)
+    public void Load_DocumentThatIsNotAnObject_IsUnreadable(string json)
     {
         File.WriteAllText(PathOf("doc.json"), json);
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);

@@ -21,8 +21,10 @@ namespace ScriptDock.Storage;
 /// <remarks>
 /// The store owns its format version (store-recovery-conventions): every write puts it first in the
 /// document as <c>formatVersion</c>, and a read takes it out before the document is deserialized, so
-/// the stored type never sees it. A file without it is unreadable. A file recording a newer version
-/// than the store's is refused with <see cref="NewerFormatVersionException"/> and left exactly in place.
+/// the stored type never sees it. A file without it was written by a build before 2026-10-05 (v0.1.0
+/// included) in a shape format 1 still reads, so it reads as format 1. A file recording a newer version
+/// than the store's is refused with <see cref="NewerFormatVersionException"/> and left exactly in place,
+/// except in a rebuildable store, whose disposable contents are rebuilt like any unreadable file.
 /// </remarks>
 /// <remarks>
 /// The app's single managed-text atomic-write choke point, and so the one place the
@@ -65,7 +67,7 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
     /// <param name="label">Human-readable noun used in log messages, e.g. <c>"config"</c>.</param>
     /// <param name="formatVersion">The format version this build writes and reads up to, from <see cref="FormatVersions"/>.</param>
     /// <param name="recordBackups">False for volatile state; durable text is recorded by default.</param>
-    /// <param name="rebuildable">True for a store the app rebuilds on its own, whose unreadable file is not preserved.</param>
+    /// <param name="rebuildable">True for a store the app rebuilds on its own, whose unreadable or newer-version file is not preserved.</param>
     public JsonStore(string fileName, string label, int formatVersion, bool recordBackups = true, bool rebuildable = false)
     {
         _filePath = Path.Combine(StorageRoot.Directory, fileName);
@@ -170,7 +172,7 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
             Log.Info("store: loaded", new { label = _label, path = filePath });
             return true;
         }
-        catch (NewerFormatVersionException ex)
+        catch (NewerFormatVersionException ex) when (!_rebuildable)
         {
             // Intact data a newer build wrote: never quarantined, rebuilt or written to.
             Log.Warn("store: written by a newer version, left in place", ex,
@@ -179,6 +181,7 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         }
         catch (Exception ex) when (_rebuildable)
         {
+            // Disposable contents, a newer version's included: defaults now, replaced on the next save.
             Log.Warn("store: file unreadable, rebuilding", ex, new { label = _label, path = filePath });
             return false;
         }
@@ -190,11 +193,16 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         }
     }
 
-    // A marker that is missing or not a positive integer makes the file unreadable.
-    private static int FormatVersionOf(JsonObject document) =>
-        document[FormatVersionKey] is JsonValue marker && marker.TryGetValue<int>(out var version) && version >= 1
+    // A missing marker is a pre-marker file, format 1; one that is present but not a positive integer
+    // makes the file unreadable.
+    private static int FormatVersionOf(JsonObject document)
+    {
+        if (!document.TryGetPropertyValue(FormatVersionKey, out var marker))
+            return 1;
+        return marker is JsonValue value && value.TryGetValue<int>(out var version) && version >= 1
             ? version
-            : throw new JsonException($"{FormatVersionKey} is missing or not a positive integer.");
+            : throw new JsonException($"{FormatVersionKey} is not a positive integer.");
+    }
 
     // Moves the unreadable file aside to its timestamped same-directory .invalid name, preserving
     // the bytes, and logs one warning naming both paths. The move either lands or its failure

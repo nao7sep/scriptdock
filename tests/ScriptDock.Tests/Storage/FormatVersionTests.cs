@@ -12,9 +12,9 @@ using Xunit;
 namespace ScriptDock.Tests.Storage;
 
 /// <summary>
-/// Each store's format version (store-recovery-conventions): a store without its marker takes its
-/// unreadable branch, the current version round-trips, and a newer one is refused with the file left
-/// byte-identical.
+/// Each store's format version (store-recovery-conventions): a store an earlier build wrote without its
+/// marker reads as format 1, the current version round-trips, and a newer one is refused with the file left
+/// byte-identical, except in the disposable stores, which rebuild instead.
 /// </summary>
 [Collection(StorageRootEnvironment.CollectionName)]
 public sealed class FormatVersionTests : IDisposable
@@ -44,15 +44,53 @@ public sealed class FormatVersionTests : IDisposable
 
     // config.json
 
-    [Fact]
-    public void Config_MissingMarker_IsQuarantined()
-    {
-        const string json = """{"hidden":["/a.command"]}""";
-        File.WriteAllText(PathOf(AppPaths.ConfigFileName), json);
+    // v0.1.0 stored every setting, the built-in seeds and two since-retired process settings included.
+    private const string V010Config = """
+        {
+          "uiFontFamily": "Inter",
+          "rootDirs": ["/Users/me/scripts"],
+          "extensions": [".command"],
+          "ignorePatterns": ["/node_modules/", "/\\.venv/", "/venv/", "/__pycache__/", "/bin/", "/obj/", "/target/", "/\\.git/"],
+          "hidden": ["/Users/me/scripts/old.command"],
+          "killProcessesOnClose": false,
+          "recaptureProcessesOnLaunch": true
+        }
+        """;
 
-        Assert.Empty(new ConfigStore().Load().Hidden);
-        Assert.Equal(json, File.ReadAllText(Assert.Single(Directory.GetFiles(_root, "config-*.invalid"))));
-        Assert.Single(QuarantineJournal.Drain());
+    [Fact]
+    public async Task Config_FromV010WithoutMarker_KeepsItsSettings()
+    {
+        // v0.1.0 seeded the platform's own launcher extension.
+        File.WriteAllText(PathOf(AppPaths.ConfigFileName),
+            V010Config.Replace("\".command\"", $"\"{ConfigDefaults.DefaultExtension}\""));
+        var store = new ConfigStore();
+
+        var config = store.Load();
+        Assert.Equal(["/Users/me/scripts"], config.RootDirs);
+        Assert.Equal(["/Users/me/scripts/old.command"], config.Hidden);
+        Assert.Equal([ConfigDefaults.DefaultExtension], config.Extensions);
+        Assert.Equal(ConfigDefaults.BuiltInIgnorePatterns, config.IgnorePatterns);
+        Assert.Empty(store.KeptKeys);
+        Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
+        Assert.Empty(QuarantineJournal.Drain());
+
+        // The seeds equal today's built-ins and the retired settings are dropped, so only real choices stay.
+        await store.SaveAsync(config);
+        using var saved = JsonDocument.Parse(File.ReadAllText(PathOf(AppPaths.ConfigFileName)));
+        Assert.Equal(["formatVersion", "uiFontFamily", "rootDirs", "hidden"],
+            saved.RootElement.EnumerateObject().Select(property => property.Name));
+    }
+
+    [Fact]
+    public void Config_FromOctoberWithoutMarker_KeepsItsSettings()
+    {
+        File.WriteAllText(PathOf(AppPaths.ConfigFileName), """{"theme":"dark","hidden":["/a.command"]}""");
+
+        var config = new ConfigStore().Load();
+
+        Assert.Equal(ThemePreference.Dark, config.Theme);
+        Assert.Equal(["/a.command"], config.Hidden);
+        Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
     }
 
     [Fact]
@@ -74,57 +112,97 @@ public sealed class FormatVersionTests : IDisposable
     // state.json
 
     [Fact]
-    public void State_MissingMarker_IsRebuilt()
+    public void State_WithoutMarker_ReadsAsFormatOne()
     {
         File.WriteAllText(PathOf(AppPaths.StateFileName), """{"windowWidth":900}""");
 
-        Assert.Null(AppStores.State().Load().WindowWidth);
+        Assert.Equal(900, AppStores.State().Load().WindowWidth);
         Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
     }
 
     [Fact]
-    public void State_CurrentVersion_RoundTrips()
+    public async Task State_CurrentVersion_RoundTrips()
     {
         var store = AppStores.State();
-        store.Save(new AppState { WindowWidth = 900 });
+        await store.SaveAsync(new AppState { WindowWidth = 900 });
 
         Assert.Equal(FormatVersions.State, FirstKeyVersion(AppPaths.StateFileName));
         Assert.Equal(900, store.Load().WindowWidth);
     }
 
     [Fact]
-    public void State_NewerVersion_IsRefusedAndLeftByteIdentical() =>
-        AssertJsonRefused(AppPaths.StateFileName, FormatVersions.State, () => AppStores.State().Load());
+    public async Task State_NewerVersion_IsRebuilt()
+    {
+        AssertJsonRebuilt(AppPaths.StateFileName, FormatVersions.State, () => AppStores.State().Load().WindowWidth);
+        await AppStores.State().SaveAsync(new AppState { WindowWidth = 900 });
+        Assert.Equal(FormatVersions.State, FirstKeyVersion(AppPaths.StateFileName));
+    }
 
     // known-paths.json
 
     [Fact]
-    public void KnownPaths_MissingMarker_IsRebuilt()
+    public void KnownPaths_WithoutMarker_ReadsAsFormatOne()
     {
         File.WriteAllText(PathOf(AppPaths.KnownPathsFileName), """{"paths":["/a.command"]}""");
 
-        Assert.Null(AppStores.KnownPaths().Load().Paths);
+        Assert.Equal(["/a.command"], AppStores.KnownPaths().Load().Paths);
         Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
     }
 
     [Fact]
-    public void KnownPaths_CurrentVersion_RoundTrips()
+    public void KnownPaths_NullMembers_AreDropped()
+    {
+        File.WriteAllText(PathOf(AppPaths.KnownPathsFileName), """{"formatVersion":1,"paths":["/a.command",null,"/b.command"]}""");
+
+        Assert.Equal(["/a.command", "/b.command"], AppStores.KnownPaths().Load().Paths);
+    }
+
+    [Fact]
+    public async Task KnownPaths_CurrentVersion_RoundTrips()
     {
         var store = AppStores.KnownPaths();
-        store.Save(new KnownPaths { Paths = ["/a.command"] });
+        await store.SaveAsync(new KnownPaths { Paths = ["/a.command"] });
 
         Assert.Equal(FormatVersions.KnownPaths, FirstKeyVersion(AppPaths.KnownPathsFileName));
         Assert.Equal(["/a.command"], store.Load().Paths);
     }
 
     [Fact]
-    public void KnownPaths_NewerVersion_IsRefusedAndLeftByteIdentical() =>
-        AssertJsonRefused(AppPaths.KnownPathsFileName, FormatVersions.KnownPaths, () => AppStores.KnownPaths().Load());
+    public void KnownPaths_NewerVersion_IsRebuilt() =>
+        AssertJsonRebuilt(AppPaths.KnownPathsFileName, FormatVersions.KnownPaths, () => AppStores.KnownPaths().Load().Paths);
 
     // records.sqlite3
 
+    // The schema builds from 2026-10-02 wrote without a version: every table but run_ends.
+    private const string October2Records = """
+        CREATE TABLE logs (id INTEGER PRIMARY KEY, session TEXT NOT NULL, time TEXT NOT NULL, level TEXT NOT NULL, message TEXT NOT NULL, line TEXT NOT NULL);
+        CREATE INDEX idx_logs_session ON logs (session);
+        CREATE TABLE runs (id INTEGER PRIMARY KEY, session TEXT NOT NULL, run INTEGER NOT NULL, time TEXT NOT NULL, script TEXT NOT NULL, pid INTEGER, os_started_at TEXT, output_path TEXT, UNIQUE (session, run));
+        CREATE INDEX idx_runs_output_path ON runs (output_path);
+        CREATE TABLE run_outputs (id INTEGER PRIMARY KEY, session TEXT NOT NULL, run INTEGER NOT NULL, time TEXT NOT NULL, output BLOB NOT NULL, UNIQUE (session, run));
+        CREATE TABLE dismissals (id INTEGER PRIMARY KEY, session TEXT NOT NULL, time TEXT NOT NULL, script TEXT NOT NULL);
+        CREATE TABLE scan_reports (id INTEGER PRIMARY KEY, session TEXT NOT NULL, time TEXT NOT NULL, report TEXT NOT NULL);
+        INSERT INTO runs (session, run, time, script) VALUES ('2026-10-03T00:00:00.000Z', 1, '2026-10-03T00:00:00.000Z', '/old.command');
+        """;
+
     [Fact]
-    public async Task Records_MissingMarker_IsUnreadable()
+    public async Task Records_FromOctoberWithoutVersion_OpenAndKeepTheirRuns()
+    {
+        var file = PathOf(RecordStore.FileName);
+        Execute(file, October2Records);
+
+        using (var records = new RecordStore(_root, SessionStart))
+        {
+            Assert.False(records.DatabaseUnavailable);
+            Assert.Equal("/old.command", Assert.Single(await records.ReadRecentAsync()).Path);
+            await records.AddRunEndAsync(new RunEnd("2026-10-03T00:00:00.000Z", 1, SessionStart, "exited", 0));
+        }
+
+        Assert.Equal(FormatVersions.Records, UserVersion(file));
+    }
+
+    [Fact]
+    public async Task Records_WithoutVersionAndWithAnUnknownTable_AreUnreadableAndLeftAlone()
     {
         var file = PathOf(RecordStore.FileName);
         CreateDatabase(file, userVersion: 0);
@@ -132,6 +210,7 @@ public sealed class FormatVersionTests : IDisposable
 
         using (var records = new RecordStore(_root, SessionStart))
         {
+            Assert.True(records.DatabaseUnavailable);
             await Assert.ThrowsAnyAsync<Exception>(() => records.AddDismissalAsync("/a.command"));
             Assert.True(File.Exists(records.FallbackPath));
         }
@@ -168,7 +247,23 @@ public sealed class FormatVersionTests : IDisposable
     // backups.sqlite3, a side store: a newer one disables recording for the session instead of stopping the app.
 
     [Fact]
-    public void Backups_MissingMarker_IsUnreadable()
+    public void Backups_FromV010WithoutVersion_KeepTheirHistoryAndRecord()
+    {
+        Execute(BackupStore.StoreFile, """
+            CREATE TABLE backups (id INTEGER PRIMARY KEY, path TEXT NOT NULL, content BLOB NOT NULL, content_sha256 TEXT NOT NULL, byte_size INTEGER NOT NULL, written_at_utc TEXT NOT NULL);
+            CREATE INDEX idx_backups_path_id ON backups (path, id);
+            INSERT INTO backups (path, content, content_sha256, byte_size, written_at_utc) VALUES ('/old.json', x'00', 'x', 1, '2026-07-08T00:00:00.000Z');
+            """);
+
+        BackupStore.Record(PathOf("doc.json"), [1]);
+        BackupStore.Close();
+
+        Assert.Equal(FormatVersions.Backups, UserVersion(BackupStore.StoreFile));
+        Assert.Equal(2L, Scalar(BackupStore.StoreFile, "SELECT COUNT(*) FROM backups"));
+    }
+
+    [Fact]
+    public void Backups_WithoutVersionAndWithAnUnknownTable_AreUnreadableAndLeftAlone()
     {
         CreateDatabase(BackupStore.StoreFile, userVersion: 0);
         var before = File.ReadAllBytes(BackupStore.StoreFile);
@@ -221,6 +316,21 @@ public sealed class FormatVersionTests : IDisposable
         Assert.Empty(QuarantineJournal.Drain());
     }
 
+    // A disposable store a newer build wrote is neither refused, quarantined nor reported: it reads as
+    // defaults, and the file stays as it is until the next save replaces it.
+    private void AssertJsonRebuilt(string fileName, int current, Func<object?> loadValue)
+    {
+        var file = PathOf(fileName);
+        File.WriteAllText(file, $$"""{"formatVersion":{{current + 1}},"future":true}""");
+        var before = File.ReadAllBytes(file);
+
+        Assert.Null(loadValue());
+
+        Assert.Equal(before, File.ReadAllBytes(file));
+        Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
+        Assert.Empty(QuarantineJournal.Drain());
+    }
+
     // The marker is written first, so it is the first thing a reader sees.
     private int FirstKeyVersion(string fileName)
     {
@@ -236,6 +346,15 @@ public sealed class FormatVersionTests : IDisposable
         connection.Open();
         using var command = connection.CreateCommand();
         command.CommandText = $"CREATE TABLE earlier (id INTEGER PRIMARY KEY); PRAGMA user_version = {userVersion};";
+        command.ExecuteNonQuery();
+    }
+
+    private static void Execute(string file, string sql)
+    {
+        using var connection = new SqliteConnection($"Data Source={file};Pooling=False");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
         command.ExecuteNonQuery();
     }
 

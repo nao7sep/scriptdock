@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using Microsoft.Data.Sqlite;
@@ -52,6 +53,9 @@ public static class BackupStore
         CREATE INDEX IF NOT EXISTS idx_backups_path_id ON backups (path, id);
         """;
 
+    // The table Schema creates; v0.1.0 wrote the same one without a version.
+    private static readonly HashSet<string> Tables = ["backups"];
+
     private static readonly object Gate = new();
 
     // A null connection after Initialize means recording is disabled for this session because the store
@@ -104,7 +108,7 @@ public static class BackupStore
             }
 
             // Before anything writes, the journal mode included.
-            SqliteFormatVersion.Check(connection, file, FormatVersions.Backups);
+            SqliteFormatVersion.Check(connection, file, FormatVersions.Backups, Tables);
 
             using (var pragmas = connection.CreateCommand())
             {
