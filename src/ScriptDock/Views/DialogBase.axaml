@@ -19,13 +19,11 @@
                     HorizontalAlignment="Right"
                     Margin="24,20,24,20"/>
 
-        <!-- The line that opens the footer band, and the bottom edge of the scrolling body. No
-             fainter than the app's own control borders (FieldBorderBrush, its strongest border, used
-             by its fields) in either theme, per the modal-dialog conventions. -->
+        <!-- The footer bounds the scrolling body with the same quiet band edge as the main window. -->
         <Border DockPanel.Dock="Bottom"
                 x:Name="FooterSeparator"
                 Height="1"
-                Background="{DynamicResource FieldBorderBrush}"/>
+                Background="{DynamicResource BorderBrush}"/>
 
         <!-- The sole scroll region. The footer is docked outside it, so it stays reachable at any
              height the dialog is bounded or dragged to. -->

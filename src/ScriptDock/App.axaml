@@ -14,9 +14,9 @@
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="AppBackgroundBrush" Color="#EEF4F6"/>
                     <SolidColorBrush x:Key="SurfaceBrush" Color="#FAFCFD"/>
-                    <SolidColorBrush x:Key="BorderBrush" Color="#CFDDE2"/>
-                    <!-- A text field is identified by its outline alone, so it holds 3:1 against its fill and surroundings. -->
-                    <SolidColorBrush x:Key="FieldBorderBrush" Color="#748A92"/>
+                    <SolidColorBrush x:Key="BorderBrush" Color="#C0CFD4"/>
+                    <!-- Resting field edges hold 2.0–2.5 against the well, card and window surfaces. -->
+                    <SolidColorBrush x:Key="FieldBorderBrush" Color="#9EACB2"/>
                     <SolidColorBrush x:Key="TextPrimaryBrush" Color="#0F2329"/>
                     <SolidColorBrush x:Key="TextSecondaryBrush" Color="#4C636B"/>
                     <!-- Electric console: the cyan action. Dark uses bright cyan under dark ink; light a deeper cyan under white, which also marks focus on a pale surface. -->
@@ -77,9 +77,9 @@
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0F181D"/>
                     <SolidColorBrush x:Key="SurfaceBrush" Color="#16252B"/>
-                    <SolidColorBrush x:Key="BorderBrush" Color="#2B414A"/>
-                    <!-- A text field is identified by its outline alone, so it holds 3:1 against its fill and surroundings. -->
-                    <SolidColorBrush x:Key="FieldBorderBrush" Color="#65808A"/>
+                    <SolidColorBrush x:Key="BorderBrush" Color="#293E46"/>
+                    <!-- Resting field edges hold 2.0–2.5 against the well, card and window surfaces. -->
+                    <SolidColorBrush x:Key="FieldBorderBrush" Color="#3D5860"/>
                     <SolidColorBrush x:Key="TextPrimaryBrush" Color="#E8F2F4"/>
                     <SolidColorBrush x:Key="TextSecondaryBrush" Color="#93A9B0"/>
                     <!-- Electric console: the cyan action. Dark uses bright cyan under dark ink; light a deeper cyan under white, which also marks focus on a pale surface. -->
@@ -492,7 +492,7 @@
 
         <!-- One-line fields: every kind takes one height, edge, corner and fill (interface-styling
              conventions), so a select beside a text box, or a button beside either, lines up. A text
-             field's resting outline is its only boundary, so it takes the 3:1 field border; it firms
+             field's resting outline takes the control-edge strength; it firms
              under the pointer and turns accent with focus, on the same recessed fill throughout. -->
         <Style Selector="TextBox">
             <Setter Property="MinHeight" Value="{StaticResource ControlHeight}"/>

@@ -7,15 +7,18 @@ using System.Text.Json;
 using System.Xml.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.LogicalTree;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using ScriptDock.Models;
 using ScriptDock.ViewModels;
 using ScriptDock.Views;
 using Xunit;
+using SkiaSharp;
 
 namespace ScriptDock.Tests;
 
@@ -111,11 +114,11 @@ public sealed class ThemeResourcesTests
         // The Recent state pill's label, in the window background colour, on each pill fill.
         foreach (var pill in new[] { "RunningBrush", "DangerTextBrush", "TextSecondaryBrush" })
             Check("AppBackgroundBrush", pill, 4.5);
-        // Marks: a field's outline, the accent, the scroll-bar thumb, and the tile dots.
+        // Marks: the accent, the scroll-bar thumb, and the tile dots. Edges have their own range.
         foreach (var surface in new[] { "AppBackgroundBrush", "SurfaceBrush", "ContentWellBrush" })
             foreach (var mark in new[]
                      {
-                         "FieldBorderBrush", "AccentBrush",
+                         "AccentBrush",
                          // Every scroll region here floats its bar, which is the brush that one reads.
                          "ScrollBarPanningThumbBackground",
                      })
@@ -127,26 +130,67 @@ public sealed class ThemeResourcesTests
         Assert.True(failures.Count == 0, $"{theme}: {string.Join("; ", failures)}");
     }
 
-    // The dialog shell's header/footer line (DialogBase's FooterSeparator) must read at least as
-    // clearly against the surface as the app's own control borders — the stronger of the two,
-    // FieldBorderBrush, since fields' outline reads more clearly than the buttons' (modal-dialog
-    // conventions).
     [Theory]
     [InlineData("Light")]
     [InlineData("Dark")]
-    public void TheDialogSeparatorIsAtLeastAsVisibleAsAFieldBorder(string theme)
+    public void RestingLinesKeepTheirHierarchyOnEveryOrdinarySurface(string theme)
     {
         var b = ThemeBrushes(theme);
         var separatorKey = DialogBaseXaml().Descendants()
             .Single(element => element.Name.LocalName == "Border" && (string?)element.Attribute(X + "Name") == "FooterSeparator")
             .Attribute("Background")!.Value
-            .Trim('{', '}').Replace("DynamicResource ", "").Replace("StaticResource ", "");
+            .Trim('{', '}').Replace("DynamicResource ", "");
+        foreach (var surface in new[] { "AppBackgroundBrush", "SurfaceBrush", "ContentWellBrush" })
+        {
+            Assert.InRange(Contrast(b["FieldBorderBrush"], b[surface]), 2.0, 2.5);
+            Assert.InRange(Contrast(b["BorderBrush"], b[surface]), 1.35, 1.70);
+        }
+        Assert.InRange(Contrast(b[separatorKey], b["AppBackgroundBrush"]), 1.35, 1.70);
+    }
 
-        var fieldContrast = Contrast(b["FieldBorderBrush"], b["AppBackgroundBrush"]);
-        var separatorContrast = Contrast(b[separatorKey], b["AppBackgroundBrush"]);
-        Assert.True(
-            separatorContrast >= fieldContrast - 0.01,
-            $"{theme}: dialog separator ({separatorKey}) contrast {separatorContrast:F2} is fainter than the field border's {fieldContrast:F2}");
+    [AvaloniaTheory]
+    [InlineData(ThemePreference.Light)]
+    [InlineData(ThemePreference.Dark)]
+    public void SettingsPaintsQuieterBandsThanRestingFields(ThemePreference theme)
+    {
+        var dialog = new SettingsDialog(new SettingsDialogViewModel(new AppConfig()), _ => System.Threading.Tasks.Task.FromResult(true));
+        try
+        {
+            AppTheme.Apply(theme);
+            dialog.Show();
+            Dispatcher.UIThread.RunJobs();
+            // Take focus off the fields so this measures resting lines, not the accent focus state.
+            dialog.GetLogicalDescendants().OfType<Button>().First(button => button.IsEnabled).Focus();
+            Dispatcher.UIThread.RunJobs();
+            using var frame = dialog.CaptureRenderedFrame();
+            Assert.NotNull(frame);
+            using var png = new MemoryStream();
+            frame.Save(png, PngBitmapEncoderOptions.Default);
+            png.Position = 0;
+            using var pixels = SKBitmap.Decode(png);
+            var field = dialog.GetLogicalDescendants().OfType<TextBox>().First();
+            var separator = dialog.FindControl<Border>("FooterSeparator")!;
+            var fieldPoint = field.TranslatePoint(new Point(field.Bounds.Width / 2, 0), dialog)!.Value;
+            var bandPoint = separator.TranslatePoint(new Point(10, 0), dialog)!.Value;
+            Color Pixel(Point p)
+            {
+                var c = pixels.GetPixel((int)p.X, (int)p.Y);
+                return Color.FromArgb(c.Alpha, c.Red, c.Green, c.Blue);
+            }
+            var fieldEdge = Pixel(fieldPoint);
+            var bandEdge = Pixel(bandPoint);
+            Assert.InRange(Contrast(fieldEdge, Pixel(fieldPoint + new Vector(0, -2))), 2.0, 2.5);
+            Assert.InRange(Contrast(fieldEdge, Pixel(fieldPoint + new Vector(0, 2))), 2.0, 2.5);
+            Assert.InRange(Contrast(bandEdge, Pixel(bandPoint + new Vector(0, -2))), 1.35, 1.70);
+            var directory = Path.Combine(RepoRoot(), "TestResults", "lines");
+            Directory.CreateDirectory(directory);
+            frame.Save(Path.Combine(directory, $"settings-{theme.ToString().ToLowerInvariant()}.png"), PngBitmapEncoderOptions.Default);
+        }
+        finally
+        {
+            dialog.Close();
+            Application.Current!.RequestedThemeVariant = ThemeVariant.Default;
+        }
     }
 
     [Theory]
