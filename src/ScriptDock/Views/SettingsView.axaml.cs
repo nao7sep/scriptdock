@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
@@ -44,11 +45,7 @@ public partial class SettingsView : UserControl
 
             // The view model resolves, de-duplicates, and validates each path; non-local
             // picks (a virtual location with no filesystem path) are skipped.
-            foreach (var folder in folders)
-            {
-                if (folder.TryGetLocalPath() is { } path)
-                    Vm.AddPickedRootDir(path);
-            }
+            await Vm.AddPickedRootDirsAsync(folders.Select(folder => folder.TryGetLocalPath()).OfType<string>());
         }
         catch (Exception ex)
         {

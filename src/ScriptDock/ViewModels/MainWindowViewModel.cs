@@ -314,14 +314,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             int version;
             IReadOnlyList<RecentRun> recent;
+            IReadOnlyDictionary<string, string> prepared;
             do
             {
                 version = _recentVersion;
                 recent = await _records.ReadRecentAsync();
-                await Task.Run(() => _keys.Refresh(recent.Select(run => run.Path)));
+                prepared = await Task.Run(() => _keys.Prepare(recent.Select(run => run.Path)));
             }
             while (version != _recentVersion);
 
+            _keys.Seed(prepared);
             _recent = recent.ToList();
             ResolveOperationalError("recent");
         }
@@ -501,7 +503,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public async Task<bool> AddFirstScanFolderAsync(string path)
     {
         var draft = CreateSettingsDraft();
-        draft.AddPickedRootDir(path);
+        await draft.AddPickedRootDirAsync(path);
         if (!await TryApplySettingsAsync(draft))
             return false;
         await ScanAsync(background: false);
@@ -526,9 +528,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         if (_quitting)
             return false;
-        var candidate = draft.ToConfig(); // Capture the submitted editable sets before waiting.
         try
         {
+            // A folder already returned by the picker is part of this submission, even if its
+            // physical identity is still resolving. The dialog's commit owns the pending additions.
+            await draft.WaitForPickedRootsAsync();
+            if (_quitting) return false;
+            var candidate = draft.ToConfig(); // Capture editable sets before waiting on earlier saves.
             await ChangeConfigAsync(async () =>
             {
                 candidate.Hidden = _config.Hidden.ToList();
@@ -633,13 +639,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
             // Everything that asks the filesystem runs here, off the interface thread: the scan, its
             // diff against the known paths and the path identities the window's lists read.
-            var (report, catalog, diff) = await Task.Run(() =>
+            var (report, catalog, diff, prepared) = await Task.Run(() =>
             {
                 var found = _scanner.Scan(roots, extensions, patterns, cts.Token);
-                _keys.Refresh(found.Found.Concat(otherPaths).Concat(known ?? []).Concat(previouslyShown).Concat(found.Inaccessible));
-                var paths = ScanCatalog.Paths(found, (known ?? []).Concat(previouslyShown), _keys.Key)
-                    .DistinctBy(_keys.Key, PathIdentity.Comparer).ToList();
-                return (found, paths, ScanDiff.Compute(paths, known));
+                var identities = _keys.Prepare(found.Found.Concat(otherPaths).Concat(known ?? []).Concat(previouslyShown).Concat(found.Inaccessible));
+                string Key(string path) => identities[path];
+                var paths = ScanCatalog.Paths(found, (known ?? []).Concat(previouslyShown), Key)
+                    .DistinctBy(Key, PathIdentity.Comparer).ToList();
+                return (found, paths, ScanDiff.Compute(paths, known, Key), identities);
             }, cts.Token);
             cts.Token.ThrowIfCancellationRequested(); // a newer scan superseded us between completion and here
             ScanReportLog.Write(_records, report);
@@ -652,11 +659,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             var shownNew = _newPaths.ToList();
             var shownRemoved = _removed;
             var flags = await Task.Run(() => background
-                ? ScanFlags.Background(diff, catalog, shownNew, shownRemoved)
-                : ScanFlags.Full(diff));
+                ? ScanFlags.Background(diff, catalog, shownNew, shownRemoved, path => prepared[path])
+                : ScanFlags.Full(diff, path => prepared[path]));
             cts.Token.ThrowIfCancellationRequested();
             flags.NewKeys.ExceptWith(flagsEnded);
 
+            _keys.Adopt(prepared);
             _lastFound = catalog;
             _newPaths = flags.NewKeys;
             _removed = flags.Removed;
@@ -748,7 +756,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         if (entry is null || _quitting)
             return;
-        var key = entry.Process?.ScriptKey ?? PathIdentity.Key(entry.Path);
+        var key = entry.Process?.ScriptKey ?? _keys.Key(entry.Path);
         if (!_scriptActions.Add(key))
             return;
 
@@ -917,7 +925,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             if (_quitting)
                 return;
             RebuildRecent();
-            if (Recent.Any(entry => PathIdentity.Same(entry.Path, path)))
+            if (Recent.Any(entry => _keys.Same(entry.Path, path)))
             {
                 SelectRecentPath(path);
                 ReportProcessActionError(path, "run", FailurePresentation.ScriptStart(ex));

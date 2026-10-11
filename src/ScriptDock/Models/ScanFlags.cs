@@ -13,26 +13,28 @@ namespace ScriptDock.Models;
 /// </summary>
 public sealed record ScanFlags(HashSet<string> NewKeys, IReadOnlyList<string> Removed)
 {
-    public static ScanFlags Full(ScanDiff diff) => new(Keys(diff.Added), diff.Removed);
+    public static ScanFlags Full(ScanDiff diff, Func<string, string>? key = null) => new(Keys(diff.Added, key ?? PathIdentity.Key), diff.Removed);
 
     public static ScanFlags Background(
-        ScanDiff diff, IEnumerable<string> found, IEnumerable<string> newKeys, IEnumerable<string> removed)
+        ScanDiff diff, IEnumerable<string> found, IEnumerable<string> newKeys, IEnumerable<string> removed,
+        Func<string, string>? key = null)
     {
-        var foundKeys = Keys(found);
-        var removedNow = Keys(diff.Removed);
+        key ??= PathIdentity.Key;
+        var foundKeys = Keys(found, key);
+        var removedNow = Keys(diff.Removed, key);
 
         var keptNew = newKeys.Where(foundKeys.Contains);
         var keptRemoved = removed.Where(path =>
         {
-            var key = PathIdentity.Key(path);
-            return !foundKeys.Contains(key) && !removedNow.Contains(key);
+            var identity = key(path);
+            return !foundKeys.Contains(identity) && !removedNow.Contains(identity);
         });
 
         return new ScanFlags(
-            new HashSet<string>(keptNew.Concat(diff.Added.Select(PathIdentity.Key)), PathIdentity.Comparer),
+            new HashSet<string>(keptNew.Concat(diff.Added.Select(key)), PathIdentity.Comparer),
             keptRemoved.Concat(diff.Removed).OrderBy(path => path, StringComparer.Ordinal).ToList());
     }
 
-    private static HashSet<string> Keys(IEnumerable<string> paths) =>
-        new(paths.Select(PathIdentity.Key), PathIdentity.Comparer);
+    private static HashSet<string> Keys(IEnumerable<string> paths, Func<string, string> key) =>
+        new(paths.Select(key), PathIdentity.Comparer);
 }

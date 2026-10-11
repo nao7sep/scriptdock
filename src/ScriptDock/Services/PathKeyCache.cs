@@ -14,15 +14,34 @@ namespace ScriptDock.Services;
 public sealed class PathKeyCache
 {
     private readonly ConcurrentDictionary<string, string> _keys = new(StringComparer.Ordinal);
+    private readonly Func<string, string> _resolve;
 
-    public string Key(string path) => _keys.GetOrAdd(path, PathIdentity.Key);
+    public PathKeyCache() : this(PathIdentity.Key) { }
+    internal PathKeyCache(Func<string, string> resolve) => _resolve = resolve;
+
+    public string Key(string path) => _keys.GetOrAdd(path, _resolve);
 
     public bool Same(string left, string right) => PathIdentity.Comparer.Equals(Key(left), Key(right));
 
-    /// <summary>Resolves <paramref name="paths"/> again. Call it off the interface thread.</summary>
-    public void Refresh(IEnumerable<string> paths)
+    // Preparing a superseded operation must not alter the live projection. Its caller adopts this
+    // snapshot only after checking currentness; decisions for that operation use the same prepared keys.
+    public IReadOnlyDictionary<string, string> Prepare(IEnumerable<string> paths)
     {
+        var prepared = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var path in paths)
-            _keys[path] = PathIdentity.Key(path);
+            if (!prepared.ContainsKey(path)) prepared[path] = _resolve(path);
+        return prepared;
+    }
+
+    public void Adopt(IReadOnlyDictionary<string, string> prepared)
+    {
+        foreach (var (path, key) in prepared) _keys[path] = key;
+    }
+
+    // Startup Recent only warms missing identities; a scan accepted while this read was pending
+    // already owns the current projection and its keys must survive the older preparation.
+    public void Seed(IReadOnlyDictionary<string, string> prepared)
+    {
+        foreach (var (path, key) in prepared) _keys.TryAdd(path, key);
     }
 }

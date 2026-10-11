@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using System.Threading;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using ScriptDock.Models;
@@ -35,8 +36,8 @@ public sealed class ScanSettlementTests : IAsyncLifetime
     public async ValueTask DisposeAsync()
     {
         _store.ReleaseAll();
-        await Task.WhenAll(_work).WaitAsync(Bound, TestContext.Current.CancellationToken);
-        if (_vm is not null) await _vm.ShutdownAsync();
+        try { await Task.WhenAll(_work); }
+        finally { if (_vm is not null) await _vm.ShutdownAsync(); }
         Directory.Delete(_root, true);
     }
 
@@ -50,6 +51,92 @@ public sealed class ScanSettlementTests : IAsyncLifetime
 
     private static ScriptFlag FlagOf(MainWindowViewModel vm, string name) =>
         vm.Scripts.Single(script => Path.GetFileName(script.Path) == name).Flag;
+
+    [AvaloniaFact]
+    public async Task OlderRecentPreparationCannotReplaceAnAcceptedScansIdentity()
+    {
+        var path = Path.Combine(_root, "script.command");
+        File.WriteAllText(path, "# fixture");
+        var records = new FakeRecordStore();
+        records.Runs.Add(new RunRecord("fixture", 1, DateTimeOffset.UtcNow, path, null, null, null));
+        var vm = Build(records: records);
+        var recentEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var followingScanEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var releaseRecent = new ManualResetEventSlim();
+        using var releaseScan = new ManualResetEventSlim();
+        var probes = 0;
+        var keys = new PathKeyCache(value =>
+        {
+            if (value != path) return value;
+            var probe = Interlocked.Increment(ref probes);
+            if (probe == 1)
+            {
+                recentEntered.TrySetResult(); releaseRecent.Wait(); return path + "-older-target";
+            }
+            if (probe == 3) { followingScanEntered.TrySetResult(); releaseScan.Wait(); }
+            return path + "-current-target";
+        });
+        typeof(MainWindowViewModel).GetField("_keys", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(vm, keys);
+        var startup = Track(vm.InitializeAsync());
+        Task? manual = null;
+        try
+        {
+            await recentEntered.Task.WaitAsync(Bound, TestContext.Current.CancellationToken);
+            manual = Track(vm.RescanCommand.ExecuteAsync(null));
+            (await _store.NextAsync()).Settled.SetResult();
+            await manual;
+            Assert.Equal(path + "-current-target", keys.Key(path));
+            releaseRecent.Set();
+            await followingScanEntered.Task.WaitAsync(Bound, TestContext.Current.CancellationToken);
+            Assert.Equal(path + "-current-target", keys.Key(path));
+        }
+        finally
+        {
+            releaseRecent.Set(); releaseScan.Set(); _store.ReleaseAll();
+            await startup;
+            if (manual is not null) await manual;
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task SupersededIdentityProbeCannotOverwriteTheAcceptedCatalogKeys()
+    {
+        var path = Path.Combine(_root, "script.command");
+        File.WriteAllText(path, "# fixture");
+        var vm = Build();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        var probes = 0;
+        var keys = new PathKeyCache(value =>
+        {
+            if (value != path) return value;
+            if (Interlocked.Increment(ref probes) == 1)
+            {
+                entered.TrySetResult();
+                release.Wait();
+                return path + "-superseded-target";
+            }
+            return path + "-current-target";
+        });
+        typeof(MainWindowViewModel).GetField("_keys", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(vm, keys);
+        var earlier = Track(vm.RescanCommand.ExecuteAsync(null));
+        Task? current = null;
+        try
+        {
+            await entered.Task.WaitAsync(Bound, TestContext.Current.CancellationToken);
+            current = Track(vm.RescanCommand.ExecuteAsync(null));
+            (await _store.NextAsync()).Settled.SetResult();
+            await current.WaitAsync(Bound, TestContext.Current.CancellationToken);
+            Assert.Equal(path + "-current-target", keys.Key(path));
+        }
+        finally
+        {
+            release.Set();
+            await earlier;
+            if (current is not null) await current;
+        }
+        Assert.Equal(path + "-current-target", keys.Key(path));
+    }
 
     [AvaloniaFact]
     public async Task InaccessibleSubtreeKeepsItsBaselineWhileObservedChangesStillApply()
@@ -117,10 +204,16 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         var path = Path.Combine(_root, "gone.command");
         _known.Paths = [path];
         var vm = Build();
+        var keys = new PathKeyCache(value =>
+        {
+            Assert.False(Dispatcher.UIThread.CheckAccess());
+            return PathIdentity.Key(value);
+        });
+        typeof(MainWindowViewModel).GetField("_keys", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(vm, keys);
         var scan = Track(vm.RescanCommand.ExecuteAsync(null));
         var held = await _store.NextAsync();
         Assert.Empty(vm.Scripts);
-        Assert.True(PreparedKeys(vm).ContainsKey(path));
+        Assert.False(PreparedKeys(vm).ContainsKey(path)); // Unaccepted preparation is still local.
         held.Settled.SetResult();
         await scan.WaitAsync(Bound, TestContext.Current.CancellationToken);
         Assert.Equal(ScriptFlag.Removed, FlagOf(vm, "gone.command"));
@@ -256,15 +349,21 @@ public sealed class ScanSettlementTests : IAsyncLifetime
     {
         private readonly Channel<Save> _submitted = Channel.CreateUnbounded<Save>();
         private readonly List<Save> _owned = [];
+        private bool _released;
         public KnownPaths Load() => new();
         public Task SaveAsync(KnownPaths value)
         {
             var save = new Save(value, new TaskCompletionSource());
             _owned.Add(save);
             _submitted.Writer.TryWrite(save);
+            if (_released) save.Settled.TrySetResult();
             return save.Settled.Task;
         }
         public Task<Save> NextAsync() => _submitted.Reader.ReadAsync().AsTask().WaitAsync(Bound, TestContext.Current.CancellationToken);
-        public void ReleaseAll() { foreach (var save in _owned) save.Settled.TrySetResult(); }
+        public void ReleaseAll()
+        {
+            _released = true;
+            foreach (var save in _owned) save.Settled.TrySetResult();
+        }
     }
 }

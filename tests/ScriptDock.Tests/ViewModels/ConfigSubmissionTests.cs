@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Headless.XUnit;
 using ScriptDock.Models;
@@ -43,14 +47,19 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
         try
         {
             foreach (var gate in _gates) gate.TrySetResult();
-            await Task.WhenAll(_work).WaitAsync(Bound, TestContext.Current.CancellationToken);
-            if (_vm is not null) await _vm.ShutdownAsync();
-            BackupStore.Close();
+            // A failed test or caller deadline does not settle a primary writer. Keep relocation
+            // until every owned task settles, and run every cleanup even when an earlier one faults.
+            try { await Task.WhenAll(_work); }
+            finally
+            {
+                try { if (_vm is not null) await _vm.ShutdownAsync(); }
+                finally { BackupStore.Close(); }
+            }
         }
         finally
         {
             Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, _previousHome);
-            Directory.Delete(_home, true);
+            if (Directory.Exists(_home)) Directory.Delete(_home, true);
         }
     }
 
@@ -64,6 +73,119 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
 
     private T Track<T>(T work) where T : Task { _work.Add(work); return work; }
     private Task Hide() => Track(_vm!.ToggleHiddenCommand.ExecuteAsync(new ScriptItem(Path.Combine(_home, "script.command"))));
+
+    [AvaloniaFact]
+    public async Task FailedBodyKeepsRelocationUntilTheActualPrimaryWriteSettles()
+    {
+        // The ambient home is also fixture-owned. A late write may never touch normal developer data.
+        var sentinel = Path.Combine(_home, "config.json");
+        const string bytes = "{\"formatVersion\":1,\"rootDirs\":[\"/owned-sentinel/\"]}";
+        File.WriteAllText(sentinel, bytes);
+        var inventory = Directory.GetFileSystemEntries(_home).Order().ToArray();
+        UnixFileMode? mode = null;
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(_home, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead);
+            mode = File.GetUnixFileMode(_home);
+        }
+        var nested = new ConfigSubmissionTests();
+        await nested.InitializeAsync();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var inner = typeof(HeldConfigStore).GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(nested._store)!;
+        var primary = typeof(ConfigStore).GetField("_store", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(inner)!;
+        typeof(JsonStore<Dictionary<string, JsonElement>>).GetField("_queueTail", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(primary, release.Task);
+        var write = nested.Hide();
+        _ = nested.Track(Task.FromException(new IOException("injected failed body")));
+        var cleanup = nested.DisposeAsync().AsTask();
+        try
+        {
+            // Cross the former five-second cleanup deadline while the production writer is held.
+            await Task.Delay(TimeSpan.FromSeconds(6), TestContext.Current.CancellationToken);
+            Assert.False(cleanup.IsCompleted);
+            Assert.Equal(nested._home, StorageRoot.Directory);
+        }
+        finally
+        {
+            release.TrySetResult();
+            try
+            {
+                await write;
+                try { await cleanup; }
+                catch (IOException) { /* the failed body is still reported, after actual settlement */ }
+            }
+            finally
+            {
+                // This regression's own cleanup must also be safe while demonstrating the old defect.
+                try { await nested._vm!.ShutdownAsync(); }
+                finally { BackupStore.Close(); }
+            }
+        }
+        Assert.Equal(_home, StorageRoot.Directory);
+        Assert.Equal(bytes, File.ReadAllText(sentinel));
+        Assert.Equal(inventory, Directory.GetFileSystemEntries(_home).Order());
+        if (mode is { } expected && !OperatingSystem.IsWindows()) Assert.Equal(expected, File.GetUnixFileMode(_home));
+    }
+
+    [AvaloniaFact]
+    public async Task SaveIncludesThePickedFolderWhoseIdentityIsStillResolving()
+    {
+        var draft = _vm!.CreateSettingsDraft();
+        draft.Theme = ThemePreference.Dark;
+        var path = Path.Combine(_home, "picked");
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var picked = Track(draft.AddPickedRootDirAsync(path, value =>
+        {
+            entered.Set(); release.Wait(); return value;
+        }));
+        Task<bool>? saved = null;
+        try
+        {
+            Assert.True(entered.Wait(Bound, TestContext.Current.CancellationToken));
+            saved = Track(_vm.TryApplySettingsAsync(draft));
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => { });
+            Assert.False(saved.IsCompleted);
+            Assert.Equal(0, _store.Submissions);
+        }
+        finally
+        {
+            release.Set();
+            await picked;
+            if (saved is not null) await saved;
+        }
+        Assert.True(await saved!);
+        Assert.Equal([path], new ConfigStore().Load().RootDirs);
+        Assert.Equal([path], _config.RootDirs);
+    }
+
+    [AvaloniaFact]
+    public async Task QuitDuringPickedFolderResolutionPreventsALateSettingsSubmission()
+    {
+        var draft = _vm!.CreateSettingsDraft();
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var pick = Track(draft.AddPickedRootDirAsync(Path.Combine(_home, "picked"), value =>
+        {
+            entered.Set(); release.Wait(); return value;
+        }));
+        Task<bool>? save = null;
+        try
+        {
+            Assert.True(entered.Wait(Bound, TestContext.Current.CancellationToken));
+            save = Track(_vm.TryApplySettingsAsync(draft));
+            Assert.False(save.IsCompleted);
+            _vm.BeginShutdown();
+        }
+        finally
+        {
+            release.Set();
+            await pick;
+            if (save is not null) await save;
+        }
+        Assert.False(await save!);
+        Assert.Equal(0, _store.Submissions);
+        Assert.Empty(_config.RootDirs);
+    }
 
     [AvaloniaFact]
     public async Task SettingsSaveKeepsTheHideWhoseSettlementItOverlaps()

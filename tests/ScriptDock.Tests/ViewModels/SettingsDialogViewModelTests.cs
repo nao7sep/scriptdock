@@ -1,5 +1,9 @@
 using System;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using ScriptDock.Models;
 using ScriptDock.ViewModels;
 using Xunit;
@@ -67,15 +71,42 @@ public sealed class SettingsDialogViewModelTests
     }
 
     [Fact]
-    public void AddPickedRootDir_PreservesLegalLeadingAndTrailingSpaces()
+    public async System.Threading.Tasks.Task AddPickedRootDir_PreservesLegalLeadingAndTrailingSpaces()
     {
         var vm = new SettingsDialogViewModel(Seed());
         var picked = Path.Combine(Path.GetTempPath(), " scriptdock-picked ");
 
-        Assert.True(vm.AddPickedRootDir(picked));
+        Assert.True(await vm.AddPickedRootDirAsync(picked));
         Assert.Contains(Path.GetFullPath(picked), vm.RootDirs);
         Assert.True(vm.IsDirty);
-        Assert.False(vm.AddPickedRootDir(picked));
+        Assert.False(await vm.AddPickedRootDirAsync(picked));
+    }
+
+    [AvaloniaFact]
+    public async Task HeldPickedIdentityKeepsTheUiAvailableAndRechecksAChangedDraft()
+    {
+        var vm = new SettingsDialogViewModel(new AppConfig());
+        var path = Path.Combine(Path.GetTempPath(), "scriptdock-picked-" + Guid.NewGuid().ToString("N"));
+        using var held = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var calls = 0;
+        var pick = vm.AddPickedRootDirAsync(path, value =>
+        {
+            Assert.False(Dispatcher.UIThread.CheckAccess());
+            if (Interlocked.Increment(ref calls) == 1) { held.Set(); release.Wait(); }
+            return value;
+        });
+        try
+        {
+            Assert.True(held.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+            Assert.False(pick.IsCompleted);
+            vm.RootDirs.Add(path); // UI work can settle while the physical identity probe is held.
+            vm.RootDirs.CollectionChanged += (_, _) => Assert.True(Dispatcher.UIThread.CheckAccess());
+        }
+        finally { release.Set(); await pick; }
+        Assert.False(await pick);
+        Assert.Single(vm.RootDirs);
+        Assert.True(calls >= 2);
     }
 
     [Fact]

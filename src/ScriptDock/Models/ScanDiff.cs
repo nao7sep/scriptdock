@@ -13,14 +13,15 @@ namespace ScriptDock.Models;
 /// </summary>
 public sealed record ScanDiff(IReadOnlyList<string> Added, IReadOnlyList<string> Removed)
 {
-    public static ScanDiff Compute(IEnumerable<string> found, IEnumerable<string>? known)
+    public static ScanDiff Compute(IEnumerable<string> found, IEnumerable<string>? known, Func<string, string>? key = null)
     {
         if (known is null)
             return new ScanDiff([], []);
 
-        var foundByKey = found.GroupBy(PathIdentity.Key, PathIdentity.Comparer)
+        key ??= PathIdentity.Key;
+        var foundByKey = found.GroupBy(key, PathIdentity.Comparer)
             .ToDictionary(group => group.Key, group => group.First(), PathIdentity.Comparer);
-        var knownByKey = known.GroupBy(PathIdentity.Key, PathIdentity.Comparer)
+        var knownByKey = known.GroupBy(key, PathIdentity.Comparer)
             .ToDictionary(group => group.Key, group => group.First(), PathIdentity.Comparer);
 
         var added = foundByKey.Where(pair => !knownByKey.ContainsKey(pair.Key))

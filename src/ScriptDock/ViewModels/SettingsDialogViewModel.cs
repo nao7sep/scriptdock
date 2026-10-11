@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ScriptDock.I18n;
 using ScriptDock.Models;
@@ -22,6 +23,7 @@ namespace ScriptDock.ViewModels;
 public sealed partial class SettingsDialogViewModel : ObservableObject
 {
     private readonly AppConfig _opened;
+    private readonly List<Task<bool>> _pickedRoots = [];
 
     public ObservableCollection<string> RootDirs { get; }
     public ObservableCollection<string> Extensions { get; }
@@ -141,17 +143,61 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     public void ResolveRootPickerFailure() => RootPickerResultMessage = null;
 
     /// <summary>Adds a path returned by the native picker without trimming legal filename bytes.</summary>
-    public bool AddPickedRootDir(string value)
+    public Task<bool> AddPickedRootDirAsync(string value) => AddPickedRootDirAsync(value, PathIdentity.Key);
+
+    public Task<bool> AddPickedRootDirsAsync(IEnumerable<string> values) => AddPickedRootDirsAsync(values, PathIdentity.Key);
+
+    internal Task<bool> AddPickedRootDirAsync(string value, Func<string, string> key) => AddPickedRootDirsAsync([value], key);
+
+    private Task<bool> AddPickedRootDirsAsync(IEnumerable<string> values, Func<string, string> key)
+    {
+        var work = AddPickedRootsCoreAsync(values.ToList(), key);
+        _pickedRoots.Add(work);
+        return SettleAsync();
+        async Task<bool> SettleAsync()
+        {
+            try { return await work; }
+            finally { _pickedRoots.Remove(work); }
+        }
+    }
+
+    internal async Task WaitForPickedRootsAsync()
+    {
+        while (_pickedRoots.Count > 0)
+        {
+            var pending = _pickedRoots.ToArray();
+            try { await Task.WhenAll(pending); }
+            finally { foreach (var work in pending) _pickedRoots.Remove(work); }
+        }
+    }
+
+    private async Task<bool> AddPickedRootsCoreAsync(IReadOnlyList<string> values, Func<string, string> key)
+    {
+        var added = false;
+        foreach (var value in values) added |= await AddPickedRootCoreAsync(value, key);
+        return added;
+    }
+
+    private async Task<bool> AddPickedRootCoreAsync(string value, Func<string, string> key)
     {
         if (value.Length == 0)
             return false;
 
         var resolved = ResolveRoot(value);
-        if (RootDirs.Any(root => PathIdentity.Same(root, resolved)))
-            return false;
-
-        RootDirs.Add(resolved);
-        return true;
+        while (true)
+        {
+            var roots = RootDirs.ToList();
+            var duplicate = await Task.Run(() =>
+            {
+                var pickedKey = key(resolved);
+                return roots.Any(root => PathIdentity.Comparer.Equals(key(root), pickedKey));
+            });
+            // A second picker result may arrive while identities resolve. Adopt only a current draft.
+            if (!roots.SequenceEqual(RootDirs, StringComparer.Ordinal)) continue;
+            if (duplicate) return false;
+            RootDirs.Add(resolved);
+            return true;
+        }
     }
 
     // Expand a leading ~ / ~/ and make the value absolute against the home directory (never the
