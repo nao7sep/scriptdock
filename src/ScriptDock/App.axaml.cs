@@ -83,6 +83,15 @@ public partial class App : Application
                 base.OnFrameworkInitializationCompleted();
                 return;
             }
+            catch (StoreReadFailedException ex)
+            {
+                desktop.MainWindow = NoticeDialog.CreateStartupFailure(
+                    I18n.Message.Of("startup.failedTitle"),
+                    FailurePresentation.StartupData(ex.FilePath));
+                RegisterOwnerActivation(desktop.MainWindow);
+                base.OnFrameworkInitializationCompleted();
+                return;
+            }
             catch (QuarantineFailedException ex)
             {
                 Log.Error("startup: a settings file could not be read or set aside", ex);

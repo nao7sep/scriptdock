@@ -318,6 +318,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             {
                 version = _recentVersion;
                 recent = await _records.ReadRecentAsync();
+                await Task.Run(() => _keys.Refresh(recent.Select(run => run.Path)));
             }
             while (version != _recentVersion);
 
@@ -598,14 +599,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             var extensions = _config.Extensions.ToList();
             var patterns = _config.IgnorePatterns.ToList();
             var known = _knownPaths.Paths?.ToList();
-            var otherPaths = _config.Hidden.Concat(_recent.Select(run => run.Path)).ToList();
+            var otherPaths = _config.Hidden.Concat(_recent.Select(run => run.Path)).Concat(_removed).ToList();
 
             // Everything that asks the filesystem runs here, off the interface thread: the scan, its
             // diff against the known paths and the path identities the window's lists read.
             var (report, diff) = await Task.Run(() =>
             {
                 var found = _scanner.Scan(roots, extensions, patterns, cts.Token);
-                _keys.Refresh(found.Found.Concat(otherPaths));
+                _keys.Refresh(found.Found.Concat(otherPaths).Concat(known ?? []));
                 return (found, ScanDiff.Compute(found.Found, known));
             }, cts.Token);
             cts.Token.ThrowIfCancellationRequested(); // a newer scan superseded us between completion and here

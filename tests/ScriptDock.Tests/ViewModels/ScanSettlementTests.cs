@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
+using System.Reflection;
 using System.IO;
 using System.Linq;
 using System.Threading.Channels;
@@ -38,16 +40,52 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         Directory.Delete(_root, true);
     }
 
-    private MainWindowViewModel Build(TimeProvider? time = null)
+    private MainWindowViewModel Build(TimeProvider? time = null, FakeRecordStore? records = null)
     {
         var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
         return _vm = new MainWindowViewModel(new FakeConfigStore { Value = config },
-            new FakeJsonStore<AppState>(), _store, new FakeRecordStore(), config, new AppState(),
+            new FakeJsonStore<AppState>(), _store, records ?? new FakeRecordStore(), config, new AppState(),
             _known, new ScriptScanner(), new FakeProcessRunner()) { Time = time ?? TimeProvider.System };
     }
 
     private static ScriptFlag FlagOf(MainWindowViewModel vm, string name) =>
         vm.Scripts.Single(script => Path.GetFileName(script.Path) == name).Flag;
+
+    [AvaloniaFact]
+    public async Task SavedRecentPathsArePreparedBeforeTheirFirstRebuild()
+    {
+        var path = Path.Combine(_root, "previous.command");
+        var records = new FakeRecordStore();
+        records.Runs.Add(new RunRecord("earlier", 1, DateTimeOffset.UtcNow, path, null, null, null));
+        var vm = Build(records: records);
+        await vm.LoadRecentAsync();
+        Assert.Empty(vm.Recent); // The projection has not had a chance to fill a cache miss itself.
+        Assert.True(PreparedKeys(vm).ContainsKey(path));
+    }
+
+    [AvaloniaFact]
+    public async Task FirstScanPreparesRemovedPathsBeforePublishingItsTiles()
+    {
+        var path = Path.Combine(_root, "gone.command");
+        _known.Paths = [path];
+        var vm = Build();
+        var scan = Track(vm.RescanCommand.ExecuteAsync(null));
+        var held = await _store.NextAsync();
+        Assert.Empty(vm.Scripts);
+        Assert.True(PreparedKeys(vm).ContainsKey(path));
+        held.Settled.SetResult();
+        await scan.WaitAsync(Bound, TestContext.Current.CancellationToken);
+        Assert.Equal(ScriptFlag.Removed, FlagOf(vm, "gone.command"));
+    }
+
+    // Inspect the actual cache before projection. Resolving a miss from the UI would populate it
+    // too, so inspecting only the finished list would not detect this regression.
+    private static ConcurrentDictionary<string, string> PreparedKeys(MainWindowViewModel vm)
+    {
+        var cache = typeof(MainWindowViewModel).GetField("_keys", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(vm)!;
+        return (ConcurrentDictionary<string, string>)typeof(PathKeyCache)
+            .GetField("_keys", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(cache)!;
+    }
 
     [AvaloniaFact]
     public async Task RunDuringAFullScansSave_KeepsItsNewFlagEnded()

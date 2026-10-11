@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -144,6 +146,66 @@ public sealed class ConfigStoreTests : IDisposable
         config.Extensions = [ConfigDefaults.DefaultExtension];
         await store.SaveAsync(config);
         Assert.Equal(["hidden"], ReadKeys());
+    }
+
+    [Fact]
+    public async Task FailedReplacement_KeepsOriginalSetForALaterUnrelatedSave()
+    {
+        const string original = """{"formatVersion":1,"extensions":[null,".sh"]}""";
+        File.WriteAllText(ConfigPath, original);
+        var store = new ConfigStore();
+        var config = store.Load();
+        var vm = NewViewModel(store, config);
+        var draft = new SettingsDialogViewModel(config);
+        draft.Extensions.Clear();
+        draft.Extensions.Add(".py");
+        // A directory at the destination forces a real publication failure on both platforms.
+        File.Move(ConfigPath, ConfigPath + ".held");
+        Directory.CreateDirectory(ConfigPath);
+        try
+        {
+            Assert.False(await vm.TryApplySettingsAsync(draft));
+            Assert.Equal(["extensions"], store.KeptKeys);
+        }
+        finally
+        {
+            Directory.Delete(ConfigPath);
+            File.Move(ConfigPath + ".held", ConfigPath);
+        }
+        await vm.ToggleHiddenCommand.ExecuteAsync(new ScriptItem("/scripts/run.command"));
+        Assert.Equal("""[null,".sh"]""", ReadRaw("extensions"));
+        Assert.Equal(["extensions", "hidden"], ReadKeys());
+        await vm.ShutdownAsync();
+    }
+
+    [Fact]
+    public async Task QueuedReset_DoesNotResurrectTheSetReplacedByThePreviousSave()
+    {
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[null,".sh"]}""");
+        var store = new ConfigStore();
+        var config = store.Load();
+        // Hold the actual primary-write queue so both snapshots precede publication. Without this
+        // gate the first write could finish before the reset, hiding a premature merge of kept keys.
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var primary = typeof(ConfigStore).GetField("_store", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(store)!;
+        typeof(JsonStore<Dictionary<string, JsonElement>>)
+            .GetField("_queueTail", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(primary, release.Task);
+        config.Extensions = [".py"];
+        var replacement = store.SaveAsync(config);
+        config.Extensions = [ConfigDefaults.DefaultExtension];
+        var reset = store.SaveAsync(config);
+        try
+        {
+            Assert.False(replacement.IsCompleted);
+            Assert.False(reset.IsCompleted);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await Task.WhenAll(replacement, reset).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        }
+        Assert.Empty(store.KeptKeys);
+        Assert.Empty(ReadKeys());
     }
 
     [Fact]

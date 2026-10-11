@@ -25,7 +25,10 @@ public sealed class ConfigStore : IConfigStore
     private readonly Dictionary<string, JsonElement> _kept = [];
 
     /// <summary>The keys the last <see cref="Load"/> could not apply, which saves keep unchanged.</summary>
-    public IReadOnlyList<string> KeptKeys => [.. _kept.Keys];
+    public IReadOnlyList<string> KeptKeys { get { lock (_kept) return [.. _kept.Keys]; } }
+
+    private readonly object _saveGate = new();
+    private Task _saveTail = Task.CompletedTask;
 
     /// <summary>The settings file.</summary>
     public static string FilePath => System.IO.Path.Combine(StorageRoot.Directory, AppPaths.ConfigFileName);
@@ -59,12 +62,29 @@ public sealed class ConfigStore : IConfigStore
 
     public Task SaveAsync(AppConfig value)
     {
+        // Snapshot the caller's intent now, but merge preserved entries only after the previous
+        // write settles: a failed replacement must not retire them, and a successful one must not
+        // be resurrected by a save queued while it was still running.
         var document = ConfigSets.Changed(value);
-        // A set the user has now given a value of its own replaces the kept one for good.
-        foreach (var key in _kept.Keys.Where(document.ContainsKey).ToList())
-            _kept.Remove(key);
-        foreach (var (key, kept) in _kept)
-            document[key] = kept;
-        return _store.SaveAsync(document);
+        lock (_saveGate)
+            return _saveTail = SaveAfterAsync(_saveTail, document);
+    }
+
+    private async Task SaveAfterAsync(Task previous, Dictionary<string, JsonElement> document)
+    {
+        try { await previous.ConfigureAwait(false); }
+        catch { /* The earlier caller observes its own failure; later saves may still succeed. */ }
+
+        List<string> replaced;
+        lock (_kept)
+        {
+            replaced = _kept.Keys.Where(document.ContainsKey).ToList();
+            foreach (var (key, kept) in _kept)
+                document.TryAdd(key, kept);
+        }
+        await _store.SaveAsync(document).ConfigureAwait(false);
+        lock (_kept)
+            foreach (var key in replaced)
+                _kept.Remove(key);
     }
 }

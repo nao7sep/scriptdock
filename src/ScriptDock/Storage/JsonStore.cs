@@ -151,14 +151,27 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
     {
         value = new T();
 
-        // An absent file is normal (first run): not a failure, so it is not logged
-        // here — the caller decides what the absence means.
-        if (!File.Exists(filePath))
+        string json;
+        try
+        {
+            // File.Exists hides access failures. Only a genuine missing path means first run.
+            json = File.ReadAllText(filePath);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
             return false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Warn("store: file could not be read, left in place", ex, new { label = _label, path = filePath });
+            if (_rebuildable)
+                return false;
+            throw new StoreReadFailedException(filePath, ex);
+        }
 
         try
         {
-            var document = JsonNode.Parse(File.ReadAllText(filePath)) as JsonObject
+            var document = JsonNode.Parse(json) as JsonObject
                 ?? throw new JsonException("The document is not a JSON object.");
             var found = FormatVersionOf(document);
             if (found > _formatVersion)
@@ -183,9 +196,9 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
             Log.Warn("store: file unreadable, rebuilding", ex, new { label = _label, path = filePath });
             return false;
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
-            // Present but unparseable: quarantine aside (bytes preserved) before defaults proceed.
+            // Successfully read but unparseable: quarantine aside (bytes preserved) before defaults proceed.
             Quarantine(filePath, ex);
             return false;
         }

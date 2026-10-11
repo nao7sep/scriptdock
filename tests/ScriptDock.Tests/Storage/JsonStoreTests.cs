@@ -97,6 +97,43 @@ public sealed class JsonStoreTests : IDisposable
         Assert.False(File.Exists(PathOf("doc.json")));
     }
 
+    [MacOnlyFact]
+    [SupportedOSPlatform("macos")]
+    public void Load_DeniedReadLeavesProtectedContentAtItsOriginalPath()
+    {
+        var path = PathOf("doc.json");
+        const string original = """{"formatVersion":1,"name":"valuable"}""";
+        File.WriteAllText(path, original);
+        var mode = File.GetUnixFileMode(path);
+        try
+        {
+            File.SetUnixFileMode(path, UnixFileMode.UserWrite);
+            var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+            var error = Assert.Throws<StoreReadFailedException>(() => store.Load());
+            Assert.Equal(path, error.FilePath);
+            Assert.True(File.Exists(path));
+            Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
+        }
+        finally { File.SetUnixFileMode(path, mode); }
+        Assert.Equal(original, File.ReadAllText(path));
+    }
+
+    [WindowsOnlyFact]
+    public void Load_SharingDenialLeavesProtectedContentAtItsOriginalPath()
+    {
+        var path = PathOf("doc.json");
+        const string original = """{"formatVersion":1,"name":"valuable"}""";
+        File.WriteAllText(path, original);
+        using (var held = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+            Assert.Throws<StoreReadFailedException>(() => store.Load());
+            Assert.True(File.Exists(path));
+            Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
+        }
+        Assert.Equal(original, File.ReadAllText(path));
+    }
+
     [Fact]
     public async Task Save_UnchangedContent_LeavesTheFileUntouched()
     {

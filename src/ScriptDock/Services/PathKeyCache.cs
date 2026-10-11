@@ -7,8 +7,9 @@ namespace ScriptDock.Services;
 /// <summary>
 /// <see cref="PathIdentity.Key"/> asks the filesystem for every path, so a slow or unreachable scan folder
 /// could stall the window each time its lists are rebuilt. The window reads keys from here instead; each
-/// scan refreshes the keys of the paths it found, the hidden list and the Recent list off the interface
-/// thread. A path seen for the first time between scans is resolved where it is asked for.
+/// scan refreshes found, known, removed and hidden paths off the interface thread; loading Recent
+/// resolves its saved paths there too, before its first rebuild. A path seen for the first time between
+/// scans is resolved where it is asked for.
 /// </summary>
 public sealed class PathKeyCache
 {
