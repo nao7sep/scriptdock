@@ -36,6 +36,14 @@ public static class PathIdentity
                 continue;
 
             var candidate = Path.Combine(current, segment);
+            // The final path may be missing or below a denied directory while an existing prefix is
+            // still resolvable. Preserve that prefix's actual case/link identity, then append only
+            // the unobserved tail literally; never case-fold a whole macOS volume by assumption.
+            if (!OperatingSystem.IsWindows() && TryRealPath(candidate) is { } prefix)
+            {
+                current = prefix;
+                continue;
+            }
             FileSystemInfo info = Directory.Exists(candidate)
                 ? new DirectoryInfo(candidate)
                 : new FileInfo(candidate);

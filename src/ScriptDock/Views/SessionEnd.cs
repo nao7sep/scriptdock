@@ -11,7 +11,7 @@ namespace ScriptDock.Views;
 /// </summary>
 internal static class SessionEnd
 {
-    // keyAEQuitReason, 'why?': the attribute loginwindow puts on the quit Apple event it sends at logout,
+    // kAEQuitReason, 'why?': the parameter loginwindow puts on the quit Apple event it sends at logout,
     // restart and shutdown. A quit from the Dock or another app carries none.
     private const uint QuitReasonKeyword = 0x7768793F;
 
@@ -39,8 +39,7 @@ internal static class SessionEnd
         {
             var manager = ObjC.Send(ObjC.Class("NSAppleEventManager"), "sharedAppleEventManager");
             var quitEvent = ObjC.Send(manager, "currentAppleEvent");
-            return quitEvent != IntPtr.Zero
-                && ObjC.SendWithCode(quitEvent, "attributeDescriptorForKeyword:", QuitReasonKeyword) != IntPtr.Zero;
+            return MacQuitIsSessionEnd(quitEvent);
         }
         catch (Exception ex)
         {
@@ -48,4 +47,8 @@ internal static class SessionEnd
             return false;
         }
     }
+
+    internal static bool MacQuitIsSessionEnd(IntPtr quitEvent) =>
+        quitEvent != IntPtr.Zero
+        && ObjC.SendWithCode(quitEvent, "paramDescriptorForKeyword:", QuitReasonKeyword) != IntPtr.Zero;
 }

@@ -50,10 +50,11 @@ public sealed class ScriptScanner
         var stack = new Stack<string>();
         foreach (var root in roots)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (Directory.Exists(root))
                 stack.Push(root);
             else
-                inaccessible.Add(root);
+                inaccessible.Add(UnreadableRoot(root));
         }
 
         while (stack.Count > 0)
@@ -126,6 +127,27 @@ public sealed class ScriptScanner
             // If attributes cannot be read, err toward not descending.
             return true;
         }
+    }
+
+    private static string UnreadableRoot(string root)
+    {
+        // Exists suppresses the reason for failure. Probe the named root: an explicitly missing
+        // sibling says nothing about a readable root, even if their parent cannot be listed.
+        try
+        {
+            _ = File.GetAttributes(root);
+        }
+        catch (UnauthorizedAccessException) when (!OperatingSystem.IsWindows())
+        {
+            // POSIX stat needs ancestor traversal, not directory listing permission. Preserve the
+            // nearest observable ancestor when traversal is denied: nested case/link spellings
+            // cannot then be resolved safely. Windows attribute denial need not imply this scope.
+            var parent = Directory.GetParent(root);
+            while (parent is not null && !Directory.Exists(parent.FullName)) parent = parent.Parent;
+            return parent?.FullName ?? root;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException) { }
+        return root;
     }
 
     private static IReadOnlyList<string> SortedPaths(List<string> values)

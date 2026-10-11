@@ -46,10 +46,13 @@ public static class RecentRuns
             .ToList();
     }
 
-    public static List<RecentRun> Add(IReadOnlyList<RecentRun> existing, string path, DateTimeOffset ranAt, int max = DefaultMax)
+    public static List<RecentRun> Add(IReadOnlyList<RecentRun> existing, string path, DateTimeOffset ranAt, int max = DefaultMax,
+        Func<string, string>? key = null, string? scriptKey = null)
     {
+        key ??= PathIdentity.Key;
+        scriptKey ??= key(path);
         var result = new List<RecentRun> { new() { Path = path, RanAt = ranAt } };
-        result.AddRange(existing.Where(r => !PathIdentity.Same(r.Path, path)));
+        result.AddRange(existing.Where(r => !PathIdentity.Comparer.Equals(key(r.Path), scriptKey)));
 
         if (result.Count > max)
             result.RemoveRange(max, result.Count - max);

@@ -41,6 +41,22 @@ public sealed class RecentRunsTests
         new() { Path = path, RanAt = new DateTimeOffset(2026, 6, 17, 0, minute, 0, TimeSpan.Zero) };
 
     [Fact]
+    public void AddUsesPreparedIdentitiesWithoutResolvingTheNewPathAgain()
+    {
+        var calls = 0;
+        string Key(string path)
+        {
+            calls++;
+            Assert.NotEqual("/new", path);
+            return path == "/alias" ? "physical" : path;
+        }
+        var result = RecentRuns.Add([Run("/alias", 1), Run("/other", 2)], "/new", DateTimeOffset.UtcNow,
+            key: Key, scriptKey: "physical");
+        Assert.Equal(["/new", "/other"], result.Select(run => run.Path));
+        Assert.Equal(2, calls);
+    }
+
+    [Fact]
     public void Add_PutsNewestFirst()
     {
         var list = RecentRuns.Add([Run("/a", 1)], "/b", new DateTimeOffset(2026, 6, 17, 0, 5, 0, TimeSpan.Zero));

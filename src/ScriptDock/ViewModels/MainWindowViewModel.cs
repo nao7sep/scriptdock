@@ -332,22 +332,40 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    // How long each step of a quit may take; together they stay well inside the time the system gives an
-    // app at logout or shutdown (unsaved-edits-conventions, Quitting).
+    // Best-effort app wait budget. Native delivery and the OS's actual deadline are qualification
+    // boundaries; these waits never promise completion or cancellation of physical work at expiry.
     internal static readonly TimeSpan QuitSettingsWriteBound = TimeSpan.FromSeconds(1);
     internal static readonly TimeSpan QuitStateSaveBound = TimeSpan.FromMilliseconds(500);
     internal static readonly TimeSpan QuitStopScriptsBound = TimeSpan.FromSeconds(1);
     internal static readonly TimeSpan QuitOutputImportBound = TimeSpan.FromMilliseconds(250);
 
-    // The latest settings or hidden-list write and the settings it saves, so a quit can wait for it and
-    // save it again.
-    private AppConfig? _configWriteCandidate;
+    // One logical settings owner: each captured intent builds on the preceding successful adoption.
+    // The tail includes publication and live adoption, not only the store's file write.
+    private Func<Task>? _retryConfigChange;
     private Task _configWrite = Task.CompletedTask;
 
-    private Task SaveConfigAsync(AppConfig candidate)
+    private Task ChangeConfigAsync(Func<Task> change)
     {
-        _configWriteCandidate = candidate;
-        return _configWrite = _configStore.SaveAsync(candidate);
+        _retryConfigChange = change;
+        return _configWrite = ChangeConfigAfterAsync(_configWrite, change);
+    }
+
+    private static async Task ChangeConfigAfterAsync(Task previous, Func<Task> change)
+    {
+        try { await previous; }
+        catch { /* The earlier caller owns its failed change; later intent uses the unchanged config. */ }
+        await change();
+    }
+
+    private async Task WaitForConfigChangesAsync()
+    {
+        Task write;
+        do
+        {
+            write = _configWrite;
+            await write;
+        }
+        while (!ReferenceEquals(write, _configWrite));
     }
 
     /// <summary>
@@ -370,9 +388,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            if (retry && _configWriteCandidate is { } candidate)
-                write = SaveConfigAsync(candidate);
-            await write.WaitAsync(QuitSettingsWriteBound, Time);
+            // A timed-out write still owns its intent. Retry waits for it instead of duplicating it;
+            // only a settled failure submits the same intent again.
+            if (retry && write.IsFaulted && _retryConfigChange is { } change)
+                _ = ChangeConfigAsync(change);
+            await WaitForConfigChangesAsync().WaitAsync(QuitSettingsWriteBound, Time);
             return true;
         }
         catch (TimeoutException)
@@ -504,18 +524,28 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public async Task<bool> TryApplySettingsAsync(SettingsDialogViewModel draft)
     {
-        var candidate = draft.ToConfig();
-        candidate.Hidden = _config.Hidden.ToList();
+        if (_quitting)
+            return false;
+        var candidate = draft.ToConfig(); // Capture the submitted editable sets before waiting.
         try
         {
-            await SaveConfigAsync(candidate);
+            await ChangeConfigAsync(async () =>
+            {
+                candidate.Hidden = _config.Hidden.ToList();
+                await _configStore.SaveAsync(candidate);
+                ApplySavedSettings(candidate);
+            });
+            return true;
         }
         catch (Exception ex)
         {
             Log.Error("ui: apply settings failed", ex);
             return false;
         }
+    }
 
+    private void ApplySavedSettings(AppConfig candidate)
+    {
         var fontChanged = !string.Equals(_config.UiFontFamily, candidate.UiFontFamily, StringComparison.Ordinal);
         var scanChanged = !_config.RootDirs.SequenceEqual(candidate.RootDirs, StringComparer.Ordinal)
             || !_config.Extensions.SequenceEqual(candidate.Extensions, StringComparer.Ordinal)
@@ -546,7 +576,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
         ShowCatalogResult(Message.Of("scan.configChanged"));
         _rescanToApplyShown = true;
-        return true;
     }
 
     /// <summary>Sends a line to the selected running script's stdin (from the console input field).</summary>
@@ -599,20 +628,23 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             var extensions = _config.Extensions.ToList();
             var patterns = _config.IgnorePatterns.ToList();
             var known = _knownPaths.Paths?.ToList();
+            var previouslyShown = _lastFound;
             var otherPaths = _config.Hidden.Concat(_recent.Select(run => run.Path)).Concat(_removed).ToList();
 
             // Everything that asks the filesystem runs here, off the interface thread: the scan, its
             // diff against the known paths and the path identities the window's lists read.
-            var (report, diff) = await Task.Run(() =>
+            var (report, catalog, diff) = await Task.Run(() =>
             {
                 var found = _scanner.Scan(roots, extensions, patterns, cts.Token);
-                _keys.Refresh(found.Found.Concat(otherPaths).Concat(known ?? []));
-                return (found, ScanDiff.Compute(found.Found, known));
+                _keys.Refresh(found.Found.Concat(otherPaths).Concat(known ?? []).Concat(previouslyShown).Concat(found.Inaccessible));
+                var paths = ScanCatalog.Paths(found, (known ?? []).Concat(previouslyShown), _keys.Key)
+                    .DistinctBy(_keys.Key, PathIdentity.Comparer).ToList();
+                return (found, paths, ScanDiff.Compute(paths, known));
             }, cts.Token);
             cts.Token.ThrowIfCancellationRequested(); // a newer scan superseded us between completion and here
             ScanReportLog.Write(_records, report);
 
-            var candidate = new KnownPaths { Paths = report.Found.ToList() };
+            var candidate = new KnownPaths { Paths = catalog.ToList() };
             await _knownPathsStore.SaveAsync(candidate);
             cts.Token.ThrowIfCancellationRequested();
 
@@ -620,20 +652,23 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             var shownNew = _newPaths.ToList();
             var shownRemoved = _removed;
             var flags = await Task.Run(() => background
-                ? ScanFlags.Background(diff, report.Found, shownNew, shownRemoved)
+                ? ScanFlags.Background(diff, catalog, shownNew, shownRemoved)
                 : ScanFlags.Full(diff));
             cts.Token.ThrowIfCancellationRequested();
             flags.NewKeys.ExceptWith(flagsEnded);
 
-            _lastFound = report.Found;
+            _lastFound = catalog;
             _newPaths = flags.NewKeys;
             _removed = flags.Removed;
             _knownPaths.Paths = candidate.Paths;
             RebuildScripts();
-            ResolveOperationalError("scan");
-            if (!background || diff.Added.Count > 0 || diff.Removed.Count > 0)
+            if (report.Inaccessible.Count > 0)
+                ReportOperationalError("scan", Message.Of("scan.failed"));
+            else
+                ResolveOperationalError("scan");
+            if (diff.Added.Count > 0 || diff.Removed.Count > 0 || (!background && report.Inaccessible.Count == 0))
                 ShowCatalogResult(ScanResultMessage(diff), transient: true);
-            else if (_rescanToApplyShown)
+            else if (!background || _rescanToApplyShown)
                 ClearCatalogResult(); // this scan applied the settings that line asked a Rescan for
             _rescanToApplyShown = false;
         }
@@ -774,42 +809,39 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private async Task ToggleHidden(ScriptItem? item)
     {
-        if (item is null)
+        if (item is null || _quitting)
             return;
 
-        // The live config takes the new hidden list only once it is saved, so a failed save changes nothing.
-        var nowHidden = !_config.Hidden.Any(path => PathIdentity.Same(path, item.Path));
-        var hidden = nowHidden
-            ? [.. _config.Hidden, item.Path]
-            : _config.Hidden.Where(path => !PathIdentity.Same(path, item.Path)).ToList();
-        var candidate = new AppConfig
-        {
-            UiFontFamily = _config.UiFontFamily,
-            Language = _config.Language,
-            Theme = _config.Theme,
-            RootDirs = _config.RootDirs,
-            Extensions = _config.Extensions,
-            IgnorePatterns = _config.IgnorePatterns,
-            Hidden = hidden,
-        };
-
+        // Capture an idempotent hide/unhide intent; replaying a toggle after a failed save is wrong.
+        var nowHidden = !_config.Hidden.Any(path => _keys.Same(path, item.Path));
         try
         {
-            await SaveConfigAsync(candidate);
-            ResolveOperationalError("toggle hidden");
+            await ChangeConfigAsync(async () =>
+            {
+                var hidden = _config.Hidden.Where(path => !_keys.Same(path, item.Path)).ToList();
+                if (nowHidden) hidden.Add(item.Path);
+                var candidate = new AppConfig
+                {
+                    UiFontFamily = _config.UiFontFamily,
+                    Language = _config.Language,
+                    Theme = _config.Theme,
+                    RootDirs = _config.RootDirs,
+                    Extensions = _config.Extensions,
+                    IgnorePatterns = _config.IgnorePatterns,
+                    Hidden = hidden,
+                };
+                await _configStore.SaveAsync(candidate);
+                _config.Hidden = hidden;
+                ResolveOperationalError("toggle hidden");
+                Log.Info("ui: toggle hidden", new { script = item.Path, hidden = nowHidden });
+                RebuildScripts(selectNeighbourIfGone: true);
+            });
         }
         catch (Exception ex)
         {
             Log.Error("ui: toggle hidden failed", ex);
             ReportOperationalError("toggle hidden", Message.Of("guard.toggleHidden"));
-            return;
         }
-
-        _config.Hidden = hidden;
-        Log.Info("ui: toggle hidden", new { script = item.Path, hidden = nowHidden });
-        // Keep the toggled script selected; if hiding made it vanish (Show hidden off), fall to its
-        // neighbour so the Scripts selection — and the Hide/Show label — never just resets.
-        RebuildScripts(selectNeighbourIfGone: true);
     }
 
     partial void OnShowHiddenChanged(bool value)
@@ -900,12 +932,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         ResolveOperationalError(RunFailedKey(path));
 
         // Running a script ends its "new" flag at once; otherwise the flag lasts until the next full scan.
-        var flagKey = PathIdentity.Key(path);
+        var flagKey = started.ScriptKey;
         _flagsEndedDuringScan.Add(flagKey);
         if (_newPaths.Remove(flagKey))
             RebuildScripts();
 
-        _recent = RecentRuns.Add(_recent, path, started.StartedAt);
+        _recent = RecentRuns.Add(_recent, path, started.StartedAt, key: _keys.Key, scriptKey: started.ScriptKey);
         _recentVersion++;
         try
         {

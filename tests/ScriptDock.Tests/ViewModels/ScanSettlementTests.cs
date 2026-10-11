@@ -52,6 +52,54 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         vm.Scripts.Single(script => Path.GetFileName(script.Path) == name).Flag;
 
     [AvaloniaFact]
+    public async Task InaccessibleSubtreeKeepsItsBaselineWhileObservedChangesStillApply()
+    {
+        var subtree = Path.Combine(_root, "offline");
+        var parked = Path.Combine(_root, "parked");
+        Directory.CreateDirectory(subtree);
+        var old = Path.Combine(subtree, "old.command");
+        var deleted = Path.Combine(_root, "offline-neighbour.command");
+        File.WriteAllText(old, "# fixture");
+        File.WriteAllText(deleted, "# fixture");
+        _known.Paths = [old, deleted];
+        var config = new AppConfig { RootDirs = [subtree, _root], Extensions = [".command"], IgnorePatterns = ["/parked/"] };
+        var vm = _vm = new MainWindowViewModel(new FakeConfigStore { Value = config },
+            new FakeJsonStore<AppState>(), _store, new FakeRecordStore(), config, new AppState(), _known,
+            new ScriptScanner(), new FakeProcessRunner());
+
+        Directory.Move(subtree, parked); // The configured root is unavailable, not evidence of deletion.
+        File.Delete(deleted);
+        var added = Path.Combine(_root, "added.command");
+        File.WriteAllText(added, "# fixture");
+        for (var pass = 0; pass < 2; pass++)
+        {
+            var scan = Track(vm.RescanCommand.ExecuteAsync(null));
+            var held = await _store.NextAsync();
+            held.Settled.SetResult();
+            await scan;
+            Assert.Contains(old, _known.Paths!);
+            Assert.Contains(added, _known.Paths!);
+            Assert.DoesNotContain(deleted, _known.Paths!);
+            Assert.NotEqual(ScriptFlag.Removed, FlagOf(vm, "old.command"));
+            Assert.True(vm.HasOperationalError);
+        }
+
+        Directory.Move(parked, subtree);
+        var recovered = Track(vm.RescanCommand.ExecuteAsync(null));
+        (await _store.NextAsync()).Settled.SetResult();
+        await recovered;
+        Assert.Equal(ScriptFlag.None, FlagOf(vm, "old.command"));
+        Assert.False(vm.HasOperationalError);
+
+        File.Delete(old);
+        var observedDeletion = Track(vm.RescanCommand.ExecuteAsync(null));
+        (await _store.NextAsync()).Settled.SetResult();
+        await observedDeletion;
+        Assert.Equal(ScriptFlag.Removed, FlagOf(vm, "old.command"));
+        Assert.DoesNotContain(old, _known.Paths!);
+    }
+
+    [AvaloniaFact]
     public async Task SavedRecentPathsArePreparedBeforeTheirFirstRebuild()
     {
         var path = Path.Combine(_root, "previous.command");

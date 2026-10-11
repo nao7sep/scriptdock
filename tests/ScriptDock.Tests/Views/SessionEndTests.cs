@@ -1,3 +1,5 @@
+using System;
+using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using ScriptDock.Views;
 using Xunit;
@@ -10,6 +12,32 @@ namespace ScriptDock.Tests.Views;
 /// </summary>
 public sealed class SessionEndTests
 {
+    [MacOnlyFact]
+    public void Native_quit_reason_is_an_event_parameter()
+    {
+        NativeLibrary.Load("/System/Library/Frameworks/Foundation.framework/Foundation");
+        using var pool = new ObjC.OwnedObject(ObjC.Send(ObjC.Class("NSAutoreleasePool"), "new"));
+        var descriptor = ObjC.Class("NSAppleEventDescriptor");
+        var quit = CreateEvent(descriptor, ObjC.Sel("appleEventWithEventClass:eventID:targetDescriptor:returnID:transactionID:"),
+            0x61657674, 0x71756974, IntPtr.Zero, -1, 0); // aevt / quit; never sent
+        Assert.NotEqual(IntPtr.Zero, quit);
+        Assert.False(SessionEnd.MacQuitIsSessionEnd(IntPtr.Zero));
+        Assert.False(SessionEnd.MacQuitIsSessionEnd(quit));
+        foreach (var code in new uint[] { 0x72657374, 0x73687574, 0x726C676F, 0x71756961 }) // rest, shut, rlgo, quia
+        {
+            var reason = ObjC.SendWithCode(descriptor, "descriptorWithEnumCode:", code);
+            SetParameter(quit, ObjC.Sel("setParamDescriptor:forKeyword:"), reason, 0x7768793F);
+            Assert.True(SessionEnd.MacQuitIsSessionEnd(quit));
+        }
+    }
+
+    [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
+    private static extern IntPtr CreateEvent(IntPtr receiver, IntPtr selector, uint eventClass, uint eventId,
+        IntPtr target, short returnId, int transactionId);
+
+    [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
+    private static extern void SetParameter(IntPtr receiver, IntPtr selector, IntPtr descriptor, uint keyword);
+
     [Theory]
     // A Windows shutdown or restart, and a Windows logoff, which Avalonia reports as an app shutdown.
     [InlineData(WindowCloseReason.OSShutdown, true, false, true)]

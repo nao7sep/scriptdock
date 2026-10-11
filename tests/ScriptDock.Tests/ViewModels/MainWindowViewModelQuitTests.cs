@@ -219,10 +219,10 @@ public sealed class MainWindowViewModelQuitTests : IAsyncLifetime
     }
 
     [Fact]
-    public void The_quits_steps_together_stay_inside_the_systems_wait_at_logout()
+    public void The_quits_steps_fit_the_apps_best_effort_wait_budget()
     {
-        // Windows ends an app about five seconds after logoff or shutdown asks it to close; the records'
-        // own two-second log flush at exit comes on top of these.
+        // Keep our sequential wait caps below five seconds, including the records' two-second
+        // flush. This asserts an internal budget, not an OS deadline or end-to-end logout behavior.
         var total = MainWindowViewModel.QuitSettingsWriteBound
             + MainWindowViewModel.QuitStateSaveBound
             + MainWindowViewModel.QuitStopScriptsBound

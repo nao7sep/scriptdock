@@ -98,7 +98,8 @@ sealed class Program
         finally
         {
             // An ordinary quit gives the backup history a short bound to record the last saves; when the
-            // system ends the session, the history was told to skip them and this returns at once.
+            // system ends the session, pending history is skipped; an already-running write can still
+            // occupy this bounded join. These are app wait bounds, not a promise of OS exit time.
             BackupStore.Shutdown(BackupDrainBound);
             Log.Info("shutdown", new { clean });
             Log.Shutdown();
