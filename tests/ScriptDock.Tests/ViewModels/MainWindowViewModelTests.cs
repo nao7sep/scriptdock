@@ -414,7 +414,7 @@ public sealed class MainWindowViewModelTests
 
         vm.DismissRecentActionErrorCommand.Execute(null);
         Assert.Equal(1, vm.RecentActionErrorCount);
-        Assert.Contains("send input", vm.RecentActionError, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(English.Of("process.sendInputFailed"), vm.RecentActionError);
 
         runner.TerminateResult = true;
         await vm.StopEntryCommand.ExecuteAsync(entry);

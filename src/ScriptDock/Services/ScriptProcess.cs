@@ -10,10 +10,10 @@ namespace ScriptDock.Services;
 
 /// <summary>
 /// One launched script as ScriptDock owns it: its state, exit code, and the path to the
-/// run-log file the child writes (read on demand for the console — ScriptDock holds no pipe
+/// run-log file the child writes (read on demand for the console — ScriptDock holds no output pipe
 /// to the child). Created and driven by <see cref="ProcessRunner"/>; exposed to the UI as a
 /// bindable handle. Exit is finalised exactly once, whether via the process's Exited event,
-/// an explicit <see cref="WaitForExit"/>, or <see cref="WaitForExitAsync"/>.
+/// or an explicit <see cref="WaitForExitAsync"/>.
 /// </summary>
 public sealed class ScriptProcess : IDisposable
 {
@@ -24,6 +24,7 @@ public sealed class ScriptProcess : IDisposable
     private bool _exitObserved;
     private readonly SemaphoreSlim _inputGate = new(1, 1);
     private readonly CancellationTokenSource _inputLifetime = new();
+    private int _inputDeliveryUncertain;
     private static readonly TimeSpan InputTimeout = TimeSpan.FromSeconds(2);
 
     public ScriptProcess(int id, string scriptPath, DateTimeOffset startedAt)
@@ -43,6 +44,7 @@ public sealed class ScriptProcess : IDisposable
     public DateTimeOffset StartedAt { get; }
     public RunState State { get; private set; } = RunState.Running;
     public int? ExitCode { get; private set; }
+    public bool CanSendInput => State == RunState.Running && Volatile.Read(ref _inputDeliveryUncertain) == 0;
 
     /// <summary>Path of the file the child shell writes stdout+stderr to; null if the run never started.</summary>
     public string? LogFilePath { get; internal set; }
@@ -120,12 +122,14 @@ public sealed class ScriptProcess : IDisposable
         using var timeoutCts = new CancellationTokenSource(timeout);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, _inputLifetime.Token);
         var entered = false;
+        var attempted = false;
         try
         {
             await _inputGate.WaitAsync(cts.Token).ConfigureAwait(false);
             entered = true;
-            if (!process.HasExited)
+            if (!process.HasExited && CanSendInput)
             {
+                attempted = true;
                 await process.StandardInput.WriteLineAsync(line.AsMemory(), cts.Token).ConfigureAwait(false);
                 await process.StandardInput.FlushAsync(cts.Token).ConfigureAwait(false);
                 return true;
@@ -133,10 +137,14 @@ public sealed class ScriptProcess : IDisposable
         }
         catch (OperationCanceledException)
         {
+            // Cancellation can follow partial delivery and leave the next line joined to its tail.
+            // Keep the pipe open, but refuse reuse until the user explicitly restarts this run.
+            if (attempted) Interlocked.Exchange(ref _inputDeliveryUncertain, 1);
             Log.Warn("run: send input timed out or was cancelled", new { id = Id });
         }
         catch (Exception ex)
         {
+            if (attempted) Interlocked.Exchange(ref _inputDeliveryUncertain, 1);
             Log.Warn("run: send input failed", ex, new { id = Id });
         }
         finally

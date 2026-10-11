@@ -41,6 +41,7 @@ public sealed class ProcessRunner : IProcessRunner
     private readonly Dictionary<ScriptProcess, Task<bool>> _terminations = new();
     private readonly Action<ScriptProcess> _startProcess;
     private readonly Func<ScriptProcess, Task<bool>> _terminateProcess;
+    private readonly Action<ProcessStartInfo>? _configureStartInfo;
 
     /// <param name="runsDirectory">Where per-run log files are written; defaults to
     /// <see cref="RunLog.DefaultDirectory"/>. Injected so tests stay isolated.</param>
@@ -48,13 +49,15 @@ public sealed class ProcessRunner : IProcessRunner
         : this(runsDirectory, DefaultTerminationGrace, process => process.Kill(entireProcessTree: true)) { }
 
     internal ProcessRunner(string? runsDirectory, TimeSpan terminationGrace, Action<Process> killProcess,
-        Action<ScriptProcess>? startProcess = null, Func<ScriptProcess, Task<bool>>? terminateProcess = null)
+        Action<ScriptProcess>? startProcess = null, Func<ScriptProcess, Task<bool>>? terminateProcess = null,
+        Action<ProcessStartInfo>? configureStartInfo = null)
     {
         _runsDirectory = runsDirectory ?? RunLog.DefaultDirectory;
         _terminationGrace = terminationGrace;
         _killProcess = killProcess;
         _startProcess = startProcess ?? LaunchProcess;
         _terminateProcess = terminateProcess ?? TerminateProcessAsync;
+        _configureStartInfo = configureStartInfo;
     }
 
     /// <summary>Raised when a process is started, restarted, or dismissed.</summary>
@@ -157,6 +160,7 @@ public sealed class ProcessRunner : IProcessRunner
         };
         foreach (var arg in command.Arguments)
             startInfo.ArgumentList.Add(arg);
+        _configureStartInfo?.Invoke(startInfo);
         var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
         process.Exited += (_, _) => handle.Complete();
         handle.Process = process;

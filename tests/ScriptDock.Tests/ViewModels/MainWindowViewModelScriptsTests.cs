@@ -58,17 +58,20 @@ public sealed class MainWindowViewModelScriptsTests : IAsyncLifetime
             // Shutting down again after a test already did is harmless; one that never did still holds
             // its timers and stays subscribed to Localizer.Changed, so a later test's language change
             // would rebuild it.
-            foreach (var vm in _vms)
+            await Task.WhenAll(_vms.Select(async vm =>
             {
-                await vm.ShutdownAsync().WaitAsync(Bound, TestContext.Current.CancellationToken);
-                await vm.ActivationScan.WaitAsync(Bound, TestContext.Current.CancellationToken);
-            }
+                try { await vm.ShutdownAsync(); }
+                finally { await vm.ActivationScan; }
+            }));
         }
         finally
         {
-            Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, _previousHome);
-            try { Directory.Delete(Path.GetDirectoryName(_root)!, recursive: true); }
-            catch { /* best-effort cleanup */ }
+            try { BackupStore.Close(); }
+            finally
+            {
+                Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, _previousHome);
+                Directory.Delete(Path.GetDirectoryName(_root)!, recursive: true);
+            }
         }
     }
 

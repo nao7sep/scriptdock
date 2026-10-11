@@ -74,7 +74,7 @@
   "process.historyFailed": "O script foi iniciado, mas não foi possível salvar sua entrada em Recentes.",
   "process.readOutputFailed": "Não foi possível atualizar a saída deste script.",
   "process.restartFailed": "O script existente não parou; nenhum substituto foi iniciado.",
-  "process.sendInputFailed": "Não foi possível enviar a entrada. Tente novamente enquanto o script estiver em execução.",
+  "process.sendInputFailed": "A entrada pode ter chegado ao script. Reinicie o script antes de enviar mais entrada.",
   "process.stopFailed": "O script não parou; o ScriptDock ainda está monitorando-o.",
   "quit.confirm": "Encerrar",
   "quit.message": {

@@ -15,8 +15,9 @@ using Xunit;
 namespace ScriptDock.Tests.Storage;
 
 [Collection(StorageRootEnvironment.CollectionName)]
-public sealed class ConfigStoreTests : IDisposable
+public sealed class ConfigStoreTests : IAsyncLifetime
 {
+    private readonly List<MainWindowViewModel> _vms = [];
     private readonly string _root = Path.Combine(Path.GetTempPath(), "scriptdock-tests", NanoId.New());
     private readonly string? _previousHome = Environment.GetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable);
     private string ConfigPath => Path.Combine(_root, "config.json");
@@ -27,11 +28,20 @@ public sealed class ConfigStoreTests : IDisposable
         Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, _root);
     }
 
-    public void Dispose()
+    public ValueTask InitializeAsync() => ValueTask.CompletedTask;
+
+    public async ValueTask DisposeAsync()
     {
-        BackupStore.Close();
-        Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, _previousHome);
-        Directory.Delete(_root, true);
+        try { await Task.WhenAll(_vms.Select(vm => vm.ShutdownAsync())); }
+        finally
+        {
+            try { BackupStore.Close(); }
+            finally
+            {
+                Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, _previousHome);
+                Directory.Delete(_root, true);
+            }
+        }
     }
 
     [Fact]
@@ -202,7 +212,7 @@ public sealed class ConfigStoreTests : IDisposable
         finally
         {
             release.TrySetResult();
-            await Task.WhenAll(replacement, reset).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            await Task.WhenAll(replacement, reset);
         }
         Assert.Empty(store.KeptKeys);
         Assert.Empty(ReadKeys());
@@ -295,8 +305,12 @@ public sealed class ConfigStoreTests : IDisposable
         Assert.Equal(["extensions", "hidden"], ReadKeys());
     }
 
-    private static MainWindowViewModel NewViewModel(ConfigStore store, AppConfig config) =>
-        new(store, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeRecordStore(), config, new AppState(), new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+    private MainWindowViewModel NewViewModel(ConfigStore store, AppConfig config)
+    {
+        var vm = new MainWindowViewModel(store, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeRecordStore(), config, new AppState(), new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+        _vms.Add(vm);
+        return vm;
+    }
 
     // One stored value, compactly, as the file holds it.
     private string ReadRaw(string key)

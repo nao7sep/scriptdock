@@ -73,7 +73,7 @@
   "process.historyFailed": "The script started, but its entry in Recent could not be saved.",
   "process.readOutputFailed": "Couldn’t refresh this script’s output.",
   "process.restartFailed": "The existing script did not stop; no replacement was launched.",
-  "process.sendInputFailed": "Couldn’t send input. Try again while the script is running.",
+  "process.sendInputFailed": "Input may have reached the script. Restart the script before sending more input.",
   "process.stopFailed": "The script did not stop; ScriptDock is still tracking it.",
   "quit.confirm": "Quit",
   "quit.message": {

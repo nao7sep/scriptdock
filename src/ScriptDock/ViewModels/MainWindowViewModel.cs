@@ -220,9 +220,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public bool NoScripts => Scripts.Count == 0;
     public bool NoRecent => Recent.Count == 0;
 
-    /// <summary>Whether the console input field can send: the selected run is running. Re-evaluated
-    /// whenever the selected entry changes.</summary>
-    public bool CanSendInput => SelectedRecentEntry?.Process is { State: RunState.Running };
+    /// <summary>Whether the selected running script's input writer can still be used. Re-evaluated
+    /// when selection changes or an input attempt settles.</summary>
+    public bool CanSendInput => SelectedRecentEntry?.Process is { CanSendInput: true };
 
     /// <summary>Whether a Recent entry is selected — drives the Output header's script-name pill.</summary>
     public bool HasSelection => SelectedRecentEntry is not null;
@@ -594,6 +594,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         try
         {
             var sent = await process.SendInputAsync(text);
+            OnPropertyChanged(nameof(CanSendInput));
+            if (!_runner.Active.Contains(process)) return sent;
             if (sent)
                 ResolveProcessActionError(entry.Path, "send-input");
             else
@@ -603,7 +605,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             Log.Error("ui: send input failed", ex);
-            ReportProcessActionError(entry.Path, "send-input", Message.Of("process.sendInputFailed"));
+            if (_runner.Active.Contains(process))
+                ReportProcessActionError(entry.Path, "send-input", Message.Of("process.sendInputFailed"));
             return false;
         }
     }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using ScriptDock.Models;
 using ScriptDock.Services;
@@ -37,12 +38,12 @@ public sealed class MainWindowViewModelQuitTests : IAsyncLifetime
         // work waiting on it can finish.
         foreach (var gate in _gates)
             gate.TrySetResult();
-        await Task.WhenAll(_work).WaitAsync(Bound, TestContext.Current.CancellationToken);
-
-        // Shutting down again after a test already did is harmless; one that never did is still
-        // subscribed to Localizer.Changed.
-        foreach (var vm in _vms)
-            await vm.ShutdownAsync().WaitAsync(Bound, TestContext.Current.CancellationToken);
+        try { await Task.WhenAll(_work); }
+        finally
+        {
+            // Cleanup owns actual settlement even if the failed body has cancelled its token.
+            await Task.WhenAll(_vms.Select(vm => vm.ShutdownAsync()));
+        }
     }
 
     private TaskCompletionSource Gate()

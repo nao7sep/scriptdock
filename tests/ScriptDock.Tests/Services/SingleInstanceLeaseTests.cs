@@ -10,6 +10,7 @@ public sealed class SingleInstanceLeaseTests
     [Fact]
     public void ASecondThreadCannotOwnTheAppNamespaceConcurrently()
     {
+        var namespaceName = "ScriptDock-fixture-" + Guid.NewGuid().ToString("N");
         using var acquired = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
         using var activated = new ManualResetEventSlim();
@@ -18,11 +19,11 @@ public sealed class SingleInstanceLeaseTests
         {
             try
             {
-                Assert.True(SingleInstanceLease.TryAcquire(out var lease));
+                Assert.True(SingleInstanceLease.TryAcquire(namespaceName, out var lease));
                 using (lease)
                 {
                     acquired.Set();
-                    release.Wait(TimeSpan.FromSeconds(10));
+                    release.Wait();
                 }
             }
             catch (Exception ex)
@@ -33,19 +34,28 @@ public sealed class SingleInstanceLeaseTests
         });
 
         owner.Start();
-        Assert.True(acquired.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
-        Assert.Null(ownerFailure);
+        try
+        {
+            Assert.True(acquired.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+            Assert.Null(ownerFailure);
 
-        if (OperatingSystem.IsWindows())
-            SingleInstanceLease.RegisterOwnerActivationHandler(activated.Set);
+            if (OperatingSystem.IsWindows())
+                SingleInstanceLease.RegisterOwnerActivationHandler(activated.Set);
 
-        Assert.False(SingleInstanceLease.TryAcquire(out var duplicate));
-        Assert.Null(duplicate);
-        if (OperatingSystem.IsWindows())
-            Assert.True(activated.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+            Assert.False(SingleInstanceLease.TryAcquire(namespaceName, out var duplicate));
+            Assert.Null(duplicate);
+            if (OperatingSystem.IsWindows())
+                Assert.True(activated.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
 
-        release.Set();
-        Assert.True(owner.Join(TimeSpan.FromSeconds(10)));
+            // A different fixture namespace can coexist; neither uses the shipped app's names.
+            Assert.True(SingleInstanceLease.TryAcquire("ScriptDock-fixture-" + Guid.NewGuid().ToString("N"), out var independent));
+            independent!.Dispose();
+        }
+        finally
+        {
+            release.Set();
+            owner.Join(); // Mutex ownership is thread-affine; settle before disposing its wait handles.
+        }
         Assert.Null(ownerFailure);
     }
 

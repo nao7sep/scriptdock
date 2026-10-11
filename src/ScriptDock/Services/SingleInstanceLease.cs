@@ -61,13 +61,19 @@ public sealed class SingleInstanceLease : IDisposable
         _activationThread.Start();
     }
 
-    public static bool TryAcquire(out SingleInstanceLease? lease)
+    public static bool TryAcquire(out SingleInstanceLease? lease) =>
+        TryAcquire(MutexName, ActivationEventName, out lease);
+
+    internal static bool TryAcquire(string namespaceName, out SingleInstanceLease? lease) =>
+        TryAcquire(namespaceName, namespaceName + "-activate", out lease);
+
+    private static bool TryAcquire(string mutexName, string activationName, out SingleInstanceLease? lease)
     {
         EventWaitHandle? activationEvent = null;
         if (OperatingSystem.IsWindows())
-            activationEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ActivationEventName);
+            activationEvent = new EventWaitHandle(false, EventResetMode.AutoReset, activationName);
 
-        var mutex = new Mutex(initiallyOwned: false, MutexName);
+        var mutex = new Mutex(initiallyOwned: false, mutexName);
         try
         {
             if (!mutex.WaitOne(TimeSpan.Zero))
