@@ -37,6 +37,9 @@ public sealed class ProcessRunnerTests : IDisposable
         catch { /* best-effort cleanup */ }
     }
 
+    private static async Task<ScriptProcess> StartAsync(ProcessRunner runner, string path) =>
+        Assert.IsType<ScriptProcess>(await runner.StartAsync(path));
+
     private string WriteExecutableScript(string name, string body)
     {
         var path = Path.Combine(_dir, name);
@@ -53,13 +56,13 @@ public sealed class ProcessRunnerTests : IDisposable
     }
 
     [MacOnlyFact]
-    public void Start_WritesOutputToRunLog_AndExitsCleanly()
+    public async Task Start_WritesOutputToRunLog_AndExitsCleanly()
     {
         var script = WriteExecutableScript("hello.command", "echo hello-from-script\nexit 0\n");
         var runner = new ProcessRunner(_runsDir);
 
-        var handle = runner.Start(script);
-        Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+        var handle = await StartAsync(runner, script);
+        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
 
         Assert.Equal(RunState.Exited, handle.State);
         Assert.Equal(0, handle.ExitCode);
@@ -69,29 +72,29 @@ public sealed class ProcessRunnerTests : IDisposable
     }
 
     [MacOnlyFact]
-    public void Start_CapturesNonZeroExitCode()
+    public async Task Start_CapturesNonZeroExitCode()
     {
         // The failure path a launcher most needs to surface: a non-zero exit must be captured, not
         // dropped to null. (Clean exit 0 and tree-kill Terminated are covered above/below.)
         var script = WriteExecutableScript("fail.command", "echo nope\nexit 3\n");
         var runner = new ProcessRunner(_runsDir);
 
-        var handle = runner.Start(script);
-        Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+        var handle = await StartAsync(runner, script);
+        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
 
         Assert.Equal(RunState.Exited, handle.State);
         Assert.Equal(3, handle.ExitCode);
     }
 
     [WindowsOnlyFact]
-    public void Start_WindowsPreservesScriptExitCodeAndOutput()
+    public async Task Start_WindowsPreservesScriptExitCodeAndOutput()
     {
         var script = Path.Combine(_dir, "exit-code.ps1");
         File.WriteAllText(script, "Write-Output 'windows-output'\nexit 7\n");
         var runner = new ProcessRunner(_runsDir);
 
-        var handle = runner.Start(script);
-        Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+        var handle = await StartAsync(runner, script);
+        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
 
         Assert.Equal(RunState.Exited, handle.State);
         Assert.Equal(7, handle.ExitCode);
@@ -104,10 +107,10 @@ public sealed class ProcessRunnerTests : IDisposable
         var script = Path.Combine(_dir, "throws.ps1");
         File.WriteAllText(script, "throw 'script-failed'\n");
         var runner = new ProcessRunner(_runsDir);
-        using var handle = runner.Start(script);
+        using var handle = await StartAsync(runner, script);
         try
         {
-            Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+            Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
             Assert.Equal(RunState.Exited, handle.State);
             Assert.NotNull(handle.ExitCode);
             Assert.NotEqual(0, handle.ExitCode);
@@ -124,10 +127,10 @@ public sealed class ProcessRunnerTests : IDisposable
         var script = Path.Combine(directory.FullName, "exit-code.bat");
         File.WriteAllText(script, "@echo off\r\necho literal-batch-path\r\nexit /b 7\r\n");
         var runner = new ProcessRunner(_runsDir);
-        using var handle = runner.Start(script);
+        using var handle = await StartAsync(runner, script);
         try
         {
-            Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+            Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
             Assert.Equal(7, handle.ExitCode);
             Assert.Contains("literal-batch-path", handle.ReadOutput());
         }
@@ -140,11 +143,11 @@ public sealed class ProcessRunnerTests : IDisposable
         var script = Path.Combine(_dir, "input.ps1");
         File.WriteAllText(script, "$line = Read-Host\nWrite-Output \"got:$line\"\n");
         var runner = new ProcessRunner(_runsDir);
-        using var handle = runner.Start(script);
+        using var handle = await StartAsync(runner, script);
         try
         {
             Assert.True(await handle.SendInputAsync("hello-stdin"));
-            Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+            Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
             Assert.Contains(handle.ReadOutput(), line => line.Contains("got:hello-stdin"));
         }
         finally { await runner.TerminateAsync(handle); }
@@ -160,7 +163,7 @@ public sealed class ProcessRunnerTests : IDisposable
             $"[System.IO.File]::WriteAllText('{pidFile.Replace("'", "''")}', [string]$child.Id)\n" +
             "$child.WaitForExit()\n");
         var runner = new ProcessRunner(_runsDir);
-        using var handle = runner.Start(script);
+        using var handle = await StartAsync(runner, script);
         int? child = null;
         try
         {
@@ -188,12 +191,12 @@ public sealed class ProcessRunnerTests : IDisposable
         var script = WriteExecutableScript("echoer.command", "read line\necho \"got:$line\"\nexit 0\n");
         var runner = new ProcessRunner(_runsDir);
 
-        var handle = runner.Start(script);
+        var handle = await StartAsync(runner, script);
         try
         {
             Assert.True(await handle.SendInputAsync("hello-stdin"));
 
-            Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+            Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
             Assert.Contains(handle.ReadOutput(), line => line.Contains("got:hello-stdin"));
         }
         finally
@@ -209,14 +212,14 @@ public sealed class ProcessRunnerTests : IDisposable
             "ordered.command",
             "read first\nread second\nprintf '%s|%s\\n' \"$first\" \"$second\"\n");
         var runner = new ProcessRunner(_runsDir);
-        var handle = runner.Start(script);
+        var handle = await StartAsync(runner, script);
         try
         {
             var first = handle.SendInputAsync("one");
             var second = handle.SendInputAsync("two");
             Assert.All(await Task.WhenAll(first, second), Assert.True);
 
-            Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+            Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
             Assert.Contains("one|two", handle.ReadOutput());
         }
         finally
@@ -230,7 +233,7 @@ public sealed class ProcessRunnerTests : IDisposable
     {
         var script = WriteExecutableScript("no-read.command", "sleep 60\n");
         var runner = new ProcessRunner(_runsDir);
-        var handle = runner.Start(script);
+        var handle = await StartAsync(runner, script);
         try
         {
             var line = new string('x', 8 * 1024 * 1024);
@@ -251,7 +254,7 @@ public sealed class ProcessRunnerTests : IDisposable
         var script = WriteExecutableScript("sleeper.command", "echo started\nsleep 60\n");
         var runner = new ProcessRunner(_runsDir);
 
-        var handle = runner.Start(script);
+        var handle = await StartAsync(runner, script);
         try
         {
             var deadline = DateTime.UtcNow.AddSeconds(20);
@@ -266,7 +269,7 @@ public sealed class ProcessRunnerTests : IDisposable
         {
             // A failed assertion must not leave the sleeper running in a folder Dispose deletes.
             handle.Process?.Kill(entireProcessTree: true);
-            handle.WaitForExit(TimeSpan.FromSeconds(20));
+            await handle.WaitForExitAsync(TimeSpan.FromSeconds(20));
             handle.Dispose();
         }
     }
@@ -279,11 +282,11 @@ public sealed class ProcessRunnerTests : IDisposable
             _runsDir,
             TimeSpan.FromMilliseconds(50),
             _ => throw new InvalidOperationException("injected kill failure"));
-        var handle = runner.Start(script);
+        var handle = await StartAsync(runner, script);
 
         Assert.False(await runner.TerminateAsync(handle));
         Assert.True(await handle.SendInputAsync("still-owned"));
-        Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
         Assert.Equal(RunState.Exited, handle.State);
         Assert.Contains("got:still-owned", handle.ReadOutput());
     }
@@ -301,7 +304,7 @@ public sealed class ProcessRunnerTests : IDisposable
                 Assert.True(process.WaitForExit(20_000));
                 throw new InvalidOperationException("injected failure after natural exit");
             });
-        var handle = runner.Start(script);
+        var handle = await StartAsync(runner, script);
 
         Assert.False(await runner.TerminateAsync(handle));
         Assert.Equal(RunState.Exited, handle.State);
@@ -312,11 +315,11 @@ public sealed class ProcessRunnerTests : IDisposable
     {
         var script = WriteExecutableScript("kill-times-out.command", "sleep 0.3\nread line\necho got:$line\n");
         var runner = new ProcessRunner(_runsDir, TimeSpan.FromMilliseconds(20), _ => { });
-        var handle = runner.Start(script);
+        var handle = await StartAsync(runner, script);
 
         Assert.False(await runner.TerminateAsync(handle));
         Assert.True(await handle.SendInputAsync("after-timeout"));
-        Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
         Assert.Equal(RunState.Exited, handle.State);
         Assert.Contains("got:after-timeout", handle.ReadOutput());
     }
@@ -326,7 +329,7 @@ public sealed class ProcessRunnerTests : IDisposable
     {
         var script = WriteExecutableScript("sleeper.command", "echo started\nsleep 60\n");
         var runner = new ProcessRunner(_runsDir);
-        var first = runner.Start(script);
+        var first = await StartAsync(runner, script);
 
         // Wait until the first run is genuinely live before restarting it.
         var deadline = DateTime.UtcNow.AddSeconds(20);
@@ -354,10 +357,10 @@ public sealed class ProcessRunnerTests : IDisposable
     {
         var script = WriteExecutableScript("once.command", "exit 0\n");
         var runner = new ProcessRunner(_runsDir);
-        var first = runner.Start(script);
-        Assert.True(first.WaitForExit(TimeSpan.FromSeconds(20)));
+        var first = await StartAsync(runner, script);
+        Assert.True(await first.WaitForExitAsync(TimeSpan.FromSeconds(20)));
 
-        var second = runner.Start(script);
+        var second = await StartAsync(runner, script);
         try
         {
             Assert.DoesNotContain(first, runner.Active);
@@ -443,7 +446,7 @@ public sealed class ProcessRunnerTests : IDisposable
             "grandparent.command",
             $"bash -c 'sleep 300 & echo $! > \"$1\"; wait' _ '{pidFile}' &\nwait\n");
         var runner = new ProcessRunner(_runsDir);
-        var handle = runner.Start(script);
+        var handle = await StartAsync(runner, script);
         var grandchild = ReadPid(pidFile);
         try
         {
@@ -470,8 +473,8 @@ public sealed class ProcessRunnerTests : IDisposable
         var ended = new List<ScriptProcess>();
         runner.RunEnded += (_, process) => { lock (ended) ended.Add(process); };
 
-        var a = runner.Start(first);
-        var b = runner.Start(second);
+        var a = await StartAsync(runner, first);
+        var b = await StartAsync(runner, second);
         var children = new[] { ReadPid(firstPidFile), ReadPid(secondPidFile) };
         try
         {
@@ -496,7 +499,7 @@ public sealed class ProcessRunnerTests : IDisposable
         var script = WriteExecutableScript("survivor.command", "echo started\nsleep 60\n");
         var grace = TimeSpan.FromMilliseconds(300);
         var runner = new ProcessRunner(_runsDir, grace, _ => { /* a kill that never ends the process */ });
-        var handle = runner.Start(script);
+        var handle = await StartAsync(runner, script);
         try
         {
             var watch = Stopwatch.StartNew();
@@ -510,12 +513,12 @@ public sealed class ProcessRunnerTests : IDisposable
         finally
         {
             handle.Process?.Kill(entireProcessTree: true);
-            handle.WaitForExit(TimeSpan.FromSeconds(20));
+            await handle.WaitForExitAsync(TimeSpan.FromSeconds(20));
         }
     }
 
     [MacOnlyFact]
-    public void RunEnded_IsRaisedOnceWhenARunEnds()
+    public async Task RunEnded_IsRaisedOnceWhenARunEnds()
     {
         var script = WriteExecutableScript("ends.command", "exit 3\n");
         var runner = new ProcessRunner(_runsDir);
@@ -523,8 +526,8 @@ public sealed class ProcessRunnerTests : IDisposable
         using var raised = new ManualResetEventSlim();
         runner.RunEnded += (_, process) => { lock (ended) ended.Add(process); raised.Set(); };
 
-        var handle = runner.Start(script);
-        Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+        var handle = await StartAsync(runner, script);
+        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
         // RunEnded may be raised on the process's exit thread, after the wait has returned.
         Assert.True(raised.Wait(TimeSpan.FromSeconds(20)));
         handle.Complete();
@@ -606,8 +609,8 @@ public sealed class ProcessRunnerTests : IDisposable
         var script = WriteExecutableScript("brief.command", "echo brief\nexit 0\n");
         var runner = new ProcessRunner(_runsDir);
         var records = new FakeRecordStore();
-        var handle = runner.Start(script);
-        Assert.True(handle.WaitForExit(TimeSpan.FromSeconds(20)));
+        var handle = await StartAsync(runner, script);
+        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
         records.Runs.Add(RunRecord.For(records.Session, handle));
         File.SetLastWriteTimeUtc(handle.LogFilePath!, DateTime.UtcNow - ProcessRunner.OutputQuietPeriod - TimeSpan.FromMinutes(1));
 

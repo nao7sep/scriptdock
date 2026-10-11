@@ -100,7 +100,9 @@ public sealed class ScriptProcess : IDisposable
         if (length == _outputCacheLength)
             return _outputCache;
 
-        _outputCache = RunLog.ReadTail(LogFilePath);
+        if (!RunLog.TryReadTail(LogFilePath, out var lines))
+            return Array.Empty<string>();
+        _outputCache = lines;
         _outputCacheLength = length;
         return _outputCache;
     }
@@ -144,22 +146,6 @@ public sealed class ScriptProcess : IDisposable
         }
 
         return false;
-    }
-
-    /// <summary>Blocks until the process exits or the timeout elapses; returns whether it
-    /// exited. On exit, the state is finalised. For UI-thread callers prefer
-    /// <see cref="WaitForExitAsync"/>, which does not block.</summary>
-    public bool WaitForExit(TimeSpan timeout)
-    {
-        var process = Process;
-        if (process is null)
-            return true;
-
-        if (!process.WaitForExit((int)timeout.TotalMilliseconds))
-            return false;
-
-        Complete();
-        return true;
     }
 
     /// <summary>Asynchronously waits until the process exits or the timeout elapses; returns whether

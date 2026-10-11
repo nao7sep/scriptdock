@@ -46,10 +46,10 @@ public sealed class FakeProcessRunner : IProcessRunner
         return process;
     }
 
-    /// <summary>When set, <see cref="Start"/> throws it: a launch that fails before any run exists.</summary>
+    /// <summary>When set, <see cref="StartAsync"/> throws it: a launch that fails before any run exists.</summary>
     public Exception? StartException { get; set; }
 
-    public ScriptProcess Start(string scriptPath)
+    private ScriptProcess Start(string scriptPath)
     {
         StartCalls.Add(scriptPath);
         if (StartException is not null)

@@ -33,42 +33,51 @@ public static class RunLog
     /// with ANSI escapes removed. A leading partial line (from cutting mid-file) is dropped.
     /// Returns empty if the file does not exist yet or cannot be read.
     /// </summary>
-    public static IReadOnlyList<string> ReadTail(string path, int maxBytes = DefaultTailBytes)
-    {
-        if (!File.Exists(path))
-            return Array.Empty<string>();
+    public static IReadOnlyList<string> ReadTail(string path, int maxBytes = DefaultTailBytes) =>
+        TryReadTail(path, out var lines, maxBytes) ? lines : Array.Empty<string>();
 
+    internal static bool TryReadTail(string path, out IReadOnlyList<string> lines, int maxBytes = DefaultTailBytes)
+    {
+        lines = Array.Empty<string>();
         try
         {
-            using var stream = new FileStream(
-                path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-
-            var trimmed = stream.Length > maxBytes;
-            if (trimmed)
-                stream.Seek(-maxBytes, SeekOrigin.End);
-
-            using var reader = new StreamReader(stream, Encoding.UTF8);
-            var lines = Lines(reader.ReadToEnd());
-
-            // When we cut into the middle of the file, the first line is a fragment.
-            if (trimmed && lines.Count > 0)
-                lines.RemoveAt(0);
-
-            // A trailing empty element from the final newline is noise.
-            if (lines.Count > 0 && lines[^1].Length == 0)
-                lines.RemoveAt(lines.Count - 1);
-
-            return lines;
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            lines = ReadTail(stream, maxBytes);
+            return true;
         }
         catch (Exception)
         {
-            // "Cannot be read" covers more than IOException: a permission-denied or otherwise
-            // unopenable log throws UnauthorizedAccessException/SecurityException, and a malformed
-            // path throws ArgumentException/NotSupportedException. The console poll calls this every
-            // tick, so any of these must degrade to empty here rather than escaping and flooding the
-            // log with a warn on every tick.
-            return Array.Empty<string>();
+            // Polling must tolerate missing, unreadable and malformed paths without logging every tick.
+            // Failure is distinct from an empty log so the caller can retry without a length change.
+            return false;
         }
+    }
+
+    internal static IReadOnlyList<string> ReadTail(Stream stream, int maxBytes)
+    {
+        if (maxBytes <= 0)
+            return Array.Empty<string>();
+        var length = stream.Length;
+        var count = (int)Math.Min(length, maxBytes);
+        var trimmed = length > count;
+        stream.Seek(length - count, SeekOrigin.Begin);
+        var bytes = new byte[count];
+        var read = 0;
+        while (read < count)
+        {
+            var received = stream.Read(bytes, read, count - read);
+            if (received == 0) break;
+            read += received;
+        }
+        // Decode only the captured extent. An actively writing child cannot extend this read forever.
+        using var snapshot = new MemoryStream(bytes, 0, read);
+        using var reader = new StreamReader(snapshot, Encoding.UTF8);
+        var lines = Lines(reader.ReadToEnd());
+        if (trimmed && lines.Count > 0)
+            lines.RemoveAt(0);
+        if (lines.Count > 0 && lines[^1].Length == 0)
+            lines.RemoveAt(lines.Count - 1);
+        return lines;
     }
 
     /// <summary>

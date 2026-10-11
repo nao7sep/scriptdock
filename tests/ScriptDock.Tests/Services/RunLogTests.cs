@@ -65,6 +65,56 @@ public sealed class RunLogTests : IDisposable
     }
 
     [Fact]
+    public void TailReadDoesNotFollowBytesAppendedAfterItsSnapshot()
+    {
+        File.WriteAllText(_file, "old\nlast\n");
+        using var stream = new AppendOnReadStream(_file);
+        Assert.Equal(["last"], RunLog.ReadTail(stream, 6));
+        Assert.True(new FileInfo(_file).Length > 6);
+    }
+
+    [MacOnlyFact]
+    public void OutputRetriesAnUnreadableFileWithoutWaitingForItToGrow()
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+        File.WriteAllText(_file, "visible\n");
+        using var process = new ScriptProcess(1, _file, default) { LogFilePath = _file };
+        var mode = File.GetUnixFileMode(_file);
+        try
+        {
+            File.SetUnixFileMode(_file, UnixFileMode.None);
+            Assert.Empty(process.ReadOutput());
+        }
+        finally { File.SetUnixFileMode(_file, mode); }
+        Assert.Equal(["visible"], process.ReadOutput());
+    }
+
+    private sealed class AppendOnReadStream(string path) : Stream
+    {
+        private readonly FileStream _file = new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        private bool _appended;
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            if (!_appended)
+            {
+                _appended = true;
+                File.AppendAllText(path, new string('x', 10000) + "\nnew\n");
+            }
+            return _file.Read(buffer, offset, count);
+        }
+        public override bool CanRead => true;
+        public override bool CanSeek => true;
+        public override bool CanWrite => false;
+        public override long Length => _file.Length;
+        public override long Position { get => _file.Position; set => _file.Position = value; }
+        public override long Seek(long offset, SeekOrigin origin) => _file.Seek(offset, origin);
+        public override void Flush() => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        protected override void Dispose(bool disposing) { if (disposing) _file.Dispose(); base.Dispose(disposing); }
+    }
+
+    [Fact]
     public void ReadTail_CollapsesCarriageReturnProgressUpdates()
     {
         File.WriteAllText(_file, "Building 1\rBuilding 2\rBuilding 3\n");

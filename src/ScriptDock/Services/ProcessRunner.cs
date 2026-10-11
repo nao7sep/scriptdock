@@ -68,9 +68,6 @@ public sealed class ProcessRunner : IProcessRunner
         get { lock (_gate) return _processes.ToList(); }
     }
 
-    public ScriptProcess Start(string scriptPath) => StartAsync(scriptPath).GetAwaiter().GetResult()
-        ?? throw new InvalidOperationException("The script is already busy or ScriptDock is stopping.");
-
     public void SealLaunches()
     {
         lock (_gate)
@@ -79,7 +76,7 @@ public sealed class ProcessRunner : IProcessRunner
 
     public async Task<ScriptProcess?> StartAsync(string scriptPath)
     {
-        var key = PathIdentity.Key(scriptPath);
+        var key = await Task.Run(() => PathIdentity.Key(scriptPath)).ConfigureAwait(false);
         lock (_gate)
         {
             if (_launchesSealed || _processes.Any(p => PathIdentity.Comparer.Equals(p.ScriptKey, key) && p.State == RunState.Running)
