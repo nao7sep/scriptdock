@@ -55,11 +55,12 @@ public static class BackupStore
 
     private static readonly object Gate = new();
 
-    // The owner thread's queue. Null until the first recording, and again after Shutdown, so a later
-    // recording (tests use throwaway roots) starts a fresh owner against the current storage root.
+    // Keep the draining owner after a bounded shutdown. A late primary write must not reopen a second
+    // history owner and race the session's last version; only test Close resets after actual settlement.
     private static BlockingCollection<Action<Connection>>? _queue;
     private static Thread? _owner;
     private static bool _abandoned;
+    private static bool _closed;
 
     // One owner's connection, opened on its first recording. Null after that open means the store is off
     // for the session; one warning was logged.
@@ -104,10 +105,9 @@ public static class BackupStore
         Thread? owner;
         lock (Gate)
         {
+            _closed = true;
             owner = _owner;
             _queue?.CompleteAdding();
-            _queue = null;
-            _owner = null;
         }
 
         if (owner is not null && !owner.Join(bound))
@@ -127,7 +127,13 @@ public static class BackupStore
     {
         Shutdown(Timeout.InfiniteTimeSpan);
         lock (Gate)
+        {
+            _queue?.Dispose();
+            _queue = null;
+            _owner = null;
             _abandoned = false;
+            _closed = false;
+        }
     }
 
     // False when the session is ending and the work was skipped.
@@ -135,7 +141,7 @@ public static class BackupStore
     {
         lock (Gate)
         {
-            if (_abandoned)
+            if (_abandoned || _closed)
                 return false;
             if (_queue is null)
             {

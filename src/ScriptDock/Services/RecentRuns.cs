@@ -20,12 +20,14 @@ public static class RecentRuns
     public static List<RecentRun> From(
         IEnumerable<RecentRun> runs,
         IEnumerable<(string Path, DateTimeOffset At)> dismissals,
-        int max = DefaultMax)
+        int max = DefaultMax,
+        Func<string, string>? pathKey = null)
     {
+        pathKey ??= PathIdentity.Key;
         var dismissedAt = new Dictionary<string, DateTimeOffset>(PathIdentity.Comparer);
         foreach (var (path, at) in dismissals)
         {
-            var key = PathIdentity.Key(path);
+            var key = pathKey(path);
             if (!dismissedAt.TryGetValue(key, out var latest) || at > latest)
                 dismissedAt[key] = at;
         }
@@ -33,7 +35,7 @@ public static class RecentRuns
         var latestRun = new Dictionary<string, RecentRun>(PathIdentity.Comparer);
         foreach (var run in runs)
         {
-            var key = PathIdentity.Key(run.Path);
+            var key = pathKey(run.Path);
             if (!latestRun.TryGetValue(key, out var latest) || run.RanAt > latest.RanAt)
                 latestRun[key] = run;
         }

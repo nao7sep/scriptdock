@@ -209,11 +209,19 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
         }, () => RecordLine("dismissal", new { time, script = scriptPath }));
     }
 
-    public Task<IReadOnlyList<RecentRun>> ReadRecentAsync() =>
-        Read<IReadOnlyList<RecentRun>>(connection =>
-            RecentRuns.From(
-                LatestRuns(connection),
-                LatestByScript(connection, "SELECT script, MAX(time) FROM dismissals GROUP BY script")));
+    public Task<IReadOnlyList<RecentRun>> ReadRecentAsync() => ReadRecentAsync(PathIdentity.Key);
+
+    internal async Task<IReadOnlyList<RecentRun>> ReadRecentAsync(Func<string, string> pathKey)
+    {
+        // Materialize database inputs on their owner; physical identity resolution can wait on an
+        // unavailable script volume and must not occupy the records writer or its read barriers.
+        var snapshot = await Read(connection => (
+            Runs: LatestRuns(connection),
+            Dismissals: LatestByScript(connection, "SELECT script, MAX(time) FROM dismissals GROUP BY script")))
+            .ConfigureAwait(false);
+        return await Task.Run(() => RecentRuns.From(snapshot.Runs, snapshot.Dismissals, pathKey: pathKey))
+            .ConfigureAwait(false);
+    }
 
     public void AddScanReport(ScanReport report)
     {

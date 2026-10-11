@@ -1,8 +1,11 @@
 using System;
+using System.Linq.Expressions;
+using System.Reflection;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Threading;
 using Microsoft.Data.Sqlite;
 using ScriptDock;
 using ScriptDock.Models;
@@ -80,6 +83,39 @@ public sealed class BackupStoreTests : IDisposable
         }
 
         return rows;
+    }
+
+    [Fact]
+    public void BoundedShutdownRejectsLateRecordsWhileItsOwnerIsStillDraining()
+    {
+        var path = Path.Combine(_root, "config.json");
+        BackupStore.Record(path, [1]);
+        BackupStore.Flush();
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var post = typeof(BackupStore).GetMethod("Post", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var parameter = Expression.Parameter(post.GetParameters()[0].ParameterType.GenericTypeArguments[0]);
+        Action hold = () => { entered.Set(); release.Wait(); };
+        var held = Expression.Lambda(post.GetParameters()[0].ParameterType,
+            Expression.Invoke(Expression.Constant(hold)), parameter).Compile();
+        post.Invoke(null, [held]);
+        var owner = (Thread)typeof(BackupStore).GetField("_owner", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+        try
+        {
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+            BackupStore.Record(path, [2]);
+            BackupStore.Shutdown(TimeSpan.Zero);
+            BackupStore.Record(path, [3]);
+            BackupStore.Flush(); // The original second owner must publish before the assertion.
+            Assert.Equal(new byte[] { 1 }, Assert.Single(RowsFor(path)).Content);
+        }
+        finally
+        {
+            release.Set();
+            owner.Join();
+            BackupStore.Close();
+        }
+        Assert.Equal(new byte[] { 2 }, Assert.Single(RowsFor(path)).Content);
     }
 
     [Fact]

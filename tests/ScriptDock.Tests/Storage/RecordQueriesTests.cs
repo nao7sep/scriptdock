@@ -55,22 +55,44 @@ public sealed class RecordQueriesTests : IDisposable
     };
 
     // A log line, a warning, a failed run, a run that exited cleanly, each with its output, and a scan.
-    private async Task<RecordStore> Seeded()
+    private async Task<RecordStore> Seeded(Action<RecordStore>? opened = null)
     {
         var records = new RecordStore(_dir, SessionStart);
-        Log(records, At(1), "info", "startup");
-        Log(records, At(2), "warn", "run: terminate failed", ",\"id\":3");
-        records.AddScanReport(Report(3, "/code/a/dev.command", "/code/b/build.command"));
-        await records.AddRunAsync(Run(4, "/code/a/dev.command"));
-        await records.AddRunEndAsync(new RunEnd(Session, 4, SessionStart.AddMinutes(5), "exited", 3));
-        await records.AddRunOutputAsync(Run(4, "/code/a/dev.command"), Encoding.UTF8.GetBytes("listening on 100% of ports\n"));
-        await records.AddRunAsync(Run(6, "/code/b/build.command"));
-        await records.AddRunEndAsync(new RunEnd(Session, 6, SessionStart.AddMinutes(7), "exited", 0));
-        await records.AddRunOutputAsync(Run(6, "/code/b/build.command"), Encoding.UTF8.GetBytes("built\n"));
-        return records;
+        try
+        {
+            opened?.Invoke(records);
+            Log(records, At(1), "info", "startup");
+            Log(records, At(2), "warn", "run: terminate failed", ",\"id\":3");
+            records.AddScanReport(Report(3, "/code/a/dev.command", "/code/b/build.command"));
+            await records.AddRunAsync(Run(4, "/code/a/dev.command"));
+            await records.AddRunEndAsync(new RunEnd(Session, 4, SessionStart.AddMinutes(5), "exited", 3));
+            await records.AddRunOutputAsync(Run(4, "/code/a/dev.command"), Encoding.UTF8.GetBytes("listening on 100% of ports\n"));
+            await records.AddRunAsync(Run(6, "/code/b/build.command"));
+            await records.AddRunEndAsync(new RunEnd(Session, 6, SessionStart.AddMinutes(7), "exited", 0));
+            await records.AddRunOutputAsync(Run(6, "/code/b/build.command"), Encoding.UTF8.GetBytes("built\n"));
+            return records;
+        }
+        catch
+        {
+            records.Dispose();
+            throw;
+        }
     }
 
     private static Task<RecordsPage> Page(RecordStore records, RecordsQuery query) => records.ReadRecordsPageAsync(query);
+
+    [Fact]
+    public async Task FailedSeedingClosesTheRecordsOwnerBeforeReturningTheFailure()
+    {
+        Directory.CreateDirectory(_dir);
+        Directory.CreateDirectory(Path.Combine(_dir, "records.sqlite3"));
+        RecordStore? opened = null;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Seeded(records => opened = records));
+        Assert.True(opened!.DatabaseUnavailable);
+        var owner = (Thread)typeof(RecordStore).GetField("_owner", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(opened)!;
+        try { Assert.False(owner.IsAlive); }
+        finally { opened.Dispose(); }
+    }
 
     [Fact]
     public async Task DetailReadsOnlyThePreviewWhileSearchStillReadsTheWholeStoredOutput()
@@ -332,6 +354,40 @@ public sealed class RecordQueriesTests : IDisposable
 
         Assert.Equal(Session, sources.CurrentSession);
         Assert.Equal([Session, "2026-10-01T09:00:00.000Z", "2026-10-01T03:00:00.000Z"], sources.Sessions);
+    }
+
+    [Fact]
+    public async Task HeldRecentIdentityResolutionDoesNotHoldRecordsWritesOrReadBarriers()
+    {
+        using var records = await Seeded();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        var recent = records.ReadRecentAsync(path =>
+        {
+            entered.TrySetResult();
+            release.Wait();
+            return path;
+        });
+        Task? write = null;
+        Task<RecordsPage>? page = null;
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            write = records.AddRunEndAsync(new RunEnd(Session, 6, SessionStart.AddHours(1), "exited", 2));
+            Log(records, At(8), "info", "written while path resolution is held");
+            page = Page(records, RecordsQuery.All);
+            await write.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            var rows = await page.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.Contains(rows.Records, row => row.Title == "written while path resolution is held");
+            Assert.False(recent.IsCompleted);
+        }
+        finally
+        {
+            release.Set();
+            await recent;
+            if (write is not null) await write;
+            if (page is not null) await page;
+        }
     }
 
     [Fact]
