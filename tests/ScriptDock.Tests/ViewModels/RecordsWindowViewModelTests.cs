@@ -451,7 +451,7 @@ public sealed class RecordsWindowViewModelTests
         Advance(RecordsWindowViewModel.LiveInterval);
 
         Assert.Equal(2, _reader.PageQueries.Count);
-        Assert.Equal(RecordsQuery.All, _reader.LastQuery);
+        Assert.Equal(RecordsQuery.All with { Through = CursorOf(Warning) }, _reader.LastQuery);
         Assert.Equal(2, _reader.SourceReads);
         Assert.Equal(2, vm.Rows.Count);
         Assert.False(vm.ShowLoadingNote);
@@ -459,6 +459,107 @@ public sealed class RecordsWindowViewModelTests
         next.SetResult(new RecordsPage([Newer, Failed, Warning], false));
         Pump();
         Assert.Equal(["app.later", "/repo/dev.command", "run: terminate failed"], Titles(vm));
+    }
+
+    [AvaloniaFact]
+    public void LiveRefreshRemovesRowsThatNoLongerMatchAndKeepsTheLoadedFloor()
+    {
+        var vm = Started();
+        _reader.Next(new RecordsPage([], true));
+        _reader.RaiseStored();
+        Pump();
+        Advance(RecordsWindowViewModel.LiveInterval);
+        Assert.Empty(vm.Rows);
+        _reader.Next(new RecordsPage([Newer], true));
+        _reader.RaiseStored();
+        Pump();
+        Advance(RecordsWindowViewModel.LiveInterval);
+        Assert.Equal(CursorOf(Warning), _reader.LastQuery.Through);
+        Assert.Equal(["app.later"], Titles(vm));
+    }
+
+    [AvaloniaFact]
+    public void LiveRefreshCannotDiscardAMorePageAdmittedWhileItWasReading()
+    {
+        _reader.Next(new RecordsPage([Failed, Warning], true));
+        var vm = Started();
+        var live = new TaskCompletionSource<RecordsPage>();
+        _reader.Next(live.Task);
+        var more = new TaskCompletionSource<RecordsPage>();
+        _reader.Next(more.Task);
+        _reader.RaiseStored();
+        Pump();
+        Advance(RecordsWindowViewModel.LiveInterval);
+        vm.LoadMore();
+        Pump();
+        Assert.Equal(2, _reader.PageQueries.Count);
+        live.SetResult(new RecordsPage([Newer, Failed, Warning], true));
+        Pump();
+        Assert.Equal(CursorOf(Warning), _reader.LastQuery.After);
+        Assert.True(vm.LoadingMore);
+        more.SetResult(new RecordsPage([Scan], false));
+        Pump();
+        Assert.False(vm.LoadingMore);
+        Assert.Equal(["app.later", "/repo/dev.command", "run: terminate failed", ""], Titles(vm));
+    }
+
+    [AvaloniaFact]
+    public void ScrollingAwayDuringALiveReadDefersItsReplacementUntilReturning()
+    {
+        var vm = Started();
+        var live = new TaskCompletionSource<RecordsPage>();
+        _reader.Next(live.Task);
+        _reader.RaiseStored();
+        Pump();
+        Advance(RecordsWindowViewModel.LiveInterval);
+        vm.ListScrolled(atTop: false, nearEnd: false);
+        live.SetResult(new RecordsPage([Newer], false));
+        Pump();
+        Assert.Equal(2, vm.Rows.Count);
+        _reader.Next(new RecordsPage([Newer, Failed, Warning], false));
+        vm.ListScrolled(atTop: true, nearEnd: false);
+        Pump();
+        Assert.Equal(3, vm.Rows.Count);
+    }
+
+    [AvaloniaFact]
+    public void LiveSignalsDuringMoreCoalesceAndRefreshTheExpandedRange()
+    {
+        _reader.Next(new RecordsPage([Failed, Warning], true));
+        var vm = Started();
+        var more = new TaskCompletionSource<RecordsPage>();
+        _reader.Next(more.Task);
+        vm.LoadMore();
+        _reader.RaiseStored();
+        Pump();
+        Advance(RecordsWindowViewModel.LiveInterval);
+        _reader.RaiseStored();
+        Pump();
+        Advance(RecordsWindowViewModel.LiveInterval);
+        Assert.Equal(2, _reader.PageQueries.Count);
+        _reader.Next(new RecordsPage([Newer, Failed, Warning, Scan], false));
+        more.SetResult(new RecordsPage([Scan], false));
+        Pump();
+        Assert.Equal(3, _reader.PageQueries.Count);
+        Assert.Equal(CursorOf(Scan), _reader.LastQuery.Through);
+        Assert.Equal(4, vm.Rows.Count);
+    }
+
+    [AvaloniaFact]
+    public void InitialReadSettlesBeforeAnOverlappingLiveSignalRefreshesIt()
+    {
+        var initial = new TaskCompletionSource<RecordsPage>();
+        _reader.Next(initial.Task);
+        var vm = Started();
+        _reader.RaiseStored();
+        Pump();
+        Advance(RecordsWindowViewModel.LiveInterval);
+        Assert.Single(_reader.PageQueries);
+        _reader.Next(new RecordsPage([Newer, Failed, Warning], false));
+        initial.SetResult(new RecordsPage([Failed, Warning], false));
+        Pump();
+        Assert.Equal(3, vm.Rows.Count);
+        Assert.Equal(CursorOf(Warning), _reader.LastQuery.Through);
     }
 
     [AvaloniaFact]

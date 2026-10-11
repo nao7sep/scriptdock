@@ -35,12 +35,12 @@ public static class RecordFormat
 
     /// <summary>The most of a run's stored output the detail pane renders, so a very large output does not
     /// stall it. The stored output is never cut, and search reads all of it.</summary>
-    public const int OutputShownBytes = 1024 * 1024;
+    public const int OutputShownBytes = RunRecordDetail.PreviewBytes;
 
     /// <summary>A run's stored output as its console shows it (<see cref="RunLog.Lines"/>), at most its first
     /// <paramref name="limit"/> bytes, cut at a character boundary, with how many stored bytes it leaves
     /// out; null when there is none or all of it is only whitespace.</summary>
-    public static OutputPreview? Output(byte[]? output, int limit = OutputShownBytes)
+    public static OutputPreview? Output(byte[]? output, int limit = OutputShownBytes, long? totalBytes = null)
     {
         if (output is null)
             return null;
@@ -51,7 +51,7 @@ public static class RecordFormat
             cut--;
 
         var text = string.Join("\n", RunLog.Lines(Encoding.UTF8.GetString(output, 0, cut))).TrimEnd('\n');
-        var more = output.Length - cut;
+        var more = (totalBytes ?? output.LongLength) - cut;
         return string.IsNullOrWhiteSpace(text) && more == 0 ? null : new OutputPreview(text, more);
     }
 

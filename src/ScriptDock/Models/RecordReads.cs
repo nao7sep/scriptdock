@@ -64,7 +64,8 @@ public sealed record RecordsQuery(
     RecordKind? Kind,
     RecordLevelFilter? Level,
     string Search,
-    RecordCursor? After)
+    RecordCursor? After,
+    RecordCursor? Through = null)
 {
     public static readonly RecordsQuery All = new(null, null, null, string.Empty, null);
 }
@@ -90,7 +91,7 @@ public sealed record RecordSummary(
 
 public sealed record RecordsPage(System.Collections.Generic.IReadOnlyList<RecordSummary> Records, bool More);
 
-/// <summary>One record whole, every field as stored. Times are the stored ISO text.</summary>
+/// <summary>One record's stored fields; run output is a bounded prefix with its total length. Times are stored ISO text.</summary>
 public abstract record RecordDetail(RecordKind Kind, long Id, string Session, string Time, LogLevel Level);
 
 /// <summary>A log line: its envelope and the whole event as the logger wrote it.</summary>
@@ -98,7 +99,7 @@ public sealed record LogRecordDetail(long Id, string Session, string Time, LogLe
     : RecordDetail(RecordKind.Log, Id, Session, Time, Level);
 
 /// <summary>
-/// A run with its latest recorded end and its imported output, each null until there is one. <c>Time</c>
+/// A run with its latest recorded end and a bounded prefix of its imported output, each null until there is one. <c>Time</c>
 /// is when the run started; <paramref name="ImportedAt"/> is when its output was imported.
 /// </summary>
 public sealed record RunRecordDetail(
@@ -115,9 +116,12 @@ public sealed record RunRecordDetail(
     string? EndState,
     int? ExitCode,
     string? ImportedAt,
-    byte[]? Output)
+    byte[]? Output,
+    long? OutputLength = null)
     : RecordDetail(RecordKind.Run, Id, Session, Time, Level)
 {
+    public const int PreviewBytes = 1024 * 1024;
+
     /// <summary>Has both its end and its output, so nothing more will be recorded for it.</summary>
     public bool Settled => EndState is not null && Output is not null;
 

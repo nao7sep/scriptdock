@@ -33,6 +33,8 @@ internal static class RecordQueries
 
     public static RecordsPage ReadPage(SqliteConnection connection, RecordsQuery query)
     {
+        if (query.After is not null && query.Through is not null)
+            throw new System.ArgumentException("A Records read cannot both page after and refresh through a cursor.", nameof(query));
         using var command = connection.CreateCommand();
         var parts = new List<string>();
         var search = LikePattern(query.Search);
@@ -93,15 +95,35 @@ internal static class RecordQueries
             command.Parameters.AddWithValue("$afterId", cursor.Id);
         }
 
-        command.Parameters.AddWithValue("$limit", PageSize + 1);
-        command.CommandText =
-            $"SELECT kind, id, session, time, level, title, text, found FROM ({string.Join(" UNION ALL ", parts)}) {after} " +
-            "ORDER BY time DESC, kind DESC, id DESC LIMIT $limit";
+        var filtered = string.Join(" UNION ALL ", parts);
+        if (query.Through is { } through)
+        {
+            command.Parameters.AddWithValue("$throughTime", through.Time);
+            command.Parameters.AddWithValue("$throughKind", RecordKinds.Name(through.Kind));
+            command.Parameters.AddWithValue("$throughId", through.Id);
+            // Refresh the entire already-loaded interval and one existence sentinel below it. This
+            // makes membership and More one snapshot without sorting/materializing all older history.
+            command.CommandText = $"WITH filtered AS NOT MATERIALIZED ({filtered}) " +
+                "SELECT kind, id, session, time, level, title, text, found, 0 AS older FROM filtered " +
+                "WHERE (time, kind, id) >= ($throughTime, $throughKind, $throughId) UNION ALL " +
+                "SELECT kind, id, session, time, level, title, text, found, 1 AS older FROM " +
+                "(SELECT * FROM filtered WHERE (time, kind, id) < ($throughTime, $throughKind, $throughId) LIMIT 1) " +
+                "ORDER BY time DESC, kind DESC, id DESC";
+        }
+        else
+        {
+            command.Parameters.AddWithValue("$limit", PageSize + 1);
+            command.CommandText =
+                $"SELECT kind, id, session, time, level, title, text, found, 0 AS older FROM ({filtered}) {after} " +
+                "ORDER BY time DESC, kind DESC, id DESC LIMIT $limit";
+        }
 
         var records = new List<RecordSummary>();
+        var more = false;
         using var reader = command.ExecuteReader();
         while (reader.Read())
         {
+            if (reader.GetInt32(8) != 0) { more = true; continue; }
             records.Add(new RecordSummary(
                 RecordKinds.Parse(reader.GetString(0)),
                 reader.GetInt64(1),
@@ -113,9 +135,11 @@ internal static class RecordQueries
                 reader.IsDBNull(7) ? null : reader.GetInt32(7)));
         }
 
-        var more = records.Count > PageSize;
-        if (more)
+        if (query.Through is null && records.Count > PageSize)
+        {
+            more = true;
             records.RemoveAt(records.Count - 1);
+        }
         return new RecordsPage(records, more);
     }
 
@@ -139,9 +163,10 @@ internal static class RecordQueries
             {
                 command.CommandText =
                     $"SELECT r.id, r.session, r.time, {RunLevel}, r.run, r.script, r.pid, r.os_started_at, r.output_path, " +
-                    $"e.time, e.state, e.exit_code, o.time, o.output FROM {RunsWithOutput} " +
+                    $"e.time, e.state, e.exit_code, o.time, substr(o.output, 1, $previewBytes), length(o.output) FROM {RunsWithOutput} " +
                     "LEFT JOIN run_ends e ON e.id = (SELECT id FROM run_ends WHERE run_session = r.session AND run = r.run " +
                     "ORDER BY time DESC, id DESC LIMIT 1) WHERE r.id = $id";
+                command.Parameters.AddWithValue("$previewBytes", RunRecordDetail.PreviewBytes + 1);
                 using var reader = command.ExecuteReader();
                 if (!reader.Read())
                     return null;
@@ -159,7 +184,8 @@ internal static class RecordQueries
                     TextOrNull(reader, 10),
                     reader.IsDBNull(11) ? null : reader.GetInt32(11),
                     TextOrNull(reader, 12),
-                    reader.IsDBNull(13) ? null : (byte[])reader.GetValue(13));
+                    reader.IsDBNull(13) ? null : (byte[])reader.GetValue(13),
+                    reader.IsDBNull(14) ? null : reader.GetInt64(14));
             }
 
             case RecordKind.ScanReport:

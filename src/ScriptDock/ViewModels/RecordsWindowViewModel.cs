@@ -53,6 +53,8 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     private bool _more;
     // The busy claim for the next page, taken before the read starts.
     private bool _fetchingMore;
+    private RecordCursor? _loadedThrough;
+    private Task? _refreshing;
     // New records arrived while the list was scrolled away from its top.
     private bool _newestPending;
     // A failed read is itself logged as a record, whose signal would start the next read; live reads stop
@@ -297,6 +299,8 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         var generation = ++_generation;
         var query = _filters;
         _fetchingMore = false;
+        _loadedThrough = null;
+        _refreshing = null;
         _newestPending = false;
         _more = false;
         LoadingMore = false;
@@ -322,16 +326,31 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
             return;
         _liveSuspended = false;
         SyncRows(page.Records);
+        _loadedThrough = RecordsPaging.CursorAfter(page.Records);
         _more = page.More;
         ListStatus = RecordsListStatus.Ready;
+        if (_newestPending && _atTop)
+            _ = ReadNewestAsync();
     }
 
-    // The newest page read again for new records. It joins the rows already shown rather than replacing
-    // them, so the list never falls back to its loading note and the pages already read stay.
-    private async Task ReadNewestAsync()
+    private Task ReadNewestAsync()
+    {
+        if (_disposed) return Task.CompletedTask;
+        if (ListStatus == RecordsListStatus.Loading || _fetchingMore || _refreshing is { IsCompleted: false })
+        {
+            _newestPending = true;
+            return Task.CompletedTask;
+        }
+        _newestPending = false;
+        return _refreshing = RefreshLoadedAsync();
+    }
+
+    // The loaded interval is authoritative: runs can leave a level filter after ending or enter a
+    // search after output is imported. Keep the floor even if every visible row stops matching.
+    private async Task RefreshLoadedAsync()
     {
         var generation = _generation;
-        var query = _filters;
+        var query = _filters with { Through = _loadedThrough };
         RecordsPage page;
         try
         {
@@ -344,22 +363,21 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        if (generation != _generation)
+        if (generation != _generation || _disposed)
             return;
-        _liveSuspended = false;
-        if (ListStatus == RecordsListStatus.Ready)
+        if (!_atTop)
         {
-            var (records, more) = RecordsPaging.MergeNewestPage(Summaries(), _more, page);
-            SyncRows(records);
-            _more = more;
+            _newestPending = true;
             return;
         }
-
+        _liveSuspended = false;
         SyncRows(page.Records);
+        _loadedThrough ??= RecordsPaging.CursorAfter(page.Records);
         _more = page.More;
-        LoadingMore = false;
-        MoreFailed = false;
         ListStatus = RecordsListStatus.Ready;
+        // Defer a coalesced successor until this refresh's task has settled.
+        if (_newestPending && !_fetchingMore)
+            Dispatcher.UIThread.Post(() => { if (generation == _generation && _atTop) _ = ReadNewestAsync(); });
     }
 
     private async Task LoadMoreAsync()
@@ -368,14 +386,16 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
             return;
         _fetchingMore = true;
         var generation = _generation;
-        var shown = Summaries();
-        var query = _filters with { After = RecordsPaging.CursorAfter(shown) };
         LoadingMore = true;
         MoreFailed = false;
 
         RecordsPage page;
         try
         {
+            if (_refreshing is { IsCompleted: false } refresh)
+                await refresh;
+            if (generation != _generation || _disposed) return;
+            var query = _filters with { After = _loadedThrough };
             page = await Bounded(_reader.ReadRecordsPageAsync(query));
         }
         catch (Exception ex)
@@ -395,8 +415,11 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         _liveSuspended = false;
         var keys = Rows.Select(row => row.Key).ToHashSet(StringComparer.Ordinal);
         SyncRows([.. Summaries(), .. page.Records.Where(record => !keys.Contains(record.Key))]);
+        _loadedThrough = RecordsPaging.CursorAfter(page.Records) ?? _loadedThrough;
         _more = page.More;
         LoadingMore = false;
+        if (_newestPending && _atTop)
+            _ = ReadNewestAsync();
     }
 
     private async Task ReadSourcesAsync()
@@ -508,7 +531,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
                 Add("records.outputFile", run.OutputPath, code: true);
                 Add("records.imported", run.ImportedAt is null ? null : RecordFormat.Time(run.ImportedAt, milliseconds: true));
                 Add("records.launch", RecordFormat.Launch(run.Session, _reader.Session));
-                if (RecordFormat.Output(run.Output) is { } output)
+                if (RecordFormat.Output(run.Output, totalBytes: run.OutputLength) is { } output)
                     DetailBlocks.Add(new RecordBlock(
                         Localizer.T("records.output"),
                         output.Text,

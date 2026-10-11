@@ -11,6 +11,7 @@ using ScriptDock;
 using ScriptDock.Models;
 using ScriptDock.Services;
 using ScriptDock.Storage;
+using ScriptDock.ViewModels;
 using Xunit;
 
 namespace ScriptDock.Tests.Storage;
@@ -70,6 +71,70 @@ public sealed class RecordQueriesTests : IDisposable
     }
 
     private static Task<RecordsPage> Page(RecordStore records, RecordsQuery query) => records.ReadRecordsPageAsync(query);
+
+    [Fact]
+    public async Task DetailReadsOnlyThePreviewWhileSearchStillReadsTheWholeStoredOutput()
+    {
+        using var records = new RecordStore(_dir, SessionStart);
+        var run = Run(1, "/large.command");
+        await records.AddRunAsync(run);
+        var bytes = Encoding.UTF8.GetBytes(new string('a', RunRecordDetail.PreviewBytes - 1) + "😀" + new string('b', 10000) + "far marker");
+        await records.AddRunOutputAsync(run, bytes);
+        var row = Assert.Single((await Page(records, RecordsQuery.All with { Search = "far marker" })).Records);
+        var detail = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(row.Kind, row.Id));
+        Assert.True(detail.Output!.Length <= RunRecordDetail.PreviewBytes + 1);
+        Assert.Equal(bytes.LongLength, detail.OutputLength);
+        var preview = Assert.IsType<OutputPreview>(RecordFormat.Output(detail.Output, totalBytes: detail.OutputLength));
+        Assert.Equal(new string('a', RunRecordDetail.PreviewBytes - 1), preview.Text);
+        Assert.Equal(bytes.LongLength - (RunRecordDetail.PreviewBytes - 1), preview.MoreBytes);
+    }
+
+    [Fact]
+    public async Task LiveRangeIsInclusiveAndReconcilesChangesBeyondTheNewestPage()
+    {
+        using var records = new RecordStore(_dir, SessionStart);
+        for (var index = 1; index <= 120; index++) await records.AddRunAsync(Run(index, $"/{index}.command"));
+        var floor = new RecordCursor(At(10), RecordKind.Run, 10);
+        var query = RecordsQuery.All with { Level = RecordLevelFilter.Info, Through = floor };
+        var before = await Page(records, query);
+        Assert.Equal(111, before.Records.Count);
+        Assert.True(before.More);
+        Assert.Equal(10, before.Records[^1].Id);
+        await records.AddRunEndAsync(new RunEnd(Session, 10, SessionStart.AddHours(3), "exited", 1));
+        await records.AddRunEndAsync(new RunEnd(Session, 11, SessionStart.AddHours(3), "exited", 2));
+        var after = await Page(records, query);
+        Assert.Equal(109, after.Records.Count);
+        Assert.DoesNotContain(after.Records, row => row.Id is 10 or 11);
+        Assert.True(after.More);
+        var all = await Page(records, query with { Level = null });
+        Assert.Equal(LogLevel.Error, all.Records.Single(row => row.Id == 11).Level);
+    }
+
+    [Fact]
+    public async Task LiveRangeHandlesTiesEmptyMembershipAndOutputEnteringTheSearch()
+    {
+        using var records = new RecordStore(_dir, SessionStart);
+        Log(records, At(1), "info", "older");
+        Log(records, At(2), "info", "needle first");
+        Log(records, At(2), "info", "needle second");
+        var run = Run(2, "/serve.command");
+        await records.AddRunAsync(run);
+        var page = await Page(records, RecordsQuery.All);
+        var floorRow = page.Records.Single(row => row.Title == "needle second");
+        var floor = new RecordCursor(floorRow.Time, floorRow.Kind, floorRow.Id);
+        var query = RecordsQuery.All with { Through = floor };
+        var range = await Page(records, query);
+        Assert.Equal(["/serve.command", "needle second"], range.Records.Select(row => row.Title));
+        Assert.True(range.More);
+        var excluded = await Page(records, query with { Search = "older" });
+        Assert.Empty(excluded.Records);
+        Assert.True(excluded.More);
+        var search = query with { Search = "needle" };
+        Assert.Equal("needle second", Assert.Single((await Page(records, search)).Records).Title);
+        await records.AddRunOutputAsync(run, Encoding.UTF8.GetBytes("needle in newly imported output"));
+        Assert.Equal(["/serve.command", "needle second"], (await Page(records, search)).Records.Select(row => row.Title));
+        Assert.True((await Page(records, search)).More);
+    }
 
     [Fact]
     public async Task Lists_every_kind_newest_first_with_its_summary()
