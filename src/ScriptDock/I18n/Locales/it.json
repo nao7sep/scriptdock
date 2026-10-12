@@ -67,7 +67,7 @@
   "nativeMenu.window": "Finestra",
   "nativeMenu.zoom": "Zoom",
   "output.dismissError": "Ignora errore del processo",
-  "output.inputPlaceholder": "Scrivi l’input e premi Enter per inviarlo allo script in esecuzione…",
+  "output.inputPlaceholder": "Scrivi l’input e premi Enter per inviarlo allo script in esecuzione",
   "output.title": "Output",
   "process.dismissFailed": "Impossibile rimuovere l’esecuzione. Controlla il log e riprova.",
   "process.dismissStopFailed": "Lo script non si è arrestato, quindi l’esecuzione non è stata rimossa.",

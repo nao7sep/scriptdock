@@ -67,7 +67,7 @@
   "nativeMenu.window": "Janela",
   "nativeMenu.zoom": "Zoom",
   "output.dismissError": "Descartar erro do processo",
-  "output.inputPlaceholder": "Digite uma entrada e pressione Enter para enviar ao script em execução…",
+  "output.inputPlaceholder": "Digite uma entrada e pressione Enter para enviar ao script em execução",
   "output.title": "Saída",
   "process.dismissFailed": "Não foi possível descartar a execução. Verifique o log e tente novamente.",
   "process.dismissStopFailed": "O script não parou, então a execução não foi descartada.",

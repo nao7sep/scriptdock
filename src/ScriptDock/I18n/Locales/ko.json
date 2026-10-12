@@ -65,7 +65,7 @@
   "nativeMenu.window": "창",
   "nativeMenu.zoom": "확대/축소",
   "output.dismissError": "프로세스 오류 지우기",
-  "output.inputPlaceholder": "입력할 내용을 적고 Enter를 누르면 실행 중인 스크립트로 전송됩니다…",
+  "output.inputPlaceholder": "입력할 내용을 적고 Enter를 누르면 실행 중인 스크립트로 전송됩니다",
   "output.title": "출력",
   "process.dismissFailed": "실행 기록을 지우지 못했습니다. 로그를 확인한 뒤 다시 시도하십시오.",
   "process.dismissStopFailed": "스크립트가 중지되지 않아 실행 기록을 지우지 않았습니다.",

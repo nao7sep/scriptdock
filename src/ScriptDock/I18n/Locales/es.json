@@ -67,7 +67,7 @@
   "nativeMenu.window": "Ventana",
   "nativeMenu.zoom": "Zoom",
   "output.dismissError": "Descartar el error del proceso",
-  "output.inputPlaceholder": "Escribe la entrada y presiona Enter para enviarla al script en ejecución…",
+  "output.inputPlaceholder": "Escribe la entrada y presiona Enter para enviarla al script en ejecución",
   "output.title": "Salida",
   "process.dismissFailed": "No se pudo descartar la ejecución. Revisa el registro e inténtalo de nuevo.",
   "process.dismissStopFailed": "El script no se detuvo, así que la ejecución no se descartó.",

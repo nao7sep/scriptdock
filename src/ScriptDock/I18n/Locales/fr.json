@@ -67,7 +67,7 @@
   "nativeMenu.window": "Fenêtre",
   "nativeMenu.zoom": "Zoom",
   "output.dismissError": "Ignorer l’erreur du processus",
-  "output.inputPlaceholder": "Saisissez du texte et appuyez sur Enter pour l’envoyer au script en cours…",
+  "output.inputPlaceholder": "Saisissez du texte et appuyez sur Enter pour l’envoyer au script en cours",
   "output.title": "Sortie",
   "process.dismissFailed": "L’exécution n’a pas pu être retirée. Consultez le journal, puis réessayez.",
   "process.dismissStopFailed": "Le script ne s’est pas arrêté, l’exécution n’a donc pas été retirée.",

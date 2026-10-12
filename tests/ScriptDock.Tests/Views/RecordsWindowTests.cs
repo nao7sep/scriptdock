@@ -253,6 +253,49 @@ public sealed class RecordsWindowTests : WindowTest
         Assert.True(vm.HasDetail);
     }
 
+    // The closed filter boxes may trim a long label to fit the narrow list pane; that is an allowed
+    // truncation only because opening the box (by keyboard or pointer) shows every label whole.
+    [AvaloniaTheory]
+    [InlineData("en")]
+    [InlineData("de")]
+    [InlineData("es")]
+    [InlineData("fr")]
+    [InlineData("it")]
+    [InlineData("pt-BR")]
+    [InlineData("ru")]
+    [InlineData("ja")]
+    [InlineData("ko")]
+    [InlineData("zh-Hans")]
+    public void An_open_filter_shows_every_label_whole_at_the_narrowest_window(string tag)
+    {
+        using var speaking = Localizer.Speaking(tag);
+        var window = Show(new RecordsWindow { DataContext = NewViewModel(), Width = RecordsLayout.MinWindowWidth, Height = 700 });
+        var measured = 0;
+
+        foreach (var name in new[] { "LaunchFilter", "KindFilter", "LevelFilter" })
+        {
+            var combo = window.GetVisualDescendants().OfType<ComboBox>().Single(combo => combo.Name == name);
+            combo.IsDropDownOpen = true;
+            try
+            {
+                Dispatcher.UIThread.RunJobs();
+                for (var index = 0; index < combo.ItemCount; index++)
+                {
+                    var label = combo.ContainerFromIndex(index)!.GetVisualDescendants().OfType<TextBlock>().Single();
+                    Assert.True(label.Bounds.Width > 0, $"{tag}: {name} item {index} was never laid out.");
+                    Assert.False(
+                        label.TextLayout.TextLines.Any(line => line.HasCollapsed),
+                        $"{tag}: {name} shows “{label.Text}” trimmed in its open list.");
+                    measured++;
+                }
+            }
+            finally { combo.IsDropDownOpen = false; }
+        }
+
+        // Launch has All plus this launch, Kind All plus three kinds, Level All, Warnings and errors plus four levels.
+        Assert.True(measured >= 12, $"{tag}: only {measured} labels were checked.");
+    }
+
     [AvaloniaFact]
     public void Bringing_a_window_back_restores_it_from_the_dock()
     {

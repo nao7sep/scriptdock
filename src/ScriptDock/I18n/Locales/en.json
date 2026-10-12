@@ -66,7 +66,7 @@
   "nativeMenu.window": "Window",
   "nativeMenu.zoom": "Zoom",
   "output.dismissError": "Dismiss process error",
-  "output.inputPlaceholder": "Type input and press Enter to send to the running script…",
+  "output.inputPlaceholder": "Type input and press Enter to send to the running script",
   "output.title": "Output",
   "process.dismissFailed": "The run could not be dismissed. Check the log and try again.",
   "process.dismissStopFailed": "The script did not stop, so the run was not dismissed.",

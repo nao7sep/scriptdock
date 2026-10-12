@@ -65,7 +65,7 @@
   "nativeMenu.window": "ウインドウ",
   "nativeMenu.zoom": "拡大/縮小",
   "output.dismissError": "プロセスのエラーを消去",
-  "output.inputPlaceholder": "入力して Enter キーを押すと、実行中のスクリプトに送信されます…",
+  "output.inputPlaceholder": "入力して Enter キーを押すと、実行中のスクリプトに送信されます",
   "output.title": "出力",
   "process.dismissFailed": "実行を履歴から消去できませんでした。ログを確認して、もう一度お試しください。",
   "process.dismissStopFailed": "スクリプトが停止しなかったため、実行を履歴から消去していません。",

@@ -43,7 +43,8 @@
 
         <Border Grid.Column="0" Classes="card" Padding="0">
             <DockPanel>
-                <!-- Filters above the list, all off when the window opens and applied on change. -->
+                <!-- Filters above the list, all off when the window opens and applied on change. A closed
+                     filter may trim its label to the narrow pane; opening it lists every label whole. -->
                 <Border x:Name="FiltersBand" DockPanel.Dock="Top" Padding="10"
                         BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
                     <StackPanel Spacing="8">
@@ -93,7 +94,8 @@
 
                 <Grid Margin="10">
                     <!-- One listbox (composite-control-conventions, Listbox): one tab stop, the arrows move
-                         the selection, and the selection follows focus. -->
+                         the selection, and the selection follows focus. A row previews a scan's roots in
+                         at most two lines; selecting the row shows the whole report in the detail pane. -->
                     <ListBox x:Name="RecordsList" ItemsSource="{Binding Rows}"
                              SelectedItem="{Binding SelectedRecord}"
                              i18n:Localized.AutomationName="records.title">

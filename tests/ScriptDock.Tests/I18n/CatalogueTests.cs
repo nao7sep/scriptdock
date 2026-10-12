@@ -196,6 +196,40 @@ public class CatalogueTests
     }
 
     [Fact]
+    public void every_ellipsis_follows_english_and_its_language_spacing()
+    {
+        // An ellipsis carries meaning (localization conventions, "Ellipsis"), so a translation has one
+        // exactly when English does. It is always the one character, never three periods; German sets it
+        // off with a no-break space, and every other language attaches it to the word.
+        var english = Read("en");
+        var failures = new List<string>();
+        foreach (var tag in Tags)
+        {
+            foreach (var (key, entry) in Read(tag))
+            {
+                var expected = Forms(english[key]).Any(form => form.Text.Contains('…'));
+                foreach (var (form, text) in Forms(entry))
+                {
+                    if (text.Contains("..."))
+                        failures.Add($"{tag}: {key}{form} uses three periods");
+                    if (text.Contains('…') != expected)
+                        failures.Add($"{tag}: {key}{form} {(expected ? "lacks" : "adds")} the ellipsis English has{(expected ? "" : " not")}");
+
+                    for (var at = text.IndexOf('…'); at >= 0; at = text.IndexOf('…', at + 1))
+                    {
+                        var before = at == 0 ? '\0' : text[at - 1];
+                        var spaced = tag == "de" ? before == ' ' : at > 0 && !char.IsWhiteSpace(before);
+                        if (!spaced)
+                            failures.Add($"{tag}: {key}{form} spaces its ellipsis wrongly (U+{(int)before:X4} before it)");
+                    }
+                }
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join("; ", failures));
+    }
+
+    [Fact]
     public void the_macos_bundle_declares_every_language()
     {
         var plist = File.ReadAllText(Path.Combine(RepoRoot(), "macOS", "Info.plist"));

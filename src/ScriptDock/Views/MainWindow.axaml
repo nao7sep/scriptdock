@@ -246,7 +246,9 @@
                         <Border DockPanel.Dock="Top" Classes="sectionHeader">
                             <DockPanel>
                                 <!-- The selected script's name as a colored pill, floated right, so the
-                                     console makes clear whose output it is shown only when a run is selected. -->
+                                     console makes clear whose output it is shown only when a run is selected.
+                                     The header band may trim it: the pill exists only while that run is
+                                     selected, and the selected Recent row shows the whole name. -->
                                 <Border DockPanel.Dock="Right" VerticalAlignment="Center" Margin="8,0,0,0"
                                         Background="{DynamicResource SelectionBrush}" CornerRadius="10" Padding="10,3"
                                         IsVisible="{Binding HasSelection}">
@@ -319,7 +321,7 @@
                                 <DataTemplate x:DataType="vm:RecentEntry">
                                     <Grid ColumnDefinitions="*,Auto">
                                         <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding DisplayName}" TextWrapping="Wrap"/>
                                             <TextBlock Text="{Binding LastRanDisplay}" Classes="recentMeta" FontSize="11"
                                                        Foreground="{DynamicResource TextSecondaryBrush}"/>
                                         </StackPanel>

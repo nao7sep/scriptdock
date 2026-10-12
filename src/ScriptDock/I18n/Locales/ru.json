@@ -68,7 +68,7 @@
   "nativeMenu.window": "Окно",
   "nativeMenu.zoom": "Масштабировать",
   "output.dismissError": "Убрать ошибку процесса",
-  "output.inputPlaceholder": "Введите текст и нажмите Enter, чтобы отправить его выполняющемуся скрипту…",
+  "output.inputPlaceholder": "Введите текст и нажмите Enter, чтобы отправить его выполняющемуся скрипту",
   "output.title": "Вывод",
   "process.dismissFailed": "Не удалось убрать запуск. Проверьте журнал и повторите попытку.",
   "process.dismissStopFailed": "Скрипт не остановился, поэтому запуск не был убран.",
