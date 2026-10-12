@@ -27,7 +27,14 @@ $NuGetPackages = if ($env:NUGET_PACKAGES) {
 } else {
     Join-Path $env:USERPROFILE ".nuget/packages"
 }
-$NativeNotices = Join-Path $NuGetPackages "skiasharp.nativeassets.win32/3.119.4/THIRD-PARTY-NOTICES.txt"
+# Take the notice from the SkiaSharp native package this publish actually resolved, as the macOS
+# bundle target does, so a SkiaSharp upgrade cannot leave the appended notice pointing at an old version.
+$Deps = Get-Content -LiteralPath "publish-win/$AppName.deps.json" -Raw | ConvertFrom-Json
+$SkiaNative = @($Deps.libraries.PSObject.Properties.Name | Where-Object { $_ -like "SkiaSharp.NativeAssets.Win32/*" })
+if ($SkiaNative.Count -ne 1) {
+    throw "Could not resolve the published SkiaSharp.NativeAssets.Win32 version from $AppName.deps.json."
+}
+$NativeNotices = Join-Path $NuGetPackages ("skiasharp.nativeassets.win32/" + $SkiaNative[0].Split("/")[1] + "/THIRD-PARTY-NOTICES.txt")
 if (-not (Test-Path -LiteralPath $NativeNotices)) {
     throw "SkiaSharp native notices were not restored: $NativeNotices"
 }

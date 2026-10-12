@@ -28,6 +28,13 @@
     <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.4" />
+    <!-- Avalonia 12.1 declares SkiaSharp 3.119.4 / HarfBuzzSharp 8.3.1.3 as minimums and supports the
+         4.x / 14.x lines when an app references them (AvaloniaUI/Avalonia#21696). These direct
+         references select the current lines; each managed package brings its matching macOS and
+         Win32 natives. The Linux and WebAssembly natives Avalonia pulls stay at its minimums, which
+         is harmless only because ScriptDock ships no Linux or browser build. -->
+    <PackageReference Include="SkiaSharp" Version="4.153.1" />
+    <PackageReference Include="HarfBuzzSharp" Version="14.2.1.301" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <!-- The write-through data-backup store (data-backup conventions). Microsoft.Data.Sqlite is
          the lowest-friction .NET SQLite binding: a managed ADO.NET provider bundling native SQLite
