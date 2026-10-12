@@ -189,9 +189,11 @@
 
 
 
-        <!-- The one keyboard-focus ring (interface-styling conventions): 2px of accent standing 1px
-             clear of the control and following its corners, shown only when focus came from the
-             keyboard, and quieter while its window is inactive. A button draws it as its own shadow
+        <!-- The focus ring (interface-styling conventions): 2px of accent standing 1px clear of the
+             control and following its corners, quieter while its window is inactive. Buttons show it
+             for keyboard focus; list rows show their actual focus target, since native list arrows
+             use unspecified-method focus and would otherwise lose the ring. A button draws it as
+             its own shadow
              rather than as an adorner: an adorner is clipped to its control's bounds, so a ring outside
              them never shows, and one freed from that clip would float over whatever a scroll region
              moved the control under. A list row draws it just inside its edge, where the row's own
@@ -208,10 +210,10 @@
         <Style Selector="Window.windowInactive Button:focus-visible /template/ ContentPresenter">
             <Setter Property="BoxShadow" Value="{DynamicResource FocusRingInactiveShadow}"/>
         </Style>
-        <Style Selector="ListBoxItem:focus-visible /template/ ContentPresenter">
+        <Style Selector="ListBoxItem:focus /template/ ContentPresenter">
             <Setter Property="BoxShadow" Value="{DynamicResource RowFocusRingShadow}"/>
         </Style>
-        <Style Selector="Window.windowInactive ListBoxItem:focus-visible /template/ ContentPresenter">
+        <Style Selector="Window.windowInactive ListBoxItem:focus /template/ ContentPresenter">
             <Setter Property="BoxShadow" Value="{DynamicResource RowFocusRingInactiveShadow}"/>
         </Style>
         <!-- A checkbox or radio has no presenter to draw on; its ring is an adorner on its own bounds,
@@ -488,6 +490,20 @@
         </Style>
         <Style Selector="ListBoxItem:selected:pressed /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource SelectionHoverBrush}"/>
+        </Style>
+
+        <!-- Command hover is visual only; the native selected item is the keyboard target. -->
+        <Style Selector="MenuItem.commandMenuItem:pointerover /template/ Border#PART_LayoutRoot">
+            <Setter Property="Background" Value="{DynamicResource ChipHoverBrush}"/>
+        </Style>
+        <Style Selector="MenuItem.commandMenuItem:selected /template/ Border#PART_LayoutRoot">
+            <Setter Property="Background" Value="{DynamicResource SelectionBrush}"/>
+        </Style>
+        <Style Selector="MenuItem.commandMenuItem:selected:pointerover /template/ Border#PART_LayoutRoot">
+            <Setter Property="Background" Value="{DynamicResource SelectionHoverBrush}"/>
+        </Style>
+        <Style Selector="MenuItem.commandMenuItem:pressed /template/ Border#PART_LayoutRoot:pointerover">
+            <Setter Property="Background" Value="{DynamicResource ChipPressedBrush}"/>
         </Style>
 
         <!-- One-line fields: every kind takes one height, edge, corner and fill (interface-styling

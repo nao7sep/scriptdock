@@ -71,6 +71,9 @@
             <Setter Property="Background" Value="{DynamicResource ChipSelectedBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
         </Style>
+        <Style Selector="ListBox#ScriptsList ListBoxItem:selected:pointerover Border.chip">
+            <Setter Property="Background" Value="{DynamicResource SelectionHoverBrush}"/>
+        </Style>
         <Style Selector="ListBox#RecentList ListBoxItem:selected TextBlock.recentMeta">
             <Setter Property="Foreground" Value="{DynamicResource SelectionSecondaryBrush}"/>
         </Style>
@@ -100,10 +103,10 @@
                           Data="M1,1 H17 M1,8 H17 M1,15 H17"/>
                     <Button.Flyout>
                         <MenuFlyout Placement="BottomEdgeAlignedRight">
-                            <MenuItem i18n:Localized.Header="menu.settings" Click="OnSettingsClick"/>
-                            <MenuItem i18n:Localized.Header="menu.records" Click="OnRecordsClick"/>
-                            <MenuItem i18n:Localized.Header="menu.shortcuts" Click="OnShortcutsClick"/>
-                            <MenuItem i18n:Localized.Header="menu.about" Click="OnAboutClick"/>
+                            <views:CommandMenuItem i18n:Localized.Header="menu.settings" Click="OnSettingsClick"/>
+                            <views:CommandMenuItem i18n:Localized.Header="menu.records" Click="OnRecordsClick"/>
+                            <views:CommandMenuItem i18n:Localized.Header="menu.shortcuts" Click="OnShortcutsClick"/>
+                            <views:CommandMenuItem i18n:Localized.Header="menu.about" Click="OnAboutClick"/>
                         </MenuFlyout>
                     </Button.Flyout>
                 </Button>
