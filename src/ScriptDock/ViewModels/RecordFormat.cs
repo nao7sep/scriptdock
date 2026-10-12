@@ -37,9 +37,14 @@ public static class RecordFormat
     /// stall it. The stored output is never cut, and search reads all of it.</summary>
     public const int OutputShownBytes = RunRecordDetail.PreviewBytes;
 
+    /// <summary>The longest line, in graphemes, the detail pane renders whole. Wrapping one unbroken line costs
+    /// far more than its length (measured: 40 000 characters lay out in about a second, 1 MB in minutes), so a
+    /// longer line is shown shortened with one marker; Open full output shows it whole.</summary>
+    public const int OutputShownLineGraphemes = 10_000;
+
     /// <summary>A run's stored output as its console shows it (<see cref="RunLog.Lines"/>), at most its first
     /// <paramref name="limit"/> bytes, cut at a character boundary, with how many stored bytes it leaves
-    /// out; null when there is none or all of it is only whitespace.</summary>
+    /// out and whether a line was shortened; null when there is none or all of it is only whitespace.</summary>
     public static OutputPreview? Output(byte[]? output, int limit = OutputShownBytes, long? totalBytes = null)
     {
         if (output is null)
@@ -50,9 +55,18 @@ public static class RecordFormat
         while (cut > 0 && cut < output.Length && (output[cut] & 0xC0) == 0x80)
             cut--;
 
-        var text = string.Join("\n", RunLog.Lines(Encoding.UTF8.GetString(output, 0, cut))).TrimEnd('\n');
+        var shortened = false;
+        var lines = RunLog.Lines(Encoding.UTF8.GetString(output, 0, cut)).Select(line =>
+        {
+            if (line.Length <= OutputShownLineGraphemes)
+                return line;
+            var (kept, truncated) = TextCleanup.Truncate(line, OutputShownLineGraphemes);
+            shortened |= truncated;
+            return truncated ? kept + "…" : line;
+        });
+        var text = string.Join("\n", lines).TrimEnd('\n');
         var more = (totalBytes ?? output.LongLength) - cut;
-        return string.IsNullOrWhiteSpace(text) && more == 0 ? null : new OutputPreview(text, more);
+        return string.IsNullOrWhiteSpace(text) && more == 0 ? null : new OutputPreview(text, more, shortened);
     }
 
     private static string? Pretty(string? text, string[] omit)
@@ -144,4 +158,4 @@ public static class RecordFormat
 }
 
 /// <summary>The part of a run's output the detail pane shows, and how many stored bytes follow it.</summary>
-public sealed record OutputPreview(string Text, long MoreBytes);
+public sealed record OutputPreview(string Text, long MoreBytes, bool LinesShortened = false);

@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using ScriptDock.I18n;
 using ScriptDock.Models;
 using ScriptDock.Services;
@@ -45,6 +47,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     private readonly IJsonStore<AppState> _stateStore;
     private readonly AppState _state;
     private readonly TimeProvider _time;
+    private readonly Func<RunRecordDetail, byte[], bool> _openOutput;
 
     // The filters the list is read for; a page's own cursor is added per read.
     private RecordsQuery _filters = RecordsQuery.All;
@@ -74,12 +77,18 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     private int _detailVersion;
     private RecordDetail? _detail;
 
-    public RecordsWindowViewModel(IRecordReader reader, IJsonStore<AppState> stateStore, AppState state, TimeProvider? time = null)
+    public RecordsWindowViewModel(
+        IRecordReader reader,
+        IJsonStore<AppState> stateStore,
+        AppState state,
+        TimeProvider? time = null,
+        Func<RunRecordDetail, byte[], bool>? openOutput = null)
     {
         _reader = reader;
         _stateStore = stateStore;
         _state = state;
         _time = time ?? TimeProvider.System;
+        _openOutput = openOutput ?? OpenInEditor;
 
         LaunchOptions.Add(new RecordFilterOption(null, () => Localizer.T("records.allLaunches")));
         KindOptions =
@@ -114,6 +123,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     private RecordsListStatus _listStatus = RecordsListStatus.Loading;
 
     [ObservableProperty] private bool _loadingMore;
+    [ObservableProperty] private bool _openOutputFailed;
     [ObservableProperty] private bool _moreFailed;
 
     [ObservableProperty]
@@ -480,9 +490,13 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
 
     private void ShowDetail(RecordDetail? detail, RecordsDetailStatus status)
     {
+        // A failed open belongs to its run: a refresh of the same run keeps it, another record clears it.
+        if (detail is null || _detail is null || detail.Kind != _detail.Kind || detail.Id != _detail.Id)
+            OpenOutputFailed = false;
         _detail = detail;
         BuildDetail();
         DetailStatus = status;
+        OnPropertyChanged(nameof(CanOpenFullOutput));
         OnPropertyChanged(nameof(DetailTitle));
         OnPropertyChanged(nameof(DetailIsCodeTitle));
         OnPropertyChanged(nameof(DetailLevelText));
@@ -497,6 +511,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     {
         DetailFields.Clear();
         DetailBlocks.Clear();
+        _outputPartial = false;
         if (_detail is null)
             return;
 
@@ -532,10 +547,18 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
                 Add("records.imported", run.ImportedAt is null ? null : RecordFormat.Time(run.ImportedAt, milliseconds: true));
                 Add("records.launch", RecordFormat.Launch(run.Session, _reader.Session));
                 if (RecordFormat.Output(run.Output, totalBytes: run.OutputLength) is { } output)
+                {
+                    string[] notes =
+                    [
+                        .. output.MoreBytes == 0 ? [] : new[] { Localizer.T("records.outputMore", ("more", Megabytes(output.MoreBytes))) },
+                        .. output.LinesShortened ? new[] { Localizer.T("records.outputLinesShortened") } : [],
+                    ];
                     DetailBlocks.Add(new RecordBlock(
                         Localizer.T("records.output"),
                         output.Text,
-                        output.MoreBytes == 0 ? null : Localizer.T("records.outputMore", ("more", Megabytes(output.MoreBytes)))));
+                        notes.Length == 0 ? null : string.Join(" ", notes)));
+                    _outputPartial = notes.Length > 0;
+                }
                 break;
 
             case ScanReportRecordDetail scan:
@@ -544,6 +567,60 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
                 AddBlock("records.report", RecordFormat.PrettyJson(scan.Report));
                 break;
         }
+    }
+
+    private bool _outputPartial;
+
+    /// <summary>The detail shows the run's output only in part (its first 1 MB, or with long lines shortened), so
+    /// Open full output is offered.</summary>
+    public bool CanOpenFullOutput => DetailStatus == RecordsDetailStatus.Ready && _detail is RunRecordDetail && _outputPartial;
+
+    /// <summary>
+    /// Opens the selected run's whole stored output in the user's text editor: the direct path to what the
+    /// detail's 1 MB view leaves out. The read is not bounded by the window's read timeout, because a caller
+    /// timeout would not stop it; the command stays disabled until it settles.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenFullOutputAsync()
+    {
+        if (_detail is not RunRecordDetail run)
+            return;
+
+        OpenOutputFailed = false;
+        bool opened;
+        try
+        {
+            var output = await _reader.ReadRunOutputAsync(run.Id);
+            opened = output is not null && await Task.Run(() => _openOutput(run, output));
+            if (output is null)
+                Log.Error("records: run has no stored output to open", new { run = run.Id });
+        }
+        catch (Exception ex)
+        {
+            Log.Error("records: read full output failed", ex, new { run = run.Id });
+            opened = false;
+        }
+
+        if (!opened && _detail is RunRecordDetail shown && shown.Id == run.Id)
+            OpenOutputFailed = true;
+    }
+
+    [RelayCommand]
+    private void DismissOpenOutputError() => OpenOutputFailed = false;
+
+    private static bool OpenInEditor(RunRecordDetail run, byte[] output)
+    {
+        string path;
+        try
+        {
+            path = RunOutputFile.Write(StorageRoot.Directory, run.Script, run.Id, output);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Error("records: write full output failed", ex, new { run = run.Id });
+            return false;
+        }
+        return ExternalLauncher.Open(path);
     }
 
     // Rounded up to a tenth, so a few bytes left out never read as none.

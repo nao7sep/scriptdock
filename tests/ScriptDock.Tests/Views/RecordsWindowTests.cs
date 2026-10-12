@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Threading;
@@ -251,6 +252,47 @@ public sealed class RecordsWindowTests : WindowTest
         Assert.Same(vm.Rows[2], vm.SelectedRecord);
         Assert.Single(_reader.DetailReads);
         Assert.True(vm.HasDetail);
+    }
+
+    // Rule 4 of the text-cleanup conventions: what the 1 MB view leaves out has a direct keyboard path.
+    [AvaloniaFact]
+    public void Open_full_output_is_reached_by_tab_and_opens_with_enter()
+    {
+        var run = new RecordSummary(RecordKind.Run, 4, Session, "2026-10-04T08:01:00.000Z", LogLevel.Info, "/repo/dev.command", null, null);
+        _reader.Page = new RecordsPage([run], false);
+        _reader.Detail = (_, _) => Task.FromResult<RecordDetail?>(new RunRecordDetail(
+            4, Session, run.Time, LogLevel.Info, 3, run.Title, null, null, null, null, null, null, null,
+            System.Text.Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat(new string('x', 79) + "\n", RecordFormat.OutputShownBytes / 80 + 1)))));
+        _reader.Output = _ => Task.FromResult<byte[]?>([1, 2, 3]);
+        var opened = 0;
+        var vm = new RecordsWindowViewModel(_reader, _stateStore, _stateStore.Value, new FakeTimeProvider(), (_, _) =>
+        {
+            opened++;
+            return true;
+        });
+        var window = Show(new RecordsWindow { DataContext = vm, Width = 1200, Height = 700 });
+        var list = List(window);
+        list.SelectedIndex = 0;
+        Dispatcher.UIThread.RunJobs();
+
+        var button = window.GetVisualDescendants().OfType<Button>()
+            .Single(button => button.Command == vm.OpenFullOutputCommand);
+        Assert.True(button.IsEffectivelyVisible);
+        list.Focus(NavigationMethod.Tab);
+        for (var presses = 0; presses < 40 && !button.IsFocused; presses++)
+            Press(window, Key.Tab);
+        Assert.True(button.IsFocused);
+
+        Press(window, Key.Enter);
+        Assert.True(System.Threading.SpinWait.SpinUntil(() => { Dispatcher.UIThread.RunJobs(); return opened == 1; }, TimeSpan.FromSeconds(5)));
+        Assert.Equal([4L], _reader.OutputReads);
+    }
+
+    private static void Press(TopLevel root, Key key)
+    {
+        root.KeyPress(key, RawInputModifiers.None, PhysicalKey.None, null);
+        root.KeyRelease(key, RawInputModifiers.None, PhysicalKey.None, null);
+        Dispatcher.UIThread.RunJobs();
     }
 
     // The closed filter boxes may trim a long label to fit the narrow list pane; that is an allowed

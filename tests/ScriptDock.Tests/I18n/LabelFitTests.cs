@@ -9,6 +9,7 @@ using Avalonia.Media;
 using Avalonia.VisualTree;
 using ScriptDock.I18n;
 using ScriptDock.Models;
+using ScriptDock.Services;
 using ScriptDock.ViewModels;
 using ScriptDock.Views;
 using Xunit;
@@ -177,6 +178,40 @@ public class LabelFitTests : WindowTest
 
         // Its message wraps; its two button labels do not.
         AssertNothingClipped(dialog, tag, atLeast: 2);
+    }
+
+    // The Records window's narrowest detail pane holds the Open full output button and the run's fields.
+    [AvaloniaTheory]
+    [InlineData("en")]
+    [InlineData("de")]
+    [InlineData("es")]
+    [InlineData("fr")]
+    [InlineData("it")]
+    [InlineData("pt-BR")]
+    [InlineData("ru")]
+    [InlineData("ja")]
+    [InlineData("ko")]
+    [InlineData("zh-Hans")]
+    public void the_records_detail_clips_nothing_at_its_narrowest(string tag)
+    {
+        using var speaking = Localizer.Speaking(tag);
+        const string session = Fakes.FakeRecordReader.CurrentSession;
+        var run = new RecordSummary(RecordKind.Run, 4, session, "2026-10-04T08:01:00.000Z", LogLevel.Info, "/repo/dev.command", null, null);
+        var reader = new Fakes.FakeRecordReader
+        {
+            Page = new RecordsPage([run], false),
+            Detail = (_, _) => Task.FromResult<RecordDetail?>(new RunRecordDetail(
+                4, session, run.Time, LogLevel.Info, 3, run.Title, 4242, null, null, null, null, null, null,
+                System.Text.Encoding.UTF8.GetBytes(new string('x', RecordFormat.OutputShownLineGraphemes + 1)))),
+        };
+        var state = new Fakes.FakeJsonStore<AppState>();
+        var vm = new RecordsWindowViewModel(reader, state, state.Value, new Fakes.FakeTimeProvider(), (_, _) => true);
+        var window = Show(new RecordsWindow { DataContext = vm, Width = RecordsLayout.MinWindowWidth, Height = 700 });
+        window.GetVisualDescendants().OfType<ListBox>().Single(list => list.Name == "RecordsList").SelectedIndex = 0;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.True(vm.CanOpenFullOutput);
+        AssertNothingClipped(window, tag, atLeast: 6);
     }
 
     private static void AssertNothingClipped(Visual root, string tag, int atLeast)

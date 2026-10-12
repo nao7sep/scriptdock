@@ -177,21 +177,77 @@ public sealed class RecordsWindowViewModelTests
         Assert.Equal(English.Of("records.output"), output.Label);
         Assert.Equal("boom\nprogress 9", output.Text);
         Assert.Null(output.Note);
+        Assert.False(vm.CanOpenFullOutput);
     }
 
     [AvaloniaFact]
     public void A_very_large_output_shows_its_first_megabyte_and_says_how_much_more_is_stored()
     {
-        // 1 MB and a half: the pane shows the first megabyte and notes the 0.5 MB left out.
-        var stored = new string('x', RecordFormat.OutputShownBytes + RecordFormat.OutputShownBytes / 2);
+        // 1 MB and a half in 1 KB lines: the pane shows the first megabyte and notes the 0.5 MB left out.
+        var stored = string.Concat(Enumerable.Repeat(new string('x', 1023) + "\n", 1536));
         _reader.Detail = (_, _) => Task.FromResult<RecordDetail?>(RunDetail(output: stored));
         var vm = Started();
         vm.SelectedRecord = vm.Rows[0];
         Pump();
 
         var output = Assert.Single(vm.DetailBlocks);
-        Assert.Equal(RecordFormat.OutputShownBytes, output.Text.Length);
+        Assert.Equal(RecordFormat.OutputShownBytes - 1, output.Text.Length);
         Assert.Equal(English.Of("records.outputMore", ("more", 0.5)), output.Note);
+        Assert.Contains(English.Of("records.openFullOutput"), output.Note);
+        Assert.True(vm.CanOpenFullOutput);
+    }
+
+    [AvaloniaFact]
+    public void A_shortened_long_line_notes_it_and_offers_the_full_output()
+    {
+        _reader.Detail = (_, _) => Task.FromResult<RecordDetail?>(RunDetail(output: new string('x', RecordFormat.OutputShownLineGraphemes + 1)));
+        var vm = Started();
+        vm.SelectedRecord = vm.Rows[0];
+        Pump();
+
+        Assert.Equal(English.Of("records.outputLinesShortened"), Assert.Single(vm.DetailBlocks).Note);
+        Assert.True(vm.CanOpenFullOutput);
+    }
+
+    [AvaloniaFact]
+    public async Task Open_full_output_hands_the_whole_stored_output_on_and_keeps_a_failure_until_dismissed()
+    {
+        var stored = Encoding.UTF8.GetBytes(new string('x', RecordFormat.OutputShownBytes * 2) + "far end");
+        _reader.Detail = (_, _) => Task.FromResult<RecordDetail?>(RunDetail(output: new string('x', RecordFormat.OutputShownBytes + 1)));
+        _reader.Output = _ => Task.FromResult<byte[]?>(stored);
+        var opened = new System.Collections.Generic.List<(long Id, byte[] Output)>();
+        var succeeds = true;
+        var vm = new RecordsWindowViewModel(_reader, _stateStore, _stateStore.Value, _time, (run, output) =>
+        {
+            opened.Add((run.Id, output));
+            return succeeds;
+        });
+        vm.Start();
+        Pump();
+        vm.SelectedRecord = vm.Rows[0];
+        Pump();
+
+        await vm.OpenFullOutputCommand.ExecuteAsync(null);
+        Assert.Equal([4L], _reader.OutputReads);
+        Assert.Same(stored, Assert.Single(opened).Output);
+        Assert.False(vm.OpenOutputFailed);
+
+        succeeds = false;
+        await vm.OpenFullOutputCommand.ExecuteAsync(null);
+        Assert.True(vm.OpenOutputFailed);
+        vm.DismissOpenOutputErrorCommand.Execute(null);
+        Assert.False(vm.OpenOutputFailed);
+
+        // A read that fails is the same failure, and choosing another record clears it with its run.
+        _reader.Output = _ => Task.FromException<byte[]?>(new InvalidOperationException("busy (test)"));
+        await vm.OpenFullOutputCommand.ExecuteAsync(null);
+        Assert.True(vm.OpenOutputFailed);
+        _reader.Detail = (_, _) => Task.FromResult<RecordDetail?>(null);
+        vm.SelectedRecord = vm.Rows[1];
+        Pump();
+        Assert.False(vm.OpenOutputFailed);
+        Assert.False(vm.CanOpenFullOutput);
+        vm.Dispose();
     }
 
     [AvaloniaFact]

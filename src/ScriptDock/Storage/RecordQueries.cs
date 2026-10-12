@@ -203,6 +203,16 @@ internal static class RecordQueries
         }
     }
 
+    /// <summary>A run's whole stored output, or null when the run has none.</summary>
+    public static byte[]? ReadRunOutput(SqliteConnection connection, long id)
+    {
+        using var command = connection.CreateCommand();
+        command.Parameters.AddWithValue("$id", id);
+        command.CommandText = $"SELECT o.output FROM {RunsWithOutput} WHERE r.id = $id";
+        using var reader = command.ExecuteReader();
+        return reader.Read() && !reader.IsDBNull(0) ? (byte[])reader.GetValue(0) : null;
+    }
+
     public static IReadOnlyList<string> ReadSessions(SqliteConnection connection)
     {
         using var command = connection.CreateCommand();

@@ -21,9 +21,11 @@ public sealed class FakeRecordReader : IRecordReader
     public List<RecordsQuery> PageQueries { get; } = [];
     public List<(RecordKind Kind, long Id)> DetailReads { get; } = [];
     public int SourceReads { get; private set; }
+    public List<long> OutputReads { get; } = [];
 
     public RecordsPage Page { get; set; } = new([], false);
     public Func<RecordKind, long, Task<RecordDetail?>> Detail { get; set; } = (_, _) => Task.FromResult<RecordDetail?>(null);
+    public Func<long, Task<byte[]?>> Output { get; set; } = _ => Task.FromResult<byte[]?>(null);
     public Func<Task<RecordSources>> Sources { get; set; } =
         () => Task.FromResult(new RecordSources(CurrentSession, [CurrentSession]));
 
@@ -51,6 +53,12 @@ public sealed class FakeRecordReader : IRecordReader
     {
         DetailReads.Add((kind, id));
         return Detail(kind, id);
+    }
+
+    public Task<byte[]?> ReadRunOutputAsync(long id)
+    {
+        OutputReads.Add(id);
+        return Output(id);
     }
 
     public Task<RecordSources> ReadRecordSourcesAsync()

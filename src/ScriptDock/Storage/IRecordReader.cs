@@ -20,6 +20,9 @@ public interface IRecordReader
     /// <summary>One record whole, or null when there is no such record.</summary>
     Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id);
 
+    /// <summary>A run's whole stored output, beyond what its detail shows; null when it has none.</summary>
+    Task<byte[]?> ReadRunOutputAsync(long id);
+
     /// <summary>Every launch that has a record the window lists.</summary>
     Task<RecordSources> ReadRecordSourcesAsync();
 

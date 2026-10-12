@@ -100,15 +100,19 @@ public sealed class RecordQueriesTests : IDisposable
         using var records = new RecordStore(_dir, SessionStart);
         var run = Run(1, "/large.command");
         await records.AddRunAsync(run);
-        var bytes = Encoding.UTF8.GetBytes(new string('a', RunRecordDetail.PreviewBytes - 1) + "😀" + new string('b', 10000) + "far marker");
+        // Lines of 1 KB up to one byte before the preview limit, where a four-byte emoji straddles it.
+        var lines = string.Concat(Enumerable.Repeat(new string('a', 1023) + "\n", 1023));
+        var prefix = lines + new string('a', RunRecordDetail.PreviewBytes - 1 - Encoding.UTF8.GetByteCount(lines));
+        var bytes = Encoding.UTF8.GetBytes(prefix + "😀" + new string('b', 10000) + "far marker");
         await records.AddRunOutputAsync(run, bytes);
         var row = Assert.Single((await Page(records, RecordsQuery.All with { Search = "far marker" })).Records);
         var detail = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(row.Kind, row.Id));
         Assert.True(detail.Output!.Length <= RunRecordDetail.PreviewBytes + 1);
         Assert.Equal(bytes.LongLength, detail.OutputLength);
         var preview = Assert.IsType<OutputPreview>(RecordFormat.Output(detail.Output, totalBytes: detail.OutputLength));
-        Assert.Equal(new string('a', RunRecordDetail.PreviewBytes - 1), preview.Text);
+        Assert.Equal(prefix, preview.Text);
         Assert.Equal(bytes.LongLength - (RunRecordDetail.PreviewBytes - 1), preview.MoreBytes);
+        Assert.Equal(bytes, await records.ReadRunOutputAsync(row.Id));
     }
 
     [Fact]

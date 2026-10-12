@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text;
 using ScriptDock.ViewModels;
 using Xunit;
@@ -79,6 +80,19 @@ public sealed class RecordFormatTests
     }
 
     [Fact]
+    public void A_line_too_long_to_wrap_quickly_is_shown_shortened_with_one_marker()
+    {
+        var limit = RecordFormat.OutputShownLineGraphemes;
+        var fits = new string('a', limit);
+        var tooLong = new string('b', limit) + "c";
+
+        var preview = RecordFormat.Output(Encoding.UTF8.GetBytes($"{fits}\n{tooLong}\nshort\n"));
+
+        Assert.Equal(new OutputPreview($"{fits}\n{new string('b', limit)}…\nshort", 0, LinesShortened: true), preview);
+        Assert.False(RecordFormat.Output(Encoding.UTF8.GetBytes(fits))!.LinesShortened);
+    }
+
+    [Fact]
     public void The_cut_never_splits_a_character()
     {
         // "aé" is a, then é in two bytes; a limit of 2 falls inside é, so the cut backs off before it.
@@ -92,11 +106,14 @@ public sealed class RecordFormatTests
     [Fact]
     public void The_default_limit_is_one_megabyte()
     {
-        var stored = Encoding.UTF8.GetBytes(new string('x', RecordFormat.OutputShownBytes + 10));
+        // Lines of 1 KB, so only the byte limit shortens the view.
+        var line = new string('x', 1023) + "\n";
+        var stored = Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat(line, RecordFormat.OutputShownBytes / 1024)) + "0123456789");
 
         var preview = RecordFormat.Output(stored)!;
 
-        Assert.Equal(RecordFormat.OutputShownBytes, preview.Text.Length);
+        Assert.Equal(RecordFormat.OutputShownBytes - 1, preview.Text.Length);
         Assert.Equal(10, preview.MoreBytes);
+        Assert.False(preview.LinesShortened);
     }
 }

@@ -3,6 +3,7 @@
         xmlns:vm="using:ScriptDock.ViewModels"
         xmlns:ctl="using:ScriptDock.Controls"
         xmlns:i18n="using:ScriptDock.I18n"
+        xmlns:views="using:ScriptDock.Views"
         x:Class="ScriptDock.Views.RecordsWindow"
         x:DataType="vm:RecordsWindowViewModel"
         i18n:Localized.Title="records.title"
@@ -210,6 +211,31 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+                            <!-- The direct path to the output the 1 MB view leaves out (text-cleanup conventions,
+                                 rule 4): offered only when the view is partial, under the note that names it. -->
+                            <StackPanel Spacing="8" IsVisible="{Binding CanOpenFullOutput}">
+                                <Button i18n:Localized.Content="records.openFullOutput" Command="{Binding OpenFullOutputCommand}"
+                                        HorizontalAlignment="Left"/>
+                                <Border x:Name="OpenOutputErrorBar" IsVisible="{Binding OpenOutputFailed}"
+                                        Background="{DynamicResource ErrorSurfaceBrush}" BorderBrush="{DynamicResource DangerTextBrush}"
+                                        BorderThickness="1" CornerRadius="6" Padding="9,7"
+                                        AutomationProperties.LiveSetting="Assertive">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <TextBlock x:Name="OpenOutputErrorText" i18n:Localized.Text="records.openOutputFailed"
+                                                   TextWrapping="Wrap" VerticalAlignment="Top"
+                                                   Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                        <Button Grid.Column="1" Classes="resultClose" VerticalAlignment="Top"
+                                                views:FirstLineAlignment.To="{Binding #OpenOutputErrorText}"
+                                                Command="{Binding DismissOpenOutputErrorCommand}"
+                                                i18n:Localized.AutomationName="records.closeOutputResult"
+                                                i18n:Localized.ToolTip="common.close">
+                                            <Path Width="10" Height="10" Stretch="Uniform"
+                                                  Stroke="{DynamicResource DangerTextBrush}" StrokeThickness="1.8"
+                                                  StrokeLineCap="Round" Data="M1,1 L9,9 M9,1 L1,9"/>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>
