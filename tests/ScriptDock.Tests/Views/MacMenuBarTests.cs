@@ -39,11 +39,11 @@ public sealed class MacMenuBarTests
         Assert.Equal(
             new[]
             {
-                "About ScriptDock", "—", "Settings…", "—", "Services", "—",
+                "About ScriptDock", "—", "Settings", "—", "Services", "—",
                 "Hide ScriptDock", "Hide Others", "Show All", "—", "Quit ScriptDock",
             },
             Titles(Menu("ScriptDock")));
-        Assert.Equal((",", Cmd), KeyOf(Menu("ScriptDock"), "Settings…"));
+        Assert.Equal((",", Cmd), KeyOf(Menu("ScriptDock"), "Settings"));
         Assert.Equal(("q", Cmd), KeyOf(Menu("ScriptDock"), "Quit ScriptDock"));
     }
 
