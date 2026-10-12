@@ -52,6 +52,10 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        // A focused ListBoxItem marks Enter and Space handled for its own selection before the list's KeyDown
+        // sees them (composite-control conventions), so the run gesture listens to handled events too.
+        ScriptsList.AddHandler(KeyDownEvent, OnScriptKeyDown, RoutingStrategies.Bubble, handledEventsToo: true);
+
         _scriptsColumnFloor = BodyGrid.ColumnDefinitions[0].MinWidth;
         _recentColumnFloor = BodyGrid.ColumnDefinitions[2].MinWidth;
         if (OperatingSystem.IsWindows())

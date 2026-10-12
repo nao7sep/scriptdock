@@ -222,7 +222,7 @@
                             <ListBox x:Name="ScriptsList" ItemsSource="{Binding Scripts}"
                                      SelectedItem="{Binding SelectedScript, Mode=TwoWay}"
                                      ItemTemplate="{DynamicResource ScriptTile}"
-                                     DoubleTapped="OnScriptDoubleTapped" KeyDown="OnScriptKeyDown">
+                                     DoubleTapped="OnScriptDoubleTapped">
                                 <ListBox.ItemsPanel>
                                     <ItemsPanelTemplate>
                                         <WrapPanel/>
