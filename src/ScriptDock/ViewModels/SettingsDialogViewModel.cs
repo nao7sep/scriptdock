@@ -58,6 +58,17 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsDirty))]
     private LanguageOption _language;
 
+    // The zone times are shown in, chosen from the list and applied on Save with its neighbours.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDirty))]
+    private TimeZoneOption _timeZone;
+
+    // Whether the computer's appearance is dark now, which the System theme entry names. The view keeps
+    // it current while the dialog is open.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ThemeSystemLabel))]
+    private bool _systemThemeIsDark;
+
     // UI (chrome) font family. Family only; blank = the bundled default.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsDirty))]
@@ -76,6 +87,8 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         _theme = config.Theme;
         LanguageOptions = LanguageOption.All();
         _language = LanguageOption.For(Languages.NormalizePreference(config.Language), LanguageOptions);
+        TimeZoneOptions = TimeZoneOption.All();
+        _timeZone = TimeZoneOption.For(config.TimeZone, TimeZoneOptions);
         _uiFontFamily = config.UiFontFamily;
 
         RootDirs = new ObservableCollection<string>(config.RootDirs);
@@ -97,6 +110,7 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         UiFontFamily = TextCleanup.SingleLine(UiFontFamily),
         Theme = Theme,
         Language = Language.Value,
+        TimeZone = TimeZone.Value,
     };
 
     public bool IsDirty => !ConfigSets.Same(ToConfig(), _opened);
@@ -122,6 +136,13 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
 
     /// <summary>The language list: System first, then each language under its own name.</summary>
     public IReadOnlyList<LanguageOption> LanguageOptions { get; }
+
+    /// <summary>The zone list: System first, with the zone it resolves to now, then the platform's zones.</summary>
+    public IReadOnlyList<TimeZoneOption> TimeZoneOptions { get; }
+
+    /// <summary>The System theme entry, with the appearance it resolves to now (app-chrome-conventions, Theme).</summary>
+    public string ThemeSystemLabel => Localizer.T("settings.themeSystem",
+        ("theme", Localizer.T(SystemThemeIsDark ? "settings.themeDark" : "settings.themeLight")));
 
     public string ExtensionError => Localizer.Current.Of(ExtensionErrorMessage) ?? string.Empty;
     public string PatternError => Localizer.Current.Of(PatternErrorMessage) ?? string.Empty;

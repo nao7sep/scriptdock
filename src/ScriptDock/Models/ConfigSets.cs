@@ -19,6 +19,8 @@ public static class ConfigSets
         ["uiFontFamily"] = new(c => c.UiFontFamily, (c, v) => c.UiFontFamily = TextCleanup.SingleLine(String(v))),
         ["language"] = new(c => c.Language, (c, v) =>
             c.Language = Languages.TryParse(String(v), out var language) ? language : throw new JsonException("Unknown language")),
+        ["timeZone"] = new(c => c.TimeZone, (c, v) =>
+            c.TimeZone = Services.DisplayTime.TryParse(String(v), out var zone) ? zone : throw new JsonException("Unknown time zone")),
         ["theme"] = new(c => c.Theme, (c, v) =>
         {
             var name = String(v);

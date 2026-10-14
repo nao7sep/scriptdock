@@ -33,6 +33,10 @@ public sealed class AppConfig
     /// </summary>
     public string Language { get; set; } = I18n.Languages.System;
 
+    /// <summary>The zone times are shown in: an IANA zone, or <c>system</c> to follow the computer's zone at
+    /// each launch. A missing value means system (timestamp-conventions, Time zones).</summary>
+    public string TimeZone { get; set; } = Services.DisplayTime.System;
+
     /// <summary>The app theme. System follows the OS; applied app-wide before the main window exists
     /// and again on each Save.</summary>
     public ThemePreference Theme { get; set; } = ThemePreference.System;

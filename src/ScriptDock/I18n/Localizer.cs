@@ -26,6 +26,9 @@ internal static class Localizer
     /// <summary>The preference as saved: a tag, or <see cref="Languages.System"/>.</summary>
     internal static string Preference { get; private set; } = Languages.System;
 
+    /// <summary>The computer's own languages, as the last <see cref="Use"/> was given them: what System means.</summary>
+    internal static IReadOnlyList<string> ComputerLanguages { get; private set; } = [];
+
     /// <summary>Raised after the language has changed, on the thread that changed it.</summary>
     internal static event Action? Changed;
 
@@ -39,6 +42,7 @@ internal static class Localizer
         var normalized = Languages.NormalizePreference(preference);
         var tag = Languages.Resolve(normalized, computerLanguages);
         Preference = normalized;
+        ComputerLanguages = computerLanguages;
         if (tag == s_translator.Tag)
             return;
 

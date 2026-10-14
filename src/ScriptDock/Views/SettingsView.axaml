@@ -24,20 +24,33 @@
         <!-- The interface language, first because it governs every other label here. The names are
              written in their own languages so a reader finds theirs whatever is showing; only System
              is translated. It applies on Save with its neighbours (localization conventions). -->
-        <StackPanel Spacing="8">
-            <TextBlock i18n:Localized.Text="settings.language" Classes="cardHeader"/>
-            <ComboBox x:Name="LanguageChoice" HorizontalAlignment="Left" MinWidth="200"
-                      ItemsSource="{Binding LanguageOptions}"
-                      SelectedItem="{Binding Language}"
-                      DisplayMemberBinding="{Binding Name}"
-                      i18n:Localized.AutomationName="settings.language"/>
-        </StackPanel>
+        <!-- The language and the zone times are shown in sit side by side. The zone comes from the
+             platform's IANA zones, System first with the zone it resolves to now (timestamp-conventions,
+             Time zones). -->
+        <WrapPanel ItemSpacing="24" LineSpacing="20">
+            <StackPanel Spacing="8">
+                <TextBlock i18n:Localized.Text="settings.language" Classes="cardHeader"/>
+                <ComboBox x:Name="LanguageChoice" MinWidth="200"
+                          ItemsSource="{Binding LanguageOptions}"
+                          SelectedItem="{Binding Language}"
+                          DisplayMemberBinding="{Binding Name}"
+                          i18n:Localized.AutomationName="settings.language"/>
+            </StackPanel>
+            <StackPanel Spacing="8">
+                <TextBlock i18n:Localized.Text="settings.timeZone" Classes="cardHeader"/>
+                <ComboBox x:Name="TimeZoneChoice" MinWidth="200"
+                          ItemsSource="{Binding TimeZoneOptions}"
+                          SelectedItem="{Binding TimeZone}"
+                          DisplayMemberBinding="{Binding Name}"
+                          i18n:Localized.AutomationName="settings.timeZone"/>
+            </StackPanel>
+        </WrapPanel>
 
         <StackPanel Spacing="8">
             <TextBlock i18n:Localized.Text="settings.theme" Classes="cardHeader"/>
             <StackPanel x:Name="ThemeChoices" Orientation="Horizontal" Spacing="20"
                         i18n:Localized.AutomationName="settings.theme">
-                <RadioButton i18n:Localized.Content="settings.themeSystem" IsChecked="{Binding IsThemeSystem}"/>
+                <RadioButton Content="{Binding ThemeSystemLabel}" IsChecked="{Binding IsThemeSystem}"/>
                 <RadioButton i18n:Localized.Content="settings.themeLight" IsChecked="{Binding IsThemeLight}"/>
                 <RadioButton i18n:Localized.Content="settings.themeDark" IsChecked="{Binding IsThemeDark}"/>
             </StackPanel>

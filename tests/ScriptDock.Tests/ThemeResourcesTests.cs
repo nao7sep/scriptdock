@@ -290,7 +290,9 @@ public sealed class ThemeResourcesTests
             host.Show();
             Dispatcher.UIThread.RunJobs();
             var radios = view.FindControl<StackPanel>("ThemeChoices")!.Children.OfType<RadioButton>().ToList();
-            Assert.Equal(new[] { "System", "Light", "Dark" }, radios.Select(radio => (string)radio.Content!));
+            // System names the appearance it resolves to now.
+            Assert.Equal(new[] { vm.ThemeSystemLabel, "Light", "Dark" }, radios.Select(radio => (string)radio.Content!));
+            Assert.Contains(vm.ThemeSystemLabel, new[] { "System (Light)", "System (Dark)" });
             Assert.Equal("Dark", radios.Single(radio => radio.IsChecked == true).Content);
             Assert.False(vm.IsDirty);
 

@@ -40,7 +40,7 @@ public sealed class RecentEntry
     /// timestamp conventions), written the way the reader's language and region write a date and a time
     /// to the minute rather than in one fixed English form.
     /// </summary>
-    public string LastRanDisplay => Localizer.Current.DateAndMinute(LastRanAt, TimeZoneInfo.Local);
+    public string LastRanDisplay => Localizer.Current.DateAndMinute(LastRanAt, DisplayTime.Zone);
 
     /// <summary>Short label for the state pill: the live process's state, or with none (a recent
     /// carried over from a past session) the recorded end of its last run, <c>Unknown</c> when no end

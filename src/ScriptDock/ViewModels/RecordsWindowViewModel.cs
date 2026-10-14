@@ -195,6 +195,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         _started = true;
         _reader.Stored += OnStored;
         Localizer.Changed += OnLanguageChanged;
+        DisplayTime.Changed += OnLanguageChanged; // every shown time is rendered again too
         _ = ReadSourcesAsync();
         _ = ReloadAsync();
     }
@@ -253,6 +254,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         _detailVersion++;
         _reader.Stored -= OnStored;
         Localizer.Changed -= OnLanguageChanged;
+        DisplayTime.Changed -= OnLanguageChanged;
         _liveTimer?.Dispose();
         _searchTimer?.Dispose();
     }

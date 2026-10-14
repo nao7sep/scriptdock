@@ -133,11 +133,11 @@ public static class RecordFormat
         }
     }
 
-    /// <summary>A stored time in the computer's own zone, to the second or the millisecond; text that is not
+    /// <summary>A stored time in the display zone (`DisplayTime`), to the second or the millisecond; text that is not
     /// a time is shown as it is.</summary>
     public static string Time(string stored, bool milliseconds = false) =>
         DateTimeOffset.TryParse(stored, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var moment)
-            ? Localizer.Current.DateAndSecond(moment, TimeZoneInfo.Local, milliseconds)
+            ? Localizer.Current.DateAndSecond(moment, DisplayTime.Zone, milliseconds)
             : stored;
 
     /// <summary>A launch, named by its session's start time, marked when it is this one.</summary>

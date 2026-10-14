@@ -12,10 +12,11 @@ namespace ScriptDock.I18n;
 /// </summary>
 public sealed record LanguageOption(string Value, string Name)
 {
-    /// <summary>System first, then each language by its own name.</summary>
+    /// <summary>System first, named with the language it resolves to now, then each language by its own name.</summary>
     internal static IReadOnlyList<LanguageOption> All() =>
     [
-        new(Languages.System, Localizer.T("settings.languageSystem")),
+        new(Languages.System, Localizer.T("settings.languageSystem",
+            ("language", Languages.NameOf(Languages.Match(Localizer.ComputerLanguages))))),
         .. Languages.All.Select(language => new LanguageOption(language.Tag, language.Name)),
     ];
 

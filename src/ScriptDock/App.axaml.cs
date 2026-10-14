@@ -199,6 +199,7 @@ public partial class App : Application
         var knownPathsStore = AppStores.KnownPaths();
 
         var config = configStore.Load();
+        DisplayTime.Use(config.TimeZone);
         var state = stateStore.Load();
         var knownPaths = knownPathsStore.Load();
 

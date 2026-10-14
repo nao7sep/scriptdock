@@ -176,6 +176,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         // Everything this view model shows is held as a key, so a language change means every projection
         // has new words: an empty name tells the bindings to re-read them all.
         Localizer.Changed += OnLanguageChanged;
+        DisplayTime.Changed += OnLanguageChanged; // the Recent rows' times are rendered again too
     }
 
     /// <summary>
@@ -447,6 +448,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         BeginShutdown();
         Localizer.Changed -= OnLanguageChanged;
+        DisplayTime.Changed -= OnLanguageChanged;
         _outputTimer?.Stop();
         _outputImportTimer?.Stop();
         _catalogResultTimer?.Stop();
@@ -563,12 +565,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         var themeChanged = _config.Theme != candidate.Theme;
         _config.Theme = candidate.Theme;
         _config.Language = candidate.Language;
+        _config.TimeZone = candidate.TimeZone;
         if (themeChanged)
             OnPropertyChanged(nameof(Theme));
 
         // The language applies here, with its neighbours, and needs no restart: every surface holding a
         // key is re-read, and the view models re-render what they hold.
         Localizer.Use(candidate.Language, ComputerLanguages);
+        DisplayTime.Use(candidate.TimeZone);
         ApplyUiFont();
         if (fontChanged)
             UiFontChanged?.Invoke(this, EventArgs.Empty);
@@ -835,6 +839,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 {
                     UiFontFamily = _config.UiFontFamily,
                     Language = _config.Language,
+                    TimeZone = _config.TimeZone,
                     Theme = _config.Theme,
                     RootDirs = _config.RootDirs,
                     Extensions = _config.Extensions,

@@ -10,7 +10,31 @@ namespace ScriptDock.Views;
 
 public partial class SettingsView : UserControl
 {
-    public SettingsView() => InitializeComponent();
+    public SettingsView()
+    {
+        InitializeComponent();
+        // The System theme entry names the computer's appearance, kept current while the dialog is open.
+        AttachedToVisualTree += (_, _) =>
+        {
+            ShowSystemAppearance();
+            if (Avalonia.Application.Current?.PlatformSettings is { } platform)
+                platform.ColorValuesChanged += OnColorValuesChanged;
+        };
+        DetachedFromVisualTree += (_, _) =>
+        {
+            if (Avalonia.Application.Current?.PlatformSettings is { } platform)
+                platform.ColorValuesChanged -= OnColorValuesChanged;
+        };
+        DataContextChanged += (_, _) => ShowSystemAppearance();
+    }
+
+    private void OnColorValuesChanged(object? sender, Avalonia.Platform.PlatformColorValues values) => ShowSystemAppearance();
+
+    private void ShowSystemAppearance()
+    {
+        if (Vm is { } vm && Avalonia.Application.Current?.PlatformSettings?.GetColorValues() is { } colors)
+            vm.SystemThemeIsDark = colors.ThemeVariant == Avalonia.Platform.PlatformThemeVariant.Dark;
+    }
 
     public Control InitialFocusControl => UiFontEntry;
 
