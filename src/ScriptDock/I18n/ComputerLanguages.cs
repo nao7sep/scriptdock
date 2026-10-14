@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Text;
 using static ScriptDock.Views.ObjC;
 
@@ -52,21 +53,26 @@ internal static class ComputerLanguages
         return preferred;
     }
 
-    private static IReadOnlyList<string> WindowsPreferred()
+    [SupportedOSPlatform("windows")]
+    internal static IReadOnlyList<string> WindowsPreferred()
     {
         const uint byName = 0x8; // MUI_LANGUAGE_NAME
 
-        uint languages = 0;
         uint length = 0;
-        if (!GetUserPreferredUILanguages(byName, out languages, null, ref length) || length == 0)
+        if (!GetUserPreferredUILanguages(byName, out _, null, ref length) || length == 0)
             return [];
 
         var buffer = new char[length];
-        if (!GetUserPreferredUILanguages(byName, out languages, buffer, ref length))
+        if (!GetUserPreferredUILanguages(byName, out _, buffer, ref length))
             return [];
 
-        // A double-null-terminated block of names.
-        var preferred = new List<string>((int)languages);
+        return NameBlock(buffer);
+    }
+
+    // A double-null-terminated block of names, as Windows returns them.
+    internal static IReadOnlyList<string> NameBlock(char[] buffer)
+    {
+        var preferred = new List<string>();
         var name = new StringBuilder();
         foreach (var character in buffer)
         {

@@ -42,4 +42,23 @@ public sealed class ComputerLanguagesTests
         // what must match, not the exact tags.
         Assert.Equal(expected.Select(LanguageOf), read.Select(LanguageOf));
     }
+
+    [Fact]
+    public void A_windows_name_block_reads_each_name_in_order()
+    {
+        Assert.Equal(["ja-JP", "en-US"], ComputerLanguages.NameBlock("ja-JP\0en-US\0\0".ToCharArray()));
+        Assert.Equal(["de-DE"], ComputerLanguages.NameBlock("de-DE\0\0junk\0".ToCharArray()));
+        Assert.Empty(ComputerLanguages.NameBlock("\0\0".ToCharArray()));
+    }
+
+    [WindowsOnlyFact]
+    public void Windows_gives_the_computers_preferred_languages()
+    {
+        if (!OperatingSystem.IsWindows()) return; // the guard the platform analyzer recognizes
+
+        var read = ComputerLanguages.WindowsPreferred();
+
+        Assert.NotEmpty(read);
+        Assert.All(read, tag => Assert.Equal(tag, System.Globalization.CultureInfo.GetCultureInfo(tag).Name, ignoreCase: true));
+    }
 }

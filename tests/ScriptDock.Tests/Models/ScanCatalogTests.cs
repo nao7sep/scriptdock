@@ -8,9 +8,9 @@ namespace ScriptDock.Tests.Models;
 
 public sealed class ScanCatalogTests
 {
-    private static ScanReport Report(string unavailable) => new()
+    private static ScanReport Report(string unavailable, params string[] found) => new()
     {
-        CompletedAt = DateTimeOffset.UtcNow, Roots = [unavailable], Found = [],
+        CompletedAt = DateTimeOffset.UtcNow, Roots = [unavailable], Found = found,
         Inaccessible = [unavailable], PrunedDirectories = [], SkippedFiles = [], InvalidPatterns = [],
     };
 
@@ -20,6 +20,23 @@ public sealed class ScanCatalogTests
         var root = Path.GetPathRoot(Path.GetFullPath(Path.GetTempPath()))!;
         var prior = Path.Combine(root, "script.command");
         Assert.Equal([prior], ScanCatalog.Paths(Report(root), [prior], path => path));
+    }
+
+    // Windows compares paths without case, so a differently cased spelling of an unavailable folder still keeps
+    // its scripts, and one script found under two spellings is listed once; elsewhere case is significant.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PathCaseMattersOnlyWhereThePlatformComparesWithIt(bool ignoreCase)
+    {
+        var unavailable = Path.Combine(Path.GetTempPath(), "Vol", "Scripts");
+        var report = Report(unavailable, Path.Combine(unavailable, "A.ps1"));
+        var lower = Path.Combine(Path.GetTempPath(), "vol", "scripts");
+        var previous = new[] { Path.Combine(lower, "a.ps1"), Path.Combine(lower, "c.ps1") };
+
+        var kept = ScanCatalog.Paths(report, previous, path => path, ignoreCase);
+
+        Assert.Equal(ignoreCase ? [report.Found[0], previous[1]] : [report.Found[0]], kept);
     }
 
     [MacOnlyFact]
