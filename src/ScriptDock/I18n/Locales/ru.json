@@ -157,7 +157,6 @@
     "many": "Найдено {count} скриптов",
     "other": "Найдено {count} скрипта"
   },
-  "records.script": "Скрипт",
   "records.search": "Поиск по журналу",
   "records.started": "Начало",
   "records.thisLaunch": "{time} (текущий сеанс)",

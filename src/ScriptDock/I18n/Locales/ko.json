@@ -142,7 +142,6 @@
   "records.scanFound": {
     "other": "스크립트 {count}개 발견"
   },
-  "records.script": "스크립트",
   "records.search": "로그 검색",
   "records.started": "시작",
   "records.thisLaunch": "{time}(이번 세션)",

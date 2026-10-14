@@ -57,12 +57,12 @@
              directories that exist on disk, so picking beats hand-entering a path. -->
         <StackPanel Spacing="8">
             <TextBlock i18n:Localized.Text="settings.roots" Classes="cardHeader"/>
-            <!-- A folder keeps its first and final segments on one line; the selected one shows whole. -->
+            <!-- A folder keeps its first and final segments on one line. -->
             <ListBox x:Name="RootList" ItemsSource="{Binding RootDirs}" Height="96"
                      Classes="boxed" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="x:String">
-                        <TextBlock Text="{Binding}" Classes="itemPath wholeWhenSelected"/>
+                        <TextBlock Text="{Binding}" Classes="itemPath"/>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
@@ -102,7 +102,7 @@
                      Classes="boxed" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="x:String">
-                        <TextBlock Text="{Binding}" Classes="itemName wholeWhenSelected"/>
+                        <TextBlock Text="{Binding}" Classes="itemName"/>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
@@ -133,7 +133,7 @@
                      Classes="boxed" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="x:String">
-                        <TextBlock Text="{Binding}" Classes="itemName wholeWhenSelected"/>
+                        <TextBlock Text="{Binding}" Classes="itemName"/>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>

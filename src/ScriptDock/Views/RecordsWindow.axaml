@@ -119,7 +119,7 @@
                                         </Border>
                                     </StackPanel>
                                     <!-- One line each: a script's path keeps its first and final segments, a
-                                         message its beginning; the selected record's detail shows them whole. -->
+                                         message its beginning. -->
                                     <TextBlock Text="{Binding Title}" Classes.code="{Binding IsCodeTitle}"
                                                Classes.itemPath="{Binding IsPathTitle}" Classes.itemName="{Binding !IsPathTitle}"
                                                FontWeight="SemiBold"/>
@@ -169,7 +169,7 @@
                                                Foreground="{DynamicResource TextSecondaryBrush}"/>
                                 </Border>
                             </StackPanel>
-                            <!-- A header line: the fields below hold the whole message or script. -->
+                            <!-- A header line: a log's whole message is a field below. -->
                             <SelectableTextBlock Text="{Binding DetailTitle}" Classes.code="{Binding DetailIsCodeTitle}"
                                                  Classes.itemPath="{Binding DetailIsPathTitle}" Classes.itemName="{Binding !DetailIsPathTitle}"
                                                  FontWeight="SemiBold" VerticalAlignment="Center"/>

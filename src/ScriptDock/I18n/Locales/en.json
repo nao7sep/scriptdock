@@ -147,7 +147,6 @@
     "one": "{count} script found",
     "other": "{count} scripts found"
   },
-  "records.script": "Script",
   "records.search": "Search records",
   "records.started": "Started",
   "records.thisLaunch": "{time} (this launch)",

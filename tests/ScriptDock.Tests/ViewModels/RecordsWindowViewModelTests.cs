@@ -166,7 +166,6 @@ public sealed class RecordsWindowViewModelTests
         Assert.Equal("/repo/dev.command", vm.DetailTitle);
         Assert.True(vm.DetailIsError);
         var fields = vm.DetailFields.ToDictionary(field => field.Label, field => field.Value);
-        Assert.Equal("/repo/dev.command", fields[English.Of("records.script")]); // the header shortens it
         Assert.True(vm.DetailIsPathTitle);
         Assert.Equal("exited", fields[English.Of("records.endState")]);
         Assert.Equal("3", fields[English.Of("records.exitCode")]);

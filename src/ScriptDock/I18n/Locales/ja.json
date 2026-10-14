@@ -142,7 +142,6 @@
   "records.scanFound": {
     "other": "スクリプト {count} 件を検出"
   },
-  "records.script": "スクリプト",
   "records.search": "ログを検索",
   "records.started": "開始",
   "records.thisLaunch": "{time}（今回の起動）",

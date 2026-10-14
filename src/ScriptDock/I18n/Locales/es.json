@@ -152,7 +152,6 @@
     "many": "{count} de scripts encontrados",
     "other": "{count} scripts encontrados"
   },
-  "records.script": "Script",
   "records.search": "Buscar registros",
   "records.started": "Inicio",
   "records.thisLaunch": "{time} (esta sesión)",

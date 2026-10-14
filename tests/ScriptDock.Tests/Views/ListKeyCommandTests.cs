@@ -67,13 +67,16 @@ public sealed class ListKeyCommandTests : WindowTest, IDisposable
     {
         var config = new AppConfig();
         var state = new AppState();
+        // The window's first load builds Recent from the records, so the entry comes from there rather than
+        // being added to a list that load would rebuild.
+        var records = new FakeRecordStore();
+        records.Runs.Add(new RunRecord(records.Session, 1, DateTimeOffset.UtcNow, "/x/old.command", null, null, null));
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config }, new FakeJsonStore<AppState> { Value = state }, new FakeJsonStore<KnownPaths>(),
-            new FakeRecordStore(), config, state, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+            records, config, state, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
         var window = Show(new MainWindow { DataContext = vm });
-        var entry = new RecentEntry("/x/old.command", "old.command", DateTimeOffset.UtcNow, process: null);
-        vm.Recent.Add(entry);
-        Dispatcher.UIThread.RunJobs();
+        Assert.True(System.Threading.SpinWait.SpinUntil(
+            () => { Dispatcher.UIThread.RunJobs(); return vm.Recent.Count == 1 && !vm.IsScanning; }, TimeSpan.FromSeconds(5)));
         var list = window.FindControl<ListBox>("RecentList")!;
         list.SelectedIndex = 0;
         list.ContainerFromIndex(0)!.Focus(NavigationMethod.Tab);
@@ -82,6 +85,7 @@ public sealed class ListKeyCommandTests : WindowTest, IDisposable
         window.KeyRelease(key, RawInputModifiers.None, PhysicalKey.None, null);
 
         Assert.True(System.Threading.SpinWait.SpinUntil(
-            () => { Dispatcher.UIThread.RunJobs(); return !vm.Recent.Contains(entry); }, TimeSpan.FromSeconds(5)));
+            () => { Dispatcher.UIThread.RunJobs(); return vm.Recent.Count == 0; }, TimeSpan.FromSeconds(5)));
+        Assert.Equal(["/x/old.command"], records.Dismissals);
     }
 }

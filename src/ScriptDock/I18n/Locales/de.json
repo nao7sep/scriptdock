@@ -147,7 +147,6 @@
     "one": "{count} Skript gefunden",
     "other": "{count} Skripte gefunden"
   },
-  "records.script": "Skript",
   "records.search": "Protokoll durchsuchen",
   "records.started": "Beginn",
   "records.thisLaunch": "{time} (diese Sitzung)",

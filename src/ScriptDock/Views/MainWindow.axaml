@@ -21,7 +21,7 @@
              dot: green while the script runs, otherwise orange while it is new;
              removed → red text, hidden → gray text. The 1px border is transparent
              by default (the selected-chip style colours it, so selection never shifts the layout). A long
-             name ends in an ellipsis, and the selected chip shows it whole. -->
+             name ends in an ellipsis. -->
         <DataTemplate x:Key="ScriptTile" x:DataType="models:ScriptItem">
             <Border Classes="chip"
                     Background="{DynamicResource ChipBackgroundBrush}"
@@ -32,7 +32,7 @@
                     <Ellipse DockPanel.Dock="Left" Width="7" Height="7" Margin="0,0,6,0" Fill="{DynamicResource RunningBrush}" VerticalAlignment="Center" IsVisible="{Binding IsRunning}"/>
                     <!-- The name's colour follows the script's state through the scriptName styles, so it
                          repaints with the theme: removed wins over hidden. -->
-                    <TextBlock Text="{Binding DisplayName}" Classes="scriptName itemName wholeWhenSelected"
+                    <TextBlock Text="{Binding DisplayName}" Classes="scriptName itemName"
                                Classes.hidden="{Binding IsHidden}" Classes.removed="{Binding IsRemoved}"/>
                 </DockPanel>
             </Border>
@@ -251,8 +251,7 @@
                                 <TextBlock i18n:Localized.Text="output.title" Classes="cardHeader" VerticalAlignment="Center"/>
                                 <!-- The selected script's name as a colored pill, floated right, so the
                                      console makes clear whose output it is shown only when a run is selected.
-                                     It takes the room the title leaves and may shorten the name: the pill exists
-                                     only while that run is selected, and the selected Recent row shows it whole. -->
+                                     It takes the room the title leaves and may shorten the name. -->
                                 <Border Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0,0,0"
                                         Background="{DynamicResource SelectionBrush}" CornerRadius="10" Padding="10,3"
                                         IsVisible="{Binding HasSelection}">
@@ -325,7 +324,7 @@
                                 <DataTemplate x:DataType="vm:RecentEntry">
                                     <Grid ColumnDefinitions="*,Auto">
                                         <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding DisplayName}" Classes="itemName wholeWhenSelected"/>
+                                            <TextBlock Text="{Binding DisplayName}" Classes="itemName"/>
                                             <TextBlock Text="{Binding LastRanDisplay}" Classes="recentMeta" FontSize="11"
                                                        Foreground="{DynamicResource TextSecondaryBrush}"/>
                                         </StackPanel>

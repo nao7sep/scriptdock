@@ -18,8 +18,8 @@ namespace ScriptDock.Tests.Views;
 /// <summary>
 /// Variable text never sizes its container (interface-styling-conventions, Labels): a name or path that
 /// identifies an item takes one line and ends in one ellipsis, a name keeping its beginning and a path its
-/// final segment; where a list has no detail of its own, the selected item shows the whole value; text to
-/// be read wraps inside an area with a height limit that scrolls.
+/// final segment; text to be read wraps inside an area with a height limit that scrolls, and a log's whole
+/// message is in its detail.
 /// </summary>
 public sealed class TextFitTests : WindowTest
 {
@@ -43,17 +43,17 @@ public sealed class TextFitTests : WindowTest
             Dispatcher.UIThread.RunJobs();
     }
 
-    private MainWindowViewModel NewMainVm()
+    private static MainWindowViewModel NewMainVm(FakeRecordStore? records = null)
     {
         var config = new AppConfig();
         var state = new AppState();
         return new MainWindowViewModel(
             new FakeConfigStore { Value = config }, new FakeJsonStore<AppState> { Value = state }, new FakeJsonStore<KnownPaths>(),
-            new FakeRecordStore(), config, state, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+            records ?? new FakeRecordStore(), config, state, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
     }
 
     [AvaloniaFact]
-    public void A_long_script_name_stays_inside_its_capped_chip_and_the_selected_chip_shows_it_whole()
+    public void A_long_script_name_stays_on_one_line_inside_its_capped_chip()
     {
         var window = Show(new MainWindow { DataContext = NewMainVm(), Width = 1100, Height = 760 });
         var list = window.FindControl<ListBox>("ScriptsList")!;
@@ -68,21 +68,18 @@ public sealed class TextFitTests : WindowTest
         Assert.Single(name.TextLayout.TextLines);
         Assert.StartsWith("a-script-whose", Drawn(name));
         Assert.EndsWith("…", Drawn(name));
-
-        list.SelectedIndex = 0;
-        Settle();
-
-        Assert.InRange(chip.Bounds.Width, 0, ScriptChip.MaxWidth);
-        Assert.True(name.TextLayout.TextLines.Count > 1);
-        Assert.Equal(LongName, Drawn(name).Replace("\n", ""));
     }
 
     [AvaloniaFact]
-    public void A_long_recent_name_takes_one_line_until_its_row_is_selected()
+    public void A_long_recent_name_takes_one_line()
     {
-        var vm = NewMainVm();
+        // Recent is built from the records by the window's first load.
+        var records = new FakeRecordStore();
+        records.Runs.Add(new RunRecord(records.Session, 1, DateTimeOffset.UtcNow, "/x/" + LongName, null, null, null));
+        var vm = NewMainVm(records);
         var window = Show(new MainWindow { DataContext = vm, Width = 1100, Height = 760 });
-        vm.Recent.Add(new RecentEntry("/x/" + LongName, LongName, DateTimeOffset.UtcNow, process: null));
+        Assert.True(System.Threading.SpinWait.SpinUntil(
+            () => { Dispatcher.UIThread.RunJobs(); return vm.Recent.Count == 1 && !vm.IsScanning; }, TimeSpan.FromSeconds(5)));
         Settle();
         var list = window.FindControl<ListBox>("RecentList")!;
         var row = (Control)list.ContainerFromIndex(0)!;
@@ -90,12 +87,6 @@ public sealed class TextFitTests : WindowTest
 
         Assert.Single(name.TextLayout.TextLines);
         Assert.EndsWith("…", Drawn(name));
-
-        list.SelectedIndex = 0;
-        Settle();
-
-        Assert.True(name.TextLayout.TextLines.Count > 1);
-        Assert.DoesNotContain("…", Drawn(name));
     }
 
     [AvaloniaFact]
@@ -112,7 +103,7 @@ public sealed class TextFitTests : WindowTest
     }
 
     [AvaloniaFact]
-    public void A_long_scan_folder_in_settings_keeps_its_final_segment_on_one_line_until_selected()
+    public void A_long_scan_folder_in_settings_keeps_its_final_segment_on_one_line()
     {
         var vm = new SettingsDialogViewModel(new AppConfig { RootDirs = [LongPath] });
         var view = new SettingsView { DataContext = vm };
@@ -126,15 +117,10 @@ public sealed class TextFitTests : WindowTest
         Assert.Contains("…", Drawn(path));
         Assert.EndsWith("/final-folder", Drawn(path));
         Assert.True(row.Bounds.Width <= list.Bounds.Width);
-
-        list.SelectedIndex = 0;
-        Settle();
-
-        Assert.Equal(LongPath, Drawn(path).Replace("\n", ""));
     }
 
     [AvaloniaFact]
-    public async Task Records_rows_and_the_detail_header_take_one_line_and_the_detail_holds_the_whole_value()
+    public async Task Records_rows_and_the_detail_header_take_one_line_and_a_logs_detail_holds_its_whole_message()
     {
         var session = FakeRecordReader.CurrentSession;
         var script = LongPath + "/deploy.command";

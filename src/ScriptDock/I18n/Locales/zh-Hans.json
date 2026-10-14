@@ -142,7 +142,6 @@
   "records.scanFound": {
     "other": "找到 {count} 个脚本"
   },
-  "records.script": "脚本",
   "records.search": "搜索日志",
   "records.started": "开始",
   "records.thisLaunch": "{time}（本次会话）",

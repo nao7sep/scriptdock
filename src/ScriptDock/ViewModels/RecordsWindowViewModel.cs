@@ -539,7 +539,6 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
                 break;
 
             case RunRecordDetail run:
-                Add("records.script", run.Script, code: true);
                 Add("records.started", RecordFormat.Time(run.Time, milliseconds: true));
                 Add("records.ended", run.EndedAt is null ? null : RecordFormat.Time(run.EndedAt, milliseconds: true));
                 Add("records.endState", run.EndState, code: true);
