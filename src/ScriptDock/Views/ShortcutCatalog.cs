@@ -96,6 +96,8 @@ public static class ShortcutCatalog
             Command(ShortcutGroup.Commands, "shortcuts.toggleHidden", cmd | KeyModifiers.Shift, cmdLabel, Key.H, "Shift+H", ShortcutAction.ToggleShowHidden),
             Command(ShortcutGroup.Commands, "shortcuts.settings", cmd, cmdLabel, Key.OemComma, "Comma", ShortcutAction.OpenSettings),
             Command(ShortcutGroup.Commands, "shortcuts.shortcuts", cmd, cmdLabel, Key.OemQuestion, "Slash", ShortcutAction.ShowShortcuts),
+            // Every window binds its own close (CloseWindowShortcut), so the main window only lists it.
+            Display(ShortcutGroup.Commands, "shortcuts.closeWindow", cmdLabel + "+W"),
 
             // Scripts — running the selection is owned by the tile (pointer + keys), listed for discoverability.
             Display(ShortcutGroup.Scripts, "shortcuts.runSelected", "Double-click/Enter/Space"),

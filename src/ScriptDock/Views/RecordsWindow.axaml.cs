@@ -28,6 +28,7 @@ public partial class RecordsWindow : Window
     public RecordsWindow()
     {
         InitializeComponent();
+        CloseWindowShortcut.Attach(this);
 
         if (OperatingSystem.IsWindows())
         {

@@ -65,6 +65,7 @@ public partial class DialogBase : Window
     public DialogBase()
     {
         InitializeComponent();
+        CloseWindowShortcut.Attach(this);
         Activated += (_, _) => Classes.Set("windowInactive", false);
         Deactivated += (_, _) => Classes.Set("windowInactive", true);
         Opened += OnOpened;

@@ -51,6 +51,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        CloseWindowShortcut.Attach(this);
 
         // A focused ListBoxItem marks Enter and Space handled for its own selection before the list's KeyDown
         // sees them (composite-control conventions), so the run gesture listens to handled events too.
@@ -760,7 +761,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            Records?.ShowOrActivate();
+            Records?.ShowOrActivate(this);
             ViewModel?.ResolveShellActionError("open-records");
         }
         catch (Exception ex)

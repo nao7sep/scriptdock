@@ -56,10 +56,11 @@ public sealed class MacMenuBarTests
             new[] { ("z", Cmd), ("Z", Cmd), ("x", Cmd), ("c", Cmd), ("v", Cmd), ("a", Cmd) },
             Menu("Edit").OfType<Item>().Select(item => (item.Key, item.Modifiers)));
 
-        Assert.Equal(new[] { "Minimize", "Zoom", "—", "Bring All to Front" }, Titles(Menu("Window")));
+        Assert.Equal(new[] { "Close", "—", "Minimize", "Zoom", "—", "Bring All to Front" }, Titles(Menu("Window")));
         Assert.Equal(
-            new[] { "performMiniaturize:", "performZoom:", "arrangeInFront:" },
+            new[] { "performClose:", "performMiniaturize:", "performZoom:", "arrangeInFront:" },
             Menu("Window").OfType<Item>().Select(item => item.Action));
+        Assert.Equal(("w", Cmd), KeyOf(Menu("Window"), "Close"));
         Assert.Equal(("m", Cmd), KeyOf(Menu("Window"), "Minimize"));
     }
 
