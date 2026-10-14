@@ -57,8 +57,15 @@
              directories that exist on disk, so picking beats hand-entering a path. -->
         <StackPanel Spacing="8">
             <TextBlock i18n:Localized.Text="settings.roots" Classes="cardHeader"/>
+            <!-- A folder keeps its first and final segments on one line; the selected one shows whole. -->
             <ListBox x:Name="RootList" ItemsSource="{Binding RootDirs}" Height="96"
-                     Classes="boxed"/>
+                     Classes="boxed" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <TextBlock Text="{Binding}" Classes="itemPath wholeWhenSelected"/>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
             <!-- Standard buttons, the height of the fields their neighbours sit beside. -->
             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                 <Button i18n:Localized.Content="settings.addRoot" Click="OnAddRootClick"/>
@@ -92,7 +99,13 @@
                 <TextBlock i18n:Localized.Text="settings.extensions" Classes="cardHeader" VerticalAlignment="Center" TextWrapping="Wrap"/>
             </DockPanel>
             <ListBox x:Name="ExtList" ItemsSource="{Binding Extensions}" Height="80"
-                     Classes="boxed"/>
+                     Classes="boxed" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <TextBlock Text="{Binding}" Classes="itemName wholeWhenSelected"/>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
             <DockPanel>
                 <Button i18n:Localized.Content="common.remove" DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnRemoveExtClick"/>
                 <Button i18n:Localized.Content="common.add" DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnAddExtClick"/>
@@ -117,7 +130,13 @@
                 <TextBlock i18n:Localized.Text="settings.ignorePatterns" Classes="cardHeader" VerticalAlignment="Center" TextWrapping="Wrap"/>
             </DockPanel>
             <ListBox x:Name="PatternList" ItemsSource="{Binding IgnorePatterns}" Height="96"
-                     Classes="boxed"/>
+                     Classes="boxed" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <TextBlock Text="{Binding}" Classes="itemName wholeWhenSelected"/>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
             <DockPanel>
                 <Button i18n:Localized.Content="common.remove" DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnRemovePatternClick"/>
                 <Button i18n:Localized.Content="common.add" DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnAddPatternClick"/>

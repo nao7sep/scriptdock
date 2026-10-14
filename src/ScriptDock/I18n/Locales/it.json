@@ -43,6 +43,16 @@
   "guard.showHidden": "Impossibile mostrare gli script nascosti — vedi il log.",
   "guard.shutdown": "La chiusura non si è conclusa correttamente — vedi il log.",
   "guard.toggleHidden": "Impossibile nascondere o mostrare lo script — vedi il log.",
+  "list.andMore": {
+    "one": "e {count} altro",
+    "many": "e altri {count}",
+    "other": "e altri {count}"
+  },
+  "list.namesAndMore": {
+    "one": "{names} e {count} altro",
+    "many": "{names} e altri {count}",
+    "other": "{names} e altri {count}"
+  },
   "menu.about": "Informazioni su ScriptDock",
   "menu.application": "Menu dell’applicazione",
   "menu.records": "Log",
@@ -124,6 +134,7 @@
   "records.levelWarn": "Avviso",
   "records.loadFailed": "Impossibile leggere il log.",
   "records.loading": "Caricamento del log…",
+  "records.message": "Messaggio",
   "records.noSelection": "Seleziona una voce per vedere tutto ciò che contiene.",
   "records.openFullOutput": "Apri output completo",
   "records.openOutputFailed": "Impossibile aprire l’output completo. Controlla il log e riprova.",
@@ -141,6 +152,7 @@
     "many": "{count} di script trovati",
     "other": "{count} script trovati"
   },
+  "records.script": "Script",
   "records.search": "Cerca nel log",
   "records.started": "Inizio",
   "records.thisLaunch": "{time} (questa sessione)",

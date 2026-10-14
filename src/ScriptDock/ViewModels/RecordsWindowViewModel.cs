@@ -147,6 +147,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     };
 
     public bool DetailIsCodeTitle => _detail is not ScanReportRecordDetail;
+    public bool DetailIsPathTitle => _detail is RunRecordDetail;
     public string DetailLevelText => _detail is null ? string.Empty : RecordFormat.LevelLabel(_detail.Level);
     public bool DetailIsError => _detail?.Level == LogLevel.Error;
     public bool DetailIsWarning => _detail?.Level == LogLevel.Warn;
@@ -499,6 +500,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanOpenFullOutput));
         OnPropertyChanged(nameof(DetailTitle));
         OnPropertyChanged(nameof(DetailIsCodeTitle));
+        OnPropertyChanged(nameof(DetailIsPathTitle));
         OnPropertyChanged(nameof(DetailLevelText));
         OnPropertyChanged(nameof(DetailIsError));
         OnPropertyChanged(nameof(DetailIsWarning));
@@ -530,12 +532,14 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         switch (_detail)
         {
             case LogRecordDetail log:
+                Add("records.message", log.Message, code: true);
                 Add("records.time", RecordFormat.Time(log.Time, milliseconds: true));
                 Add("records.launch", RecordFormat.Launch(log.Session, _reader.Session));
                 AddBlock("records.details", RecordFormat.LogDetails(log.Line));
                 break;
 
             case RunRecordDetail run:
+                Add("records.script", run.Script, code: true);
                 Add("records.started", RecordFormat.Time(run.Time, milliseconds: true));
                 Add("records.ended", run.EndedAt is null ? null : RecordFormat.Time(run.EndedAt, milliseconds: true));
                 Add("records.endState", run.EndState, code: true);

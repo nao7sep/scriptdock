@@ -42,6 +42,14 @@
   "guard.showHidden": "Ausgeblendete Skripte konnten nicht angezeigt werden — siehe Protokoll.",
   "guard.shutdown": "Das Beenden wurde nicht sauber abgeschlossen — siehe Protokoll.",
   "guard.toggleHidden": "Das Skript konnte nicht aus- oder eingeblendet werden — siehe Protokoll.",
+  "list.andMore": {
+    "one": "und {count} weitere",
+    "other": "und {count} weitere"
+  },
+  "list.namesAndMore": {
+    "one": "{names} und {count} weitere",
+    "other": "{names} und {count} weitere"
+  },
   "menu.about": "Über ScriptDock",
   "menu.application": "Anwendungsmenü",
   "menu.records": "Protokoll",
@@ -122,6 +130,7 @@
   "records.levelWarn": "Warnung",
   "records.loadFailed": "Das Protokoll konnte nicht gelesen werden.",
   "records.loading": "Protokoll wird geladen\u00a0…",
+  "records.message": "Meldung",
   "records.noSelection": "Wählen Sie einen Eintrag aus, um alles zu sehen, was er enthält.",
   "records.openFullOutput": "Vollständige Ausgabe öffnen",
   "records.openOutputFailed": "Die vollständige Ausgabe konnte nicht geöffnet werden. Prüfen Sie das Protokoll und versuchen Sie es erneut.",
@@ -138,6 +147,7 @@
     "one": "{count} Skript gefunden",
     "other": "{count} Skripte gefunden"
   },
+  "records.script": "Skript",
   "records.search": "Protokoll durchsuchen",
   "records.started": "Beginn",
   "records.thisLaunch": "{time} (diese Sitzung)",

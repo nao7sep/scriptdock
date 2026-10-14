@@ -118,11 +118,18 @@
                                                        Foreground="{DynamicResource TextSecondaryBrush}"/>
                                         </Border>
                                     </StackPanel>
+                                    <!-- One line each: a script's path keeps its first and final segments, a
+                                         message its beginning; the selected record's detail shows them whole. -->
                                     <TextBlock Text="{Binding Title}" Classes.code="{Binding IsCodeTitle}"
-                                               FontWeight="SemiBold" TextWrapping="Wrap"/>
-                                    <TextBlock Text="{Binding Text}" IsVisible="{Binding HasText}" Classes="recordMeta"
-                                               TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
-                                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                               Classes.itemPath="{Binding IsPathTitle}" Classes.itemName="{Binding !IsPathTitle}"
+                                               FontWeight="SemiBold"/>
+                                    <DockPanel IsVisible="{Binding HasRoots}">
+                                        <TextBlock DockPanel.Dock="Right" Text="{Binding MoreRootsText}" IsVisible="{Binding HasMoreRoots}"
+                                                   Classes="recordMeta" Margin="6,0,0,0"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        <TextBlock Text="{Binding FirstRoot}" Classes="recordMeta itemPath"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    </DockPanel>
                                 </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -162,8 +169,10 @@
                                                Foreground="{DynamicResource TextSecondaryBrush}"/>
                                 </Border>
                             </StackPanel>
+                            <!-- A header line: the fields below hold the whole message or script. -->
                             <SelectableTextBlock Text="{Binding DetailTitle}" Classes.code="{Binding DetailIsCodeTitle}"
-                                                 FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                                 Classes.itemPath="{Binding DetailIsPathTitle}" Classes.itemName="{Binding !DetailIsPathTitle}"
+                                                 FontWeight="SemiBold" VerticalAlignment="Center"/>
                         </DockPanel>
                     </Border>
                     <ScrollViewer x:Name="DetailScroll" Focusable="True"

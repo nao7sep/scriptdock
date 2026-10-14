@@ -44,6 +44,18 @@
   "guard.showHidden": "Не удалось показать скрытые скрипты — см. журнал.",
   "guard.shutdown": "Завершение работы прошло некорректно — см. журнал.",
   "guard.toggleHidden": "Не удалось скрыть или показать скрипт — см. журнал.",
+  "list.andMore": {
+    "one": "и ещё {count}",
+    "few": "и ещё {count}",
+    "many": "и ещё {count}",
+    "other": "и ещё {count}"
+  },
+  "list.namesAndMore": {
+    "one": "{names} и ещё {count}",
+    "few": "{names} и ещё {count}",
+    "many": "{names} и ещё {count}",
+    "other": "{names} и ещё {count}"
+  },
   "menu.about": "О программе ScriptDock",
   "menu.application": "Меню приложения",
   "menu.records": "Журнал",
@@ -126,6 +138,7 @@
   "records.levelWarn": "Предупреждение",
   "records.loadFailed": "Не удалось прочитать журнал.",
   "records.loading": "Загрузка журнала…",
+  "records.message": "Сообщение",
   "records.noSelection": "Выберите элемент, чтобы увидеть всё, что он содержит.",
   "records.openFullOutput": "Открыть весь вывод",
   "records.openOutputFailed": "Не удалось открыть весь вывод. Проверьте журнал и повторите попытку.",
@@ -144,6 +157,7 @@
     "many": "Найдено {count} скриптов",
     "other": "Найдено {count} скрипта"
   },
+  "records.script": "Скрипт",
   "records.search": "Поиск по журналу",
   "records.started": "Начало",
   "records.thisLaunch": "{time} (текущий сеанс)",

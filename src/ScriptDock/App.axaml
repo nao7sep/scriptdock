@@ -492,6 +492,30 @@
             <Setter Property="Background" Value="{DynamicResource SelectionHoverBrush}"/>
         </Style>
 
+        <!-- Identifying text (interface-styling-conventions, Labels): a name or path that tells items apart
+             takes one line and ends with one ellipsis; a name keeps its beginning, a path its first and final
+             segments. In a list with no detail of its own, the selected item shows its whole value, so it is
+             reachable by keyboard and touch. -->
+        <Style Selector=":is(TextBlock).itemName">
+            <Setter Property="TextWrapping" Value="NoWrap"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+        <Style Selector=":is(TextBlock).itemPath">
+            <Setter Property="TextWrapping" Value="NoWrap"/>
+            <Setter Property="TextTrimming" Value="PathSegmentEllipsis"/>
+        </Style>
+        <Style Selector="ListBoxItem:selected TextBlock.wholeWhenSelected">
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="TextTrimming" Value="None"/>
+        </Style>
+
+        <!-- Text to be read wraps whole inside an area with a height limit that scrolls. -->
+        <Style Selector="ScrollViewer.messageArea">
+            <Setter Property="MaxHeight" Value="96"/>
+            <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+        </Style>
+
         <!-- Command hover is visual only; the native selected item is the keyboard target. -->
         <Style Selector="MenuItem.commandMenuItem:pointerover /template/ Border#PART_LayoutRoot">
             <Setter Property="Background" Value="{DynamicResource ChipHoverBrush}"/>

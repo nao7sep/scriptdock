@@ -43,6 +43,16 @@
   "guard.showHidden": "Les scripts masqués n’ont pas pu être affichés — voir le journal.",
   "guard.shutdown": "La fermeture de ScriptDock ne s’est pas terminée correctement — voir le journal.",
   "guard.toggleHidden": "Le script n’a pas pu être masqué ni affiché — voir le journal.",
+  "list.andMore": {
+    "one": "et {count} autre",
+    "many": "et {count} autres",
+    "other": "et {count} autres"
+  },
+  "list.namesAndMore": {
+    "one": "{names} et {count} autre",
+    "many": "{names} et {count} autres",
+    "other": "{names} et {count} autres"
+  },
   "menu.about": "À propos de ScriptDock",
   "menu.application": "Menu de l’application",
   "menu.records": "Journal",
@@ -124,6 +134,7 @@
   "records.levelWarn": "Avertissement",
   "records.loadFailed": "Le journal n’a pas pu être lu.",
   "records.loading": "Chargement du journal…",
+  "records.message": "Message",
   "records.noSelection": "Sélectionnez une entrée pour voir tout ce qu’elle contient.",
   "records.openFullOutput": "Ouvrir la sortie complète",
   "records.openOutputFailed": "Impossible d’ouvrir la sortie complète. Consultez le journal, puis réessayez.",
@@ -141,6 +152,7 @@
     "many": "{count} de scripts trouvés",
     "other": "{count} scripts trouvés"
   },
+  "records.script": "Script",
   "records.search": "Rechercher dans le journal",
   "records.started": "Début",
   "records.thisLaunch": "{time} (ce lancement)",

@@ -42,6 +42,14 @@
   "guard.showHidden": "Hidden scripts could not be shown — see the log.",
   "guard.shutdown": "Shutting down did not finish cleanly — see the log.",
   "guard.toggleHidden": "The script could not be hidden or shown — see the log.",
+  "list.andMore": {
+    "one": "and {count} more",
+    "other": "and {count} more"
+  },
+  "list.namesAndMore": {
+    "one": "{names} and {count} more",
+    "other": "{names} and {count} more"
+  },
   "menu.about": "About ScriptDock",
   "menu.application": "Application menu",
   "menu.records": "Records",
@@ -122,6 +130,7 @@
   "records.levelWarn": "Warning",
   "records.loadFailed": "The records could not be read.",
   "records.loading": "Loading records…",
+  "records.message": "Message",
   "records.noSelection": "Select a record to see everything it holds.",
   "records.openFullOutput": "Open full output",
   "records.openOutputFailed": "The full output could not be opened. Check the log and try again.",
@@ -138,6 +147,7 @@
     "one": "{count} script found",
     "other": "{count} scripts found"
   },
+  "records.script": "Script",
   "records.search": "Search records",
   "records.started": "Started",
   "records.thisLaunch": "{time} (this launch)",

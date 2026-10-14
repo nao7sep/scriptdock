@@ -29,7 +29,7 @@ internal static class RecordQueries
         "CASE WHEN json_valid(report) THEN json_array_length(report, '$.found') END";
 
     private const string ScanRoots =
-        "CASE WHEN json_valid(report) THEN (SELECT group_concat(value, ', ') FROM json_each(report, '$.roots')) END";
+        "CASE WHEN json_valid(report) THEN (SELECT json_group_array(value) FROM json_each(report, '$.roots')) END";
 
     public static RecordsPage ReadPage(SqliteConnection connection, RecordsQuery query)
     {

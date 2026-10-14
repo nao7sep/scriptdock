@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using ScriptDock.I18n;
 
 namespace ScriptDock;
@@ -21,8 +22,19 @@ public static class FailurePresentation
 
     public static Message NewerStore(string path) => Message.Of("failure.newerStore", ("path", path));
 
-    public static Message KeptSettings(string path, IEnumerable<string> keys) =>
-        Message.Of("failure.keptSettings", ("path", path), ("keys", string.Join(", ", keys)));
+    /// <summary>How many values a message names before it counts the rest (interface-styling-conventions,
+    /// Labels); the file it names holds them all.</summary>
+    internal const int NamedValues = 3;
+
+    public static Message KeptSettings(string path, IEnumerable<string> keys)
+    {
+        var all = keys.ToList();
+        var named = string.Join(", ", all.Take(NamedValues));
+        object listed = all.Count <= NamedValues
+            ? named
+            : Message.Of("list.namesAndMore", ("names", named), ("count", all.Count - NamedValues));
+        return Message.Of("failure.keptSettings", ("path", path), ("keys", listed));
+    }
 
     public static Message RecordsUnavailable(string path) => Message.Of("failure.recordsUnavailable", ("path", path));
 

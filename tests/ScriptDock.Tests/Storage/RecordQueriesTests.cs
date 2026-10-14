@@ -178,7 +178,7 @@ public sealed class RecordQueriesTests : IDisposable
         var scan = page.Records[2];
         Assert.Equal(LogLevel.Info, scan.Level);
         Assert.Equal(2, scan.Found);
-        Assert.Equal("/code, /work", scan.Text);
+        Assert.Equal("""["/code","/work"]""", scan.Text);
         Assert.Equal(At(3), scan.Time);
         var outputs = page.Records.Take(2).ToDictionary(record => record.Title, record => record.Level);
         Assert.Equal(LogLevel.Error, outputs["/code/a/dev.command"]);

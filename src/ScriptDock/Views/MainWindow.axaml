@@ -17,23 +17,24 @@
         layout in WindowMetrics and assigned in OnLoaded. -->
 
     <Window.Resources>
-        <!-- Content-sized script chip: slightly raised from the list well. At most one dot: green
-             while the script runs, otherwise orange while it is new;
+        <!-- Content-sized script chip, up to a width cap: slightly raised from the list well. At most one
+             dot: green while the script runs, otherwise orange while it is new;
              removed → red text, hidden → gray text. The 1px border is transparent
-             by default (the selected-chip style colours it, so selection never shifts the layout). -->
+             by default (the selected-chip style colours it, so selection never shifts the layout). A long
+             name ends in an ellipsis, and the selected chip shows it whole. -->
         <DataTemplate x:Key="ScriptTile" x:DataType="models:ScriptItem">
             <Border Classes="chip"
                     Background="{DynamicResource ChipBackgroundBrush}"
-                    BorderThickness="1"
+                    BorderThickness="1" MaxWidth="{x:Static views:ScriptChip.MaxWidth}"
                     CornerRadius="{StaticResource CompactRadius}" Padding="12,7" Margin="3">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <Ellipse Width="7" Height="7" Fill="{DynamicResource ScriptNewBrush}" VerticalAlignment="Center" IsVisible="{Binding ShowsNewDot}"/>
-                    <Ellipse Width="7" Height="7" Fill="{DynamicResource RunningBrush}" VerticalAlignment="Center" IsVisible="{Binding IsRunning}"/>
+                <DockPanel>
+                    <Ellipse DockPanel.Dock="Left" Width="7" Height="7" Margin="0,0,6,0" Fill="{DynamicResource ScriptNewBrush}" VerticalAlignment="Center" IsVisible="{Binding ShowsNewDot}"/>
+                    <Ellipse DockPanel.Dock="Left" Width="7" Height="7" Margin="0,0,6,0" Fill="{DynamicResource RunningBrush}" VerticalAlignment="Center" IsVisible="{Binding IsRunning}"/>
                     <!-- The name's colour follows the script's state through the scriptName styles, so it
                          repaints with the theme: removed wins over hidden. -->
-                    <TextBlock Text="{Binding DisplayName}" Classes="scriptName"
+                    <TextBlock Text="{Binding DisplayName}" Classes="scriptName itemName wholeWhenSelected"
                                Classes.hidden="{Binding IsHidden}" Classes.removed="{Binding IsRemoved}"/>
-                </StackPanel>
+                </DockPanel>
             </Border>
         </DataTemplate>
     </Window.Resources>
@@ -123,8 +124,10 @@
                 BorderThickness="0,0,0,1" Padding="14,10"
                 AutomationProperties.LiveSetting="Assertive">
             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                <TextBlock x:Name="OperationalErrorText" Text="{Binding OperationalError}" VerticalAlignment="Top"
-                           Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+                <ScrollViewer Classes="messageArea">
+                    <TextBlock x:Name="OperationalErrorText" Text="{Binding OperationalError}" VerticalAlignment="Top"
+                               Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+                </ScrollViewer>
                 <TextBlock Grid.Column="1" Text="{Binding OperationalErrorCountText}"
                            IsVisible="{Binding HasMultipleOperationalErrors}"
                            Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
@@ -244,19 +247,19 @@
                 <Border Grid.Row="2" Classes="card" Padding="0">
                     <DockPanel>
                         <Border DockPanel.Dock="Top" Classes="sectionHeader">
-                            <DockPanel>
+                            <Grid ColumnDefinitions="Auto,*">
+                                <TextBlock i18n:Localized.Text="output.title" Classes="cardHeader" VerticalAlignment="Center"/>
                                 <!-- The selected script's name as a colored pill, floated right, so the
                                      console makes clear whose output it is shown only when a run is selected.
-                                     The header band may trim it: the pill exists only while that run is
-                                     selected, and the selected Recent row shows the whole name. -->
-                                <Border DockPanel.Dock="Right" VerticalAlignment="Center" Margin="8,0,0,0"
+                                     It takes the room the title leaves and may shorten the name: the pill exists
+                                     only while that run is selected, and the selected Recent row shows it whole. -->
+                                <Border Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0,0,0"
                                         Background="{DynamicResource SelectionBrush}" CornerRadius="10" Padding="10,3"
                                         IsVisible="{Binding HasSelection}">
                                     <TextBlock Text="{Binding SelectedRecentEntry.DisplayName}" FontSize="12" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
+                                               Foreground="{DynamicResource TextPrimaryBrush}" Classes="itemName"/>
                                 </Border>
-                                <TextBlock i18n:Localized.Text="output.title" Classes="cardHeader" VerticalAlignment="Center"/>
-                            </DockPanel>
+                            </Grid>
                         </Border>
                         <!-- Per-process action failures are owned by the selected run's detail/console.
                              They persist across selection changes and are never duplicated in global chrome. -->
@@ -265,9 +268,10 @@
                                 BorderThickness="0,0,0,1" Padding="10,10"
                                 AutomationProperties.LiveSetting="{Binding RecentActionLiveSetting}">
                             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="7">
-                                <TextBlock x:Name="RecentActionErrorText" Text="{Binding RecentActionError}" VerticalAlignment="Top"
-                                           Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"
-                                           />
+                                <ScrollViewer Classes="messageArea">
+                                    <TextBlock x:Name="RecentActionErrorText" Text="{Binding RecentActionError}" VerticalAlignment="Top"
+                                               Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+                                </ScrollViewer>
                                 <TextBlock Grid.Column="1" Text="{Binding RecentActionErrorCountText}"
                                            IsVisible="{Binding HasMultipleRecentActionErrors}"
                                            Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
@@ -321,7 +325,7 @@
                                 <DataTemplate x:DataType="vm:RecentEntry">
                                     <Grid ColumnDefinitions="*,Auto">
                                         <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding DisplayName}" TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding DisplayName}" Classes="itemName wholeWhenSelected"/>
                                             <TextBlock Text="{Binding LastRanDisplay}" Classes="recentMeta" FontSize="11"
                                                        Foreground="{DynamicResource TextSecondaryBrush}"/>
                                         </StackPanel>

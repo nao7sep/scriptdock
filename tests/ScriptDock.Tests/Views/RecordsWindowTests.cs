@@ -33,7 +33,7 @@ public sealed class RecordsWindowTests : WindowTest
     private static readonly RecordSummary Line = new(
         RecordKind.Log, 9, Session, "2026-10-04T08:00:30.000Z", LogLevel.Warn, "run: terminate failed", null, null);
     private static readonly RecordSummary Scan = new(
-        RecordKind.ScanReport, 2, Session, "2026-10-04T08:00:00.000Z", LogLevel.Info, "", "/code", 3);
+        RecordKind.ScanReport, 2, Session, "2026-10-04T08:00:00.000Z", LogLevel.Info, "", """["/code"]""", 3);
 
     private readonly FakeRecordReader _reader = new() { Page = new RecordsPage([Line, Scan], false) };
     private readonly FakeJsonStore<AppState> _stateStore = new();

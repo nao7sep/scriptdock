@@ -29,7 +29,7 @@ public sealed class RecordsWindowViewModelTests
     private static readonly RecordSummary Newer = new(
         RecordKind.Log, 12, Session, "2026-10-04T08:02:00.000Z", LogLevel.Info, "app.later", null, null);
     private static readonly RecordSummary Scan = new(
-        RecordKind.ScanReport, 2, Session, "2026-10-04T08:00:00.000Z", LogLevel.Info, "", "/code, /work", 3);
+        RecordKind.ScanReport, 2, Session, "2026-10-04T08:00:00.000Z", LogLevel.Info, "", """["/code","/work"]""", 3);
 
     private readonly FakeRecordReader _reader = new() { Page = new RecordsPage([Failed, Warning], false) };
     private readonly FakeJsonStore<AppState> _stateStore = new();
@@ -166,6 +166,8 @@ public sealed class RecordsWindowViewModelTests
         Assert.Equal("/repo/dev.command", vm.DetailTitle);
         Assert.True(vm.DetailIsError);
         var fields = vm.DetailFields.ToDictionary(field => field.Label, field => field.Value);
+        Assert.Equal("/repo/dev.command", fields[English.Of("records.script")]); // the header shortens it
+        Assert.True(vm.DetailIsPathTitle);
         Assert.Equal("exited", fields[English.Of("records.endState")]);
         Assert.Equal("3", fields[English.Of("records.exitCode")]);
         Assert.Equal("4242", fields[English.Of("records.processId")]);
@@ -363,12 +365,15 @@ public sealed class RecordsWindowViewModelTests
         Pump();
         Assert.Equal("run: terminate failed", vm.DetailTitle);
         Assert.Equal("{\n  \"id\": 3,\n  \"script\": \"/a\"\n}", Assert.Single(vm.DetailBlocks).Text.Replace("\r\n", "\n"));
+        // The header shows the message on one line, so the detail holds it whole.
+        Assert.Equal("run: terminate failed", vm.DetailFields.Single(f => f.Label == English.Of("records.message")).Value);
 
         vm.SelectedRecord = vm.Rows[1];
         Pump();
         Assert.Equal(English.Of("records.scanFound", ("count", 3)), vm.DetailTitle);
         Assert.Equal(English.Of("records.scanFound", ("count", 3)), vm.Rows[1].Title);
-        Assert.Equal("/code, /work", vm.Rows[1].Text);
+        Assert.Equal("/code", vm.Rows[1].FirstRoot);
+        Assert.Equal(English.Of("list.andMore", ("count", 1)), vm.Rows[1].MoreRootsText);
         Assert.Equal(English.Of("records.report"), Assert.Single(vm.DetailBlocks).Label);
     }
 

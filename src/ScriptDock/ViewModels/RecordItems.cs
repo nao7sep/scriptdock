@@ -1,6 +1,7 @@
 using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ScriptDock.Models;
+using ScriptDock.I18n;
 using ScriptDock.Services;
 
 namespace ScriptDock.ViewModels;
@@ -30,8 +31,17 @@ public sealed class RecordRow : ObservableObject
     /// <summary>A message or a path is shown as the app wrote it; a scan's title is a sentence.</summary>
     public bool IsCodeTitle => Summary.Kind != RecordKind.ScanReport;
 
-    public string Text => Summary.Text ?? string.Empty;
-    public bool HasText => !string.IsNullOrEmpty(Summary.Text);
+    /// <summary>A run's title is its script's path, shortened as a path.</summary>
+    public bool IsPathTitle => Summary.Kind == RecordKind.Run;
+
+    // A scan's folders, named by the first and counted past it (interface-styling-conventions, Labels).
+    private string[] Roots => _roots ??= RecordFormat.JsonStrings(Summary.Text);
+    private string[]? _roots;
+
+    public bool HasRoots => Roots.Length > 0;
+    public string FirstRoot => HasRoots ? Roots[0] : string.Empty;
+    public bool HasMoreRoots => Roots.Length > 1;
+    public string MoreRootsText => HasMoreRoots ? Localizer.T("list.andMore", ("count", Roots.Length - 1)) : string.Empty;
 
     public void Refresh() => OnPropertyChanged(string.Empty);
 }

@@ -72,7 +72,7 @@ public sealed record RecordsQuery(
 
 /// <summary>
 /// One row of the list. <paramref name="Time"/> is the stored ISO time. <paramref name="Title"/> is a log
-/// line's message or a run's script; <paramref name="Text"/> is a scan's roots; <paramref name="Found"/>
+/// line's message or a run's script; <paramref name="Text"/> is a scan's roots, as a JSON array; <paramref name="Found"/>
 /// is how many scripts a scan found. A run's time is its start; it reads as <c>error</c> when it failed or
 /// exited with another code than 0, and a scan report as <c>info</c>.
 /// </summary>

@@ -29,6 +29,24 @@ public static class RecordFormat
     /// empty: blank, or JSON <c>null</c>, <c>{}</c>, <c>[]</c> or a blank string.</summary>
     public static string? PrettyJson(string? text) => Pretty(text, []);
 
+    /// <summary>The strings of a stored JSON array, in order; empty when it is absent, not an array, or not JSON.</summary>
+    public static string[] JsonStrings(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return [];
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.ValueKind == JsonValueKind.Array
+                ? [.. document.RootElement.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.String).Select(item => item.GetString()!)]
+                : [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
     /// <summary>A stored log line's own fields, as <see cref="PrettyJson"/> shows them, without the envelope
     /// the pane shows above them; null when none remain.</summary>
     public static string? LogDetails(string line) => Pretty(line, LogEnvelope);
