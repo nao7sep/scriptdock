@@ -49,7 +49,6 @@ public sealed class CloseWindowShortcutTests : WindowTest
         var host = new RecordsWindowHost(() => new RecordsWindowViewModel(new FakeRecordReader(), stateStore, stateStore.Value, new FakeTimeProvider()));
         var main = Show(new MainWindow { DataContext = NewMainVm(new FakeProcessRunner()), Records = host });
         var records = Track(host.ShowOrActivate(main));
-        records.Activate();
         Dispatcher.UIThread.RunJobs();
         Assert.True(records.IsActive);
 
