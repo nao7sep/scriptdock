@@ -26,8 +26,13 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     private readonly List<Task<bool>> _pickedRoots = [];
 
     public ObservableCollection<string> RootDirs { get; }
-    public ObservableCollection<string> Extensions { get; }
-    public ObservableCollection<string> IgnorePatterns { get; }
+    public ObservableCollection<EditableItem> Extensions { get; }
+    public ObservableCollection<EditableItem> IgnorePatterns { get; }
+
+    // The stored sets the app could not apply, kept unchanged until the user saves a value for them, and
+    // the sets this draft has chosen a value for, a reset to the built-in included.
+    private readonly HashSet<string> _kept;
+    private readonly HashSet<string> _chosen = new(StringComparer.Ordinal);
 
     // The dialog's own messages are held as keys and rendered where they are shown, so none of them
     // is assembled in one language (localization conventions).
@@ -82,8 +87,9 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsThemeDark))]
     private ThemePreference _theme;
 
-    public SettingsDialogViewModel(AppConfig config)
+    public SettingsDialogViewModel(AppConfig config, IReadOnlyCollection<string>? keptSets = null)
     {
+        _kept = new HashSet<string>(keptSets ?? [], StringComparer.Ordinal);
         _theme = config.Theme;
         LanguageOptions = LanguageOption.All();
         _language = LanguageOption.For(Languages.NormalizePreference(config.Language), LanguageOptions);
@@ -92,28 +98,96 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         _uiFontFamily = config.UiFontFamily;
 
         RootDirs = new ObservableCollection<string>(config.RootDirs);
-        Extensions = new ObservableCollection<string>(config.Extensions);
-        IgnorePatterns = new ObservableCollection<string>(config.IgnorePatterns);
+        Extensions = new ObservableCollection<EditableItem>(config.Extensions.Select(text => new EditableItem(text)));
+        IgnorePatterns = new ObservableCollection<EditableItem>(config.IgnorePatterns.Select(text => new EditableItem(text)));
         _opened = ToConfig();
 
-        RootDirs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsDirty));
-        Extensions.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsDirty));
-        IgnorePatterns.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsDirty));
+        RootDirs.CollectionChanged += (_, _) => Chose("rootDirs");
+        TrackRows(Extensions, "extensions");
+        TrackRows(IgnorePatterns, "ignorePatterns");
     }
+
+    // A row added, removed or edited is a value chosen for its set.
+    private void TrackRows(ObservableCollection<EditableItem> rows, string set)
+    {
+        void Watch(EditableItem row) => row.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(EditableItem.Text))
+                Chose(set);
+        };
+        foreach (var row in rows)
+            Watch(row);
+        rows.CollectionChanged += (_, e) =>
+        {
+            foreach (var row in e.NewItems?.OfType<EditableItem>() ?? [])
+                Watch(row);
+            Chose(set);
+        };
+    }
+
+    partial void OnLanguageChanged(LanguageOption value) => Chose("language");
+    partial void OnTimeZoneChanged(TimeZoneOption value) => Chose("timeZone");
+    partial void OnThemeChanged(ThemePreference value) => Chose("theme");
+    partial void OnUiFontFamilyChanged(string value) => Chose("uiFontFamily");
+
+    private void Chose(string set)
+    {
+        _chosen.Add(set);
+        OnPropertyChanged(nameof(IsDirty));
+    }
+
+    /// <summary>The sets this draft chose a value for, which replace any stored entry the app kept.</summary>
+    public IReadOnlyCollection<string> ChosenSets => _chosen;
+
+    // A list as stored: each row trimmed, blank rows dropped, and one entry per member as the scanner
+    // matches them, ignoring case.
+    private static List<string> Rows(IEnumerable<EditableItem> rows, Func<string, string> stored) =>
+        rows.Select(row => row.Text.Trim()).Where(text => text.Length > 0).Select(stored)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
     /// <summary>The draft as a config, its text cleaned. It holds no hidden scripts: the dialog does not edit them.</summary>
     public AppConfig ToConfig() => new()
     {
         RootDirs = RootDirs.ToList(),
-        Extensions = Extensions.ToList(),
-        IgnorePatterns = IgnorePatterns.ToList(),
+        Extensions = Rows(Extensions, ConfigSets.Extension),
+        IgnorePatterns = Rows(IgnorePatterns, text => text),
         UiFontFamily = TextCleanup.SingleLine(UiFontFamily),
         Theme = Theme,
         Language = Language.Value,
         TimeZone = TimeZone.Value,
     };
 
-    public bool IsDirty => !ConfigSets.Same(ToConfig(), _opened);
+    /// <summary>The draft differs from the opened settings, or chooses a value for a set the app kept
+    /// unchanged, which a reset to the built-in replaces.</summary>
+    public bool IsDirty => !ConfigSets.Same(ToConfig(), _opened) || _chosen.Overlaps(_kept);
+
+    /// <summary>
+    /// The check Save runs: each non-blank row passes its set's check, or carries a message naming it on
+    /// its own row, and the extensions keep at least one. False holds Save.
+    /// </summary>
+    public bool Validate()
+    {
+        var valid = true;
+        foreach (var row in Extensions)
+            valid &= Check(row, ConfigSets.ExtensionError);
+        foreach (var row in IgnorePatterns)
+            valid &= Check(row, ConfigSets.PatternError);
+        if (valid && ToConfig().Extensions.Count == 0)
+        {
+            ExtensionErrorMessage = Message.Of("settings.extensionsRequired");
+            valid = false;
+        }
+        return valid;
+
+        static bool Check(EditableItem row, Func<string, Message?> error)
+        {
+            var trimmed = row.Text.Trim();
+            row.ErrorMessage = trimmed.Length > 0 && error(trimmed) is { } reason
+                ? Message.Of("settings.rowError", ("item", trimmed), ("reason", reason))
+                : null;
+            return row.ErrorMessage is null;
+        }
+    }
 
     // One flag per radio: checking one selects its theme; the others clear through the group.
     public bool IsThemeSystem
@@ -237,19 +311,18 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
             return false;
         }
 
-        if (!trimmed.StartsWith('.'))
-            trimmed = "." + trimmed;
+        trimmed = ConfigSets.Extension(trimmed);
 
         // Dedup case-insensitively to match how the scanner compares extensions
         // (OrdinalIgnoreCase, mirroring the case-insensitive filesystems it runs on), so
         // ".command" and ".Command" are one entry rather than two that match the same files.
-        if (Extensions.Any(e => string.Equals(e, trimmed, StringComparison.OrdinalIgnoreCase)))
+        if (Extensions.Any(e => string.Equals(ConfigSets.Extension(e.Text.Trim()), trimmed, StringComparison.OrdinalIgnoreCase)))
         {
             ExtensionErrorMessage = Message.Of("settings.extensionDuplicate");
             return false;
         }
 
-        Extensions.Add(trimmed);
+        Extensions.Add(new EditableItem(trimmed));
         ExtensionErrorMessage = null;
         return true;
     }
@@ -266,33 +339,36 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         // Dedup case-insensitively to match how the scanner matches patterns (IgnoreRules compiles
         // them IgnoreCase), so "/Node_modules/" and "/node_modules/" are one entry, not two that
         // prune the same directories.
-        if (IgnorePatterns.Any(p => string.Equals(p, trimmed, StringComparison.OrdinalIgnoreCase)))
+        if (IgnorePatterns.Any(p => string.Equals(p.Text.Trim(), trimmed, StringComparison.OrdinalIgnoreCase)))
         {
             PatternErrorMessage = Message.Of("settings.patternDuplicate");
             return false;
         }
 
-        IgnorePatterns.Add(trimmed);
+        IgnorePatterns.Add(new EditableItem(trimmed));
         PatternErrorMessage = null;
         return true;
     }
 
+    // A reset chooses the built-in, which replaces a stored set the app could not apply.
     public void ResetExtensions()
     {
         Extensions.Clear();
-        Extensions.Add(ConfigDefaults.DefaultExtension);
+        Extensions.Add(new EditableItem(ConfigDefaults.DefaultExtension));
         ExtensionErrorMessage = null;
+        Chose("extensions");
     }
 
     public void ResetIgnorePatterns()
     {
         IgnorePatterns.Clear();
         foreach (var pattern in ConfigDefaults.BuiltInIgnorePatterns)
-            IgnorePatterns.Add(pattern);
+            IgnorePatterns.Add(new EditableItem(pattern));
         PatternErrorMessage = null;
+        Chose("ignorePatterns");
     }
 
     public void RemoveRootDir(string value) => RootDirs.Remove(value);
-    public void RemoveExtension(string value) => Extensions.Remove(value);
-    public void RemoveIgnorePattern(string value) => IgnorePatterns.Remove(value);
+    public void RemoveExtension(EditableItem row) => Extensions.Remove(row);
+    public void RemoveIgnorePattern(EditableItem row) => IgnorePatterns.Remove(row);
 }

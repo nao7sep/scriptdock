@@ -9,6 +9,7 @@ using ScriptDock.Models;
 using ScriptDock.ViewModels;
 using ScriptDock.Views;
 using ScriptDock.Tests.I18n;
+using System.Linq;
 using Xunit;
 
 namespace ScriptDock.Tests.Views;
@@ -26,8 +27,8 @@ public sealed class SettingsAccessibilityTests : WindowTest
         view.FindControl<Button>("ResetExtensions")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         view.FindControl<Button>("ResetIgnorePatterns")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
-        Assert.Equal([ConfigDefaults.DefaultExtension], vm.Extensions);
-        Assert.Equal(ConfigDefaults.BuiltInIgnorePatterns, vm.IgnorePatterns);
+        Assert.Equal([ConfigDefaults.DefaultExtension], vm.Extensions.Select(row => row.Text));
+        Assert.Equal(ConfigDefaults.BuiltInIgnorePatterns, vm.IgnorePatterns.Select(row => row.Text));
         Assert.True(vm.IsDirty);
     }
 

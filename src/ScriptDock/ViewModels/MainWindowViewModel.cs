@@ -493,7 +493,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    public SettingsDialogViewModel CreateSettingsDraft() => new(_config);
+    public SettingsDialogViewModel CreateSettingsDraft() => new(_config, _configStore.KeptKeys);
 
     /// <summary>True while there is no folder to scan, so nothing can be listed: the launch asks for one.</summary>
     public bool NeedsScanFolder => _config.RootDirs.Count == 0;
@@ -537,10 +537,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             await draft.WaitForPickedRootsAsync();
             if (_quitting) return false;
             var candidate = draft.ToConfig(); // Capture editable sets before waiting on earlier saves.
+            var chosen = draft.ChosenSets.ToList();
             await ChangeConfigAsync(async () =>
             {
                 candidate.Hidden = _config.Hidden.ToList();
-                await _configStore.SaveAsync(candidate);
+                await _configStore.SaveAsync(candidate, chosen);
                 ApplySavedSettings(candidate);
             });
             return true;
@@ -846,7 +847,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                     IgnorePatterns = _config.IgnorePatterns,
                     Hidden = hidden,
                 };
-                await _configStore.SaveAsync(candidate);
+                await _configStore.SaveAsync(candidate, ["hidden"]);
                 _config.Hidden = hidden;
                 ResolveOperationalError("toggle hidden");
                 Log.Info("ui: toggle hidden", new { script = item.Path, hidden = nowHidden });

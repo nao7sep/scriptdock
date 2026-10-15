@@ -7,6 +7,25 @@
              x:Class="ScriptDock.Views.SettingsView"
              x:DataType="vm:SettingsDialogViewModel">
 
+    <UserControl.Resources>
+        <DataTemplate x:Key="EditableRow" x:DataType="vm:EditableItem">
+            <StackPanel Spacing="2" Margin="0,0,0,6">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                    <ctl:ComposingTextBox Text="{Binding Text}" Classes.invalid="{Binding HasError}"
+                                          AutomationProperties.HelpText="{Binding Error}"/>
+                    <Button Grid.Column="1" Classes="resultClose" VerticalAlignment="Center" Click="OnRemoveRowClick"
+                            i18n:Localized.AutomationName="common.remove" i18n:Localized.ToolTip="common.remove">
+                        <Path Width="10" Height="10" Stretch="Uniform"
+                              Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1.8"
+                              StrokeLineCap="Round" Data="M1,1 L9,9 M9,1 L1,9"/>
+                    </Button>
+                </Grid>
+                <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}"
+                           Foreground="{DynamicResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"/>
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.Resources>
+
     <UserControl.Styles>
         <!-- A checkbox caption wraps rather than being cut off: the settings dialog has a fixed width,
              and several of these captions are whole sentences that grow by half again in German. -->
@@ -71,7 +90,7 @@
         <StackPanel Spacing="8">
             <TextBlock i18n:Localized.Text="settings.roots" Classes="cardHeader"/>
             <!-- A folder keeps its first and final segments on one line. -->
-            <ListBox x:Name="RootList" ItemsSource="{Binding RootDirs}" Height="96"
+            <ListBox x:Name="RootList" ItemsSource="{Binding RootDirs}" Height="96" KeyDown="OnRootListKeyDown"
                      Classes="boxed" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="x:String">
@@ -82,7 +101,9 @@
             <!-- Standard buttons, the height of the fields their neighbours sit beside. -->
             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                 <Button i18n:Localized.Content="settings.addRoot" Click="OnAddRootClick"/>
-                <Button i18n:Localized.Content="common.remove" Click="OnRemoveRootClick"/>
+                <!-- Remove acts on the selected folder, so it waits for one; Delete and Backspace on the list do the same. -->
+                <Button x:Name="RemoveRoot" i18n:Localized.Content="common.remove" Click="OnRemoveRootClick"
+                        IsEnabled="{Binding #RootList.SelectedItem, Converter={x:Static ObjectConverters.IsNotNull}}"/>
             </StackPanel>
             <Grid x:Name="RootPickerResult" ColumnDefinitions="*,Auto" ColumnSpacing="7"
                   IsVisible="{Binding HasRootPickerResult}"
@@ -111,16 +132,13 @@
                         i18n:Localized.Content="settings.resetExtensions" Click="OnResetExtensionsClick"/>
                 <TextBlock i18n:Localized.Text="settings.extensions" Classes="cardHeader" VerticalAlignment="Center" TextWrapping="Wrap"/>
             </DockPanel>
-            <ListBox x:Name="ExtList" ItemsSource="{Binding Extensions}" Height="80"
-                     Classes="boxed" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="x:String">
-                        <TextBlock Text="{Binding}" Classes="itemName"/>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+            <!-- One editable row per item (config-sets-conventions, In the interface): any item changes in
+                 place, Save trims each row and drops blank ones, and a row that fails its check is marked
+                 with a message naming it. Each row removes itself. -->
+            <ScrollViewer MaxHeight="168" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="ExtList" ItemsSource="{Binding Extensions}" ItemTemplate="{StaticResource EditableRow}"/>
+            </ScrollViewer>
             <DockPanel>
-                <Button i18n:Localized.Content="common.remove" DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnRemoveExtClick"/>
                 <Button i18n:Localized.Content="common.add" DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnAddExtClick"/>
                 <ctl:ComposingTextBox x:Name="ExtEntry" PlaceholderText=".command" SubmitOnEnter="True" Submitted="OnExtSubmitted"
                                       Classes.invalid="{Binding HasExtensionError}"
@@ -142,16 +160,13 @@
                         i18n:Localized.Content="settings.resetIgnorePatterns" Click="OnResetIgnorePatternsClick"/>
                 <TextBlock i18n:Localized.Text="settings.ignorePatterns" Classes="cardHeader" VerticalAlignment="Center" TextWrapping="Wrap"/>
             </DockPanel>
-            <ListBox x:Name="PatternList" ItemsSource="{Binding IgnorePatterns}" Height="96"
-                     Classes="boxed" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="x:String">
-                        <TextBlock Text="{Binding}" Classes="itemName"/>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+            <!-- One editable row per item (config-sets-conventions, In the interface): any item changes in
+                 place, Save trims each row and drops blank ones, and a row that fails its check is marked
+                 with a message naming it. Each row removes itself. -->
+            <ScrollViewer MaxHeight="168" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="PatternList" ItemsSource="{Binding IgnorePatterns}" ItemTemplate="{StaticResource EditableRow}"/>
+            </ScrollViewer>
             <DockPanel>
-                <Button i18n:Localized.Content="common.remove" DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnRemovePatternClick"/>
                 <Button i18n:Localized.Content="common.add" DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnAddPatternClick"/>
                 <ctl:ComposingTextBox x:Name="PatternEntry" PlaceholderText="/node_modules/" SubmitOnEnter="True" Submitted="OnPatternSubmitted"
                                       Classes.invalid="{Binding HasPatternError}"

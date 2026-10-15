@@ -87,22 +87,29 @@ public partial class SettingsView : UserControl
     private void OnAddExtClick(object? sender, RoutedEventArgs e) => AddExtension();
     private void OnAddPatternClick(object? sender, RoutedEventArgs e) => AddPattern();
 
-    private void OnRemoveRootClick(object? sender, RoutedEventArgs e)
+    private void OnRemoveRootClick(object? sender, RoutedEventArgs e) => RemoveSelectedRoot();
+
+    // Delete and Backspace remove the selected folder, as they dismiss the selected Recent run.
+    private void OnRootListKeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
     {
-        if (Vm is not null && RootList.SelectedItem is string value)
-            Vm.RemoveRootDir(value);
+        if (e.Key is Avalonia.Input.Key.Delete or Avalonia.Input.Key.Back && e.KeyModifiers == Avalonia.Input.KeyModifiers.None)
+            e.Handled = RemoveSelectedRoot();
     }
 
-    private void OnRemoveExtClick(object? sender, RoutedEventArgs e)
+    private bool RemoveSelectedRoot()
     {
-        if (Vm is not null && ExtList.SelectedItem is string value)
-            Vm.RemoveExtension(value);
+        if (Vm is null || RootList.SelectedItem is not string value)
+            return false;
+        Vm.RemoveRootDir(value);
+        return true;
     }
 
-    private void OnRemovePatternClick(object? sender, RoutedEventArgs e)
+    private void OnRemoveRowClick(object? sender, RoutedEventArgs e)
     {
-        if (Vm is not null && PatternList.SelectedItem is string value)
-            Vm.RemoveIgnorePattern(value);
+        if (Vm is null || (sender as Control)?.DataContext is not EditableItem row)
+            return;
+        if (!Vm.Extensions.Remove(row))
+            Vm.IgnorePatterns.Remove(row);
     }
 
     private void AddExtension()

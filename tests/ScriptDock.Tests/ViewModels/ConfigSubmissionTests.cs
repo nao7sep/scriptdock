@@ -287,7 +287,8 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
         public bool FailNext { get; set; }
         public Task LastPublication { get; private set; } = Task.CompletedTask;
         public AppConfig Load() => _inner.Load();
-        public Task SaveAsync(AppConfig value)
+        public IReadOnlyList<string> KeptKeys => _inner.KeptKeys;
+        public Task SaveAsync(AppConfig value, IReadOnlyCollection<string>? replaced = null)
         {
             Submissions++;
             if (FailNext)
@@ -295,7 +296,7 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
                 FailNext = false;
                 return Fail(Gates.Dequeue().Task);
             }
-            var write = LastPublication = _inner.SaveAsync(value);
+            var write = LastPublication = _inner.SaveAsync(value, replaced);
             return Gates.TryDequeue(out var gate) ? Hold(write, gate.Task) : write;
         }
         private static async Task Hold(Task write, Task gate) { await write; await gate; }

@@ -12,7 +12,9 @@ namespace ScriptDock.Models;
 /// text is held after the text-cleanup-conventions, paths exactly.</summary>
 public static class ConfigSets
 {
-    private sealed record Set(Func<AppConfig, object> Read, Action<AppConfig, JsonElement> Apply);
+    // An unordered set is compared as a set, ignoring case as the scanner matches it, so reordering it or
+    // re-adding a built-in member leaves no copy on disk (config-sets-conventions, In the interface).
+    private sealed record Set(Func<AppConfig, object> Read, Action<AppConfig, JsonElement> Apply, bool Unordered = false);
 
     private static readonly IReadOnlyDictionary<string, Set> Sets = new Dictionary<string, Set>
     {
@@ -29,8 +31,10 @@ public static class ConfigSets
             c.Theme = theme;
         }),
         ["rootDirs"] = new(c => c.RootDirs, (c, v) => c.RootDirs = Strings(v)),
-        ["extensions"] = new(c => c.Extensions, (c, v) => c.Extensions = Texts(v, ExtensionError)),
-        ["ignorePatterns"] = new(c => c.IgnorePatterns, (c, v) => c.IgnorePatterns = Texts(v, PatternError)),
+        // A scan needs at least one extension; an empty list would find nothing.
+        ["extensions"] = new(c => c.Extensions, (c, v) =>
+            c.Extensions = Texts(v, ExtensionError) is { Count: > 0 } extensions ? extensions : throw new JsonException("No extension"), Unordered: true),
+        ["ignorePatterns"] = new(c => c.IgnorePatterns, (c, v) => c.IgnorePatterns = Texts(v, PatternError), Unordered: true),
         ["hidden"] = new(c => c.Hidden, (c, v) => c.Hidden = Strings(v)),
     };
 
@@ -53,8 +57,11 @@ public static class ConfigSets
         // change what the regex matches. Interior spaces are left alone (a regex can match a literal
         // space in a path).
         : trimmed.Contains('\n') || trimmed.Contains('\r') ? Message.Of("settings.patternMultiline")
-        : !IsValidRegex(trimmed) ? Message.Of("settings.patternInvalid", ("pattern", trimmed))
+        : !IsValidRegex(trimmed) ? Message.Of("settings.patternInvalid")
         : null;
+
+    /// <summary>An extension as stored: trimmed, with its leading dot.</summary>
+    public static string Extension(string trimmed) => trimmed.StartsWith('.') ? trimmed : "." + trimmed;
 
     public static bool IsKnown(string key) => Sets.ContainsKey(key);
     public static void Apply(AppConfig config, string key, JsonElement value) => Sets[key].Apply(config, value);
@@ -64,11 +71,16 @@ public static class ConfigSets
     {
         var builtIn = new AppConfig();
         return Sets.Keys
-            .Where(key => Raw(config, key) != Raw(builtIn, key))
+            .Where(key => Compared(config, key) != Compared(builtIn, key))
             .ToDictionary(key => key, key => Value(config, key));
     }
 
-    public static bool Same(AppConfig a, AppConfig b) => Sets.Keys.All(key => Raw(a, key) == Raw(b, key));
+    public static bool Same(AppConfig a, AppConfig b) => Sets.Keys.All(key => Compared(a, key) == Compared(b, key));
+
+    private static string Compared(AppConfig config, string key) => Sets[key].Unordered
+        ? string.Join('\n', ((IEnumerable<string>)Sets[key].Read(config))
+            .Select(member => member.ToUpperInvariant()).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        : Raw(config, key);
 
     private static JsonElement Value(AppConfig config, string key) =>
         JsonSerializer.SerializeToElement(Sets[key].Read(config), JsonOptions.Default);

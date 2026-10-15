@@ -6,6 +6,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using ScriptDock.Models;
 using ScriptDock.ViewModels;
+using System.Linq;
 using Xunit;
 
 namespace ScriptDock.Tests.ViewModels;
@@ -130,7 +131,7 @@ public sealed class SettingsDialogViewModelTests
         var vm = new SettingsDialogViewModel(Seed());
 
         Assert.True(vm.AddExtension("sh"));
-        Assert.Contains(".sh", vm.Extensions);
+        Assert.Contains(".sh", vm.Extensions.Select(row => row.Text));
     }
 
     [Fact]
@@ -153,14 +154,14 @@ public sealed class SettingsDialogViewModelTests
         // Interior space — a pasted multi-token blob, never a real extension.
         Assert.False(vm.AddExtension(".com mand"));
         Assert.NotEqual(string.Empty, vm.ExtensionError);
-        Assert.DoesNotContain(".com mand", vm.Extensions);
+        Assert.DoesNotContain(".com mand", vm.Extensions.Select(row => row.Text));
 
         // A multi-line paste leaks a newline into the single-line field.
         Assert.False(vm.AddExtension(".sh\n.ps1"));
 
         // A clean value still adds and clears the error.
         Assert.True(vm.AddExtension(".sh"));
-        Assert.Contains(".sh", vm.Extensions);
+        Assert.Contains(".sh", vm.Extensions.Select(row => row.Text));
         Assert.Equal(string.Empty, vm.ExtensionError);
         Assert.False(vm.HasExtensionError);
         Assert.Equal(string.Empty, vm.ExtensionItemStatus);
@@ -191,7 +192,7 @@ public sealed class SettingsDialogViewModelTests
 
         // An interior space is legitimate regex content — a path can contain one — so it is kept.
         Assert.True(vm.AddIgnorePattern("/My Projects/"));
-        Assert.Contains("/My Projects/", vm.IgnorePatterns);
+        Assert.Contains("/My Projects/", vm.IgnorePatterns.Select(row => row.Text));
         Assert.Equal(string.Empty, vm.PatternError);
     }
 
@@ -202,7 +203,7 @@ public sealed class SettingsDialogViewModelTests
 
         Assert.False(vm.AddIgnorePattern("["));
         Assert.NotEqual(string.Empty, vm.PatternError);
-        Assert.DoesNotContain("[", vm.IgnorePatterns);
+        Assert.DoesNotContain("[", vm.IgnorePatterns.Select(row => row.Text));
 
         Assert.True(vm.AddIgnorePattern("/obj/"));
         Assert.Equal(string.Empty, vm.PatternError);
@@ -230,7 +231,65 @@ public sealed class SettingsDialogViewModelTests
         vm.AddExtension(".ps1");
         Assert.True(vm.IsDirty);
 
-        vm.RemoveExtension(".ps1");
+        vm.RemoveExtension(vm.Extensions.Single(row => row.Text == ".ps1"));
+
+        Assert.False(vm.IsDirty);
+    }
+
+    // ── Rows typed in place (config-sets-conventions, In the interface) ─────────────────────────
+
+    [Fact]
+    public void Each_row_edits_in_place_and_Save_trims_drops_blanks_and_merges_case()
+    {
+        var vm = new SettingsDialogViewModel(new AppConfig { Extensions = [".command"], IgnorePatterns = ["/a/"] });
+        vm.Extensions[0].Text = "  sh  ";
+        vm.Extensions.Add(new EditableItem("   "));
+        vm.Extensions.Add(new EditableItem(".SH"));
+        vm.IgnorePatterns[0].Text = " /b/ ";
+        vm.IgnorePatterns.Add(new EditableItem("/B/"));
+
+        Assert.True(vm.Validate());
+        Assert.Equal([".sh"], vm.ToConfig().Extensions);
+        Assert.Equal(["/b/"], vm.ToConfig().IgnorePatterns);
+        Assert.True(vm.IsDirty);
+    }
+
+    [Fact]
+    public void A_row_that_fails_its_check_is_marked_with_a_message_naming_it_and_holds_Save()
+    {
+        var vm = new SettingsDialogViewModel(new AppConfig());
+        var bad = new EditableItem("[");
+        vm.IgnorePatterns.Add(bad);
+        vm.Extensions[0].Text = ".com mand";
+
+        Assert.False(vm.Validate());
+        Assert.True(bad.HasError);
+        Assert.Contains("[", bad.Error);
+        Assert.True(vm.Extensions[0].HasError);
+        Assert.Contains(".com mand", vm.Extensions[0].Error);
+        Assert.False(vm.IgnorePatterns[0].HasError); // the built-ins pass
+
+        bad.Text = "/fixed/"; // editing clears the mark until the next check
+        Assert.False(bad.HasError);
+    }
+
+    [Fact]
+    public void An_empty_extension_list_holds_Save()
+    {
+        var vm = new SettingsDialogViewModel(new AppConfig());
+        vm.Extensions[0].Text = " ";
+
+        Assert.False(vm.Validate());
+        Assert.True(vm.HasExtensionError);
+    }
+
+    [Fact]
+    public void Reordering_a_list_is_no_change()
+    {
+        var vm = new SettingsDialogViewModel(new AppConfig());
+        var first = vm.IgnorePatterns[0];
+        vm.IgnorePatterns.RemoveAt(0);
+        vm.IgnorePatterns.Add(first);
 
         Assert.False(vm.IsDirty);
     }

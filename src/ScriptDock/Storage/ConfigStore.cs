@@ -60,17 +60,18 @@ public sealed class ConfigStore : IConfigStore
         return config;
     }
 
-    public Task SaveAsync(AppConfig value)
+    public Task SaveAsync(AppConfig value, IReadOnlyCollection<string>? replaced = null)
     {
         // Snapshot the caller's intent now, but merge preserved entries only after the previous
         // write settles: a failed replacement must not retire them, and a successful one must not
         // be resurrected by a save queued while it was still running.
         var document = ConfigSets.Changed(value);
+        var chosen = new HashSet<string>(replaced ?? [], StringComparer.Ordinal);
         lock (_saveGate)
-            return _saveTail = SaveAfterAsync(_saveTail, document);
+            return _saveTail = SaveAfterAsync(_saveTail, document, chosen);
     }
 
-    private async Task SaveAfterAsync(Task previous, Dictionary<string, JsonElement> document)
+    private async Task SaveAfterAsync(Task previous, Dictionary<string, JsonElement> document, HashSet<string> chosen)
     {
         try { await previous.ConfigureAwait(false); }
         catch { /* The earlier caller observes its own failure; later saves may still succeed. */ }
@@ -78,9 +79,11 @@ public sealed class ConfigStore : IConfigStore
         List<string> replaced;
         lock (_kept)
         {
-            replaced = _kept.Keys.Where(document.ContainsKey).ToList();
+            // A set the user saved a value for replaces its kept entry, even when that value is the built-in.
+            replaced = _kept.Keys.Where(key => document.ContainsKey(key) || chosen.Contains(key)).ToList();
             foreach (var (key, kept) in _kept)
-                document.TryAdd(key, kept);
+                if (!chosen.Contains(key))
+                    document.TryAdd(key, kept);
         }
         await _store.SaveAsync(document).ConfigureAwait(false);
         lock (_kept)

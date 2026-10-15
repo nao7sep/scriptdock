@@ -97,8 +97,45 @@ public sealed class ConfigStoreTests : IAsyncLifetime
         Assert.True(await vm.TryApplySettingsAsync(draft));
         Assert.Equal(["extensions", "hidden", "theme", "unknown", "version"], ReadKeys());
         Assert.Equal("true", ReadRaw("unknown"));
-        Assert.Empty(store.Load().Extensions);
+        // An empty extension list would find nothing, so it is kept unchanged and the built-in applies.
+        Assert.Equal("[]", ReadRaw("extensions"));
+        Assert.Equal([ConfigDefaults.DefaultExtension], store.Load().Extensions);
+        Assert.Contains("extensions", store.KeptKeys);
         Assert.Equal(["/hidden"], store.Load().Hidden);
+    }
+
+    // The startup notice says to fix a kept set in Settings: choosing its built-in there is a real change.
+    [Fact]
+    public async Task Resetting_a_kept_set_in_Settings_replaces_it_with_the_built_in()
+    {
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[],"ignorePatterns":["["]}""");
+        var store = new ConfigStore();
+        var vm = NewViewModel(store, store.Load());
+        var draft = vm.CreateSettingsDraft();
+        Assert.False(draft.IsDirty);
+
+        draft.ResetExtensions();
+        Assert.True(draft.IsDirty);
+        Assert.True(await vm.TryApplySettingsAsync(draft));
+
+        Assert.Equal(["ignorePatterns"], ReadKeys()); // the set not reset stays as it was
+        Assert.Equal("""["["]""", ReadRaw("ignorePatterns"));
+        Assert.Equal([ConfigDefaults.DefaultExtension], store.Load().Extensions);
+    }
+
+    // Order has no meaning, and the scanner ignores case: reordering the built-ins or re-adding one in
+    // another case is still the built-in, so nothing is written.
+    [Fact]
+    public async Task Lists_are_compared_as_sets_so_a_reordered_built_in_leaves_no_copy()
+    {
+        var store = new ConfigStore();
+        await store.SaveAsync(new AppConfig
+        {
+            Extensions = [ConfigDefaults.DefaultExtension.ToUpperInvariant()],
+            IgnorePatterns = [.. ConfigDefaults.BuiltInIgnorePatterns.Reverse()],
+        });
+        Assert.False(File.Exists(ConfigPath) && ReadKeys().Length > 0);
+        Assert.True(ConfigSets.Same(new AppConfig { IgnorePatterns = [.. ConfigDefaults.BuiltInIgnorePatterns.Reverse()] }, new AppConfig()));
     }
 
     [Fact]
@@ -168,7 +205,7 @@ public sealed class ConfigStoreTests : IAsyncLifetime
         var vm = NewViewModel(store, config);
         var draft = new SettingsDialogViewModel(config);
         draft.Extensions.Clear();
-        draft.Extensions.Add(".py");
+        draft.Extensions.Add(new EditableItem(".py"));
         // A directory at the destination forces a real publication failure on both platforms.
         File.Move(ConfigPath, ConfigPath + ".held");
         Directory.CreateDirectory(ConfigPath);

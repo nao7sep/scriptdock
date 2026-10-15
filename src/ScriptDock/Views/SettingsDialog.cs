@@ -51,6 +51,9 @@ public sealed class SettingsDialog : DialogBase
             return true;
 
         _draft.SaveErrorMessage = null;
+        // A row that fails its check is marked on its own row and holds Save.
+        if (!_draft.Validate())
+            return false;
         if (await _trySave(_draft))
             return true;
 

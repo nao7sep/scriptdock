@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using ScriptDock.Models;
@@ -18,8 +19,14 @@ public sealed class FakeConfigStore : IConfigStore
     /// still running until the test settles it.</summary>
     public TaskCompletionSource? SaveGate { get; set; }
 
-    public Task SaveAsync(AppConfig value)
+    public IReadOnlyList<string> KeptKeys { get; set; } = [];
+
+    /// <summary>The sets the last save was told the user chose a value for.</summary>
+    public IReadOnlyCollection<string>? LastReplaced { get; private set; }
+
+    public Task SaveAsync(AppConfig value, IReadOnlyCollection<string>? replaced = null)
     {
+        LastReplaced = replaced;
         if (SaveGate is { } gate)
             return gate.Task;
         if (ThrowOnSave)
