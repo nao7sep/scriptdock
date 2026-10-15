@@ -24,9 +24,9 @@ public sealed class CloseWindowShortcutTests : WindowTest
     private static void PressClose(Window window)
     {
         var command = ShortcutCatalog.CommandModifier(window) == KeyModifiers.Meta ? RawInputModifiers.Meta : RawInputModifiers.Control;
+        // The press alone closes; no release follows, since the window may finish closing at any moment
+        // after it and a closed window takes no input.
         window.KeyPress(Key.W, command, PhysicalKey.W, "w");
-        if (window.IsVisible) // a window the press closed takes no release
-            window.KeyRelease(Key.W, command, PhysicalKey.W, "w");
         Dispatcher.UIThread.RunJobs();
     }
 
