@@ -12,7 +12,7 @@ public sealed record TimeZoneOption(string Value, string Name)
     internal static IReadOnlyList<TimeZoneOption> All() =>
     [
         new(DisplayTime.System, Localizer.T("settings.timeZoneSystem",
-            ("zone", DisplayTime.NameOf(DisplayTime.Resolve(DisplayTime.System))))),
+            ("zone", DisplayTime.ComputerName()))),
         .. DisplayTime.Zones().Select(zone => new TimeZoneOption(zone, zone)),
     ];
 

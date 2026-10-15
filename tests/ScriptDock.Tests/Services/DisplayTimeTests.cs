@@ -42,6 +42,26 @@ public sealed class DisplayTimeTests : IDisposable
         Assert.Equal("Asia/Tokyo", DisplayTime.NameOf(DisplayTime.Resolve("Asia/Tokyo")));
     }
 
+    // System names the computer's zone as the platform reports it, by its canonical IANA name, never a
+    // legacy alias .NET may match from zone data ("Japan" for Asia/Tokyo).
+    [Theory]
+    [InlineData("/var/db/timezone/zoneinfo/Asia/Tokyo", "Asia/Tokyo")]
+    [InlineData("/usr/share/zoneinfo/America/Argentina/Buenos_Aires", "America/Argentina/Buenos_Aires")]
+    [InlineData("../usr/share/zoneinfo/UTC", "UTC")]
+    [InlineData("/var/db/timezone/zoneinfo/", null)]
+    [InlineData("/etc/localtime-copy", null)]
+    [InlineData(null, null)]
+    public void The_computers_zone_is_named_from_its_zone_file_link(string? target, string? name) =>
+        Assert.Equal(name, DisplayTime.NameFromLink(target));
+
+    [MacOnlyFact]
+    public void On_macOS_the_computers_zone_is_the_link_targets_IANA_name()
+    {
+        var target = new System.IO.FileInfo("/etc/localtime").LinkTarget!;
+        Assert.Equal(target[(target.LastIndexOf("zoneinfo/", StringComparison.Ordinal) + "zoneinfo/".Length)..], DisplayTime.ComputerName());
+        Assert.True(DisplayTime.TryParse(DisplayTime.ComputerName(), out _));
+    }
+
     [Fact]
     public void The_list_is_the_platforms_IANA_zones_by_name_once_each()
     {
@@ -102,7 +122,7 @@ public sealed class DisplayTimeTests : IDisposable
         var draft = new SettingsDialogViewModel(new AppConfig { TimeZone = "Asia/Tokyo" });
 
         Assert.Equal(DisplayTime.System, draft.TimeZoneOptions[0].Value);
-        Assert.Equal(English.Of("settings.timeZoneSystem", ("zone", DisplayTime.NameOf(TimeZoneInfo.Local))), draft.TimeZoneOptions[0].Name);
+        Assert.Equal(English.Of("settings.timeZoneSystem", ("zone", DisplayTime.ComputerName())), draft.TimeZoneOptions[0].Name);
         Assert.Equal(DisplayTime.Zones(), draft.TimeZoneOptions.Skip(1).Select(option => option.Value));
         Assert.Equal("Asia/Tokyo", draft.TimeZone.Value);
         Assert.False(draft.IsDirty);

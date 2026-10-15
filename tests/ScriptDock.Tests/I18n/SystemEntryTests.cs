@@ -48,7 +48,7 @@ public sealed class SystemEntryTests
     {
         With("ja", ["ja-JP"], () =>
         {
-            var zone = ScriptDock.Services.DisplayTime.NameOf(System.TimeZoneInfo.Local);
+            var zone = ScriptDock.Services.DisplayTime.ComputerName();
             Assert.Equal($"システム（{zone}）", new SettingsDialogViewModel(new AppConfig()).TimeZoneOptions[0].Name);
         });
     }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 
 namespace ScriptDock.Services;
@@ -57,8 +58,38 @@ public static class DisplayTime
     public static TimeZoneInfo Resolve(string? preference) =>
         (preference is null || preference == System ? null : Find(preference)) ?? Computer();
 
-    /// <summary>A zone's IANA name, as the list and the System entry show it.</summary>
+    /// <summary>A zone's IANA name, as the list shows it.</summary>
     public static string NameOf(TimeZoneInfo zone) => IanaName(zone.Id) ?? zone.Id;
+
+    /// <summary>
+    /// The computer's zone by its canonical IANA name, as the platform reports it, for the System entry.
+    /// Off Windows that is the <c>/etc/localtime</c> link's target after <c>zoneinfo/</c>, as macOS's own
+    /// time-zone API reads it: .NET names the local zone by matching zone data when the link points outside
+    /// <c>/usr/share/zoneinfo</c>, and can then return a legacy alias such as "Japan". Windows names map to IANA.
+    /// </summary>
+    public static string ComputerName() =>
+        (OperatingSystem.IsWindows() ? null : NameFromLink(LocalTimeLink())) ?? NameOf(Computer());
+
+    /// <summary>The IANA name in a zone file's path, after its last <c>zoneinfo/</c>; null when there is none.</summary>
+    internal static string? NameFromLink(string? target)
+    {
+        const string Marker = "zoneinfo/";
+        var at = target?.LastIndexOf(Marker, StringComparison.Ordinal) ?? -1;
+        var name = at < 0 ? null : target![(at + Marker.Length)..];
+        return string.IsNullOrEmpty(name) ? null : name;
+    }
+
+    private static string? LocalTimeLink()
+    {
+        try
+        {
+            return new FileInfo("/etc/localtime").LinkTarget;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
 
     private static TimeZoneInfo Computer()
     {
