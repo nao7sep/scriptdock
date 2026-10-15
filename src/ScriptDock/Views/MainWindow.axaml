@@ -91,8 +91,9 @@
             <DockPanel>
                 <!-- Hamburger docked right; the wordmark is the last (fill) child so it stays left. -->
                 <!-- The compact icon role: square-ish around the mark, so the bars have as much room
-                     over and under them as beside them rather than reading as filling the button. -->
-                <Button Classes="tool icon" DockPanel.Dock="Right"
+                     over and under them as beside them rather than reading as filling the button. Ghost:
+                     no border or fill at rest, a fill on hover, press and while the menu is open. -->
+                <Button x:Name="AppMenuButton" Classes="tool icon ghost" DockPanel.Dock="Right"
                         i18n:Localized.AutomationName="menu.application"
                         i18n:Localized.ToolTip="menu.application">
                     <!-- Hamburger as three strokes: bars 16 long and 2 thick with 5 between them, the

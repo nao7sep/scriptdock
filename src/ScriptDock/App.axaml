@@ -292,6 +292,24 @@
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
         </Style>
 
+        <!-- A header icon button with no resting surface, as the fleet's hamburger: a bare mark at rest,
+             the button's hover fill under the pointer and while the menu it opened is open, and its
+             pressed fill on press. Against the header band those read about 1.3:1 and 1.4-1.5:1 in both
+             themes. The keyboard focus ring is unchanged. -->
+        <Style Selector="Button.ghost">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="Button.ghost /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="Button.ghost:pointerover /template/ ContentPresenter, Button.ghost:flyout-open /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}"/>
+        </Style>
+        <Style Selector="Button.ghost:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource ButtonPressedBrush}"/>
+        </Style>
+
         <!-- Dialog accent (commit) button -->
         <Style Selector="Button.accent">
             <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
