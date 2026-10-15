@@ -42,6 +42,16 @@
   "guard.showHidden": "Hidden scripts could not be shown — see the log.",
   "guard.shutdown": "Shutting down did not finish cleanly — see the log.",
   "guard.toggleHidden": "The script could not be hidden or shown — see the log.",
+  "language.de": "German",
+  "language.en": "English",
+  "language.es": "Spanish",
+  "language.fr": "French",
+  "language.it": "Italian",
+  "language.ja": "Japanese",
+  "language.ko": "Korean",
+  "language.pt-BR": "Portuguese",
+  "language.ru": "Russian",
+  "language.zh-Hans": "Chinese",
   "list.andMore": {
     "one": "and {count} more",
     "other": "and {count} more"

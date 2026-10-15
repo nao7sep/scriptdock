@@ -42,6 +42,16 @@
   "guard.showHidden": "Ausgeblendete Skripte konnten nicht angezeigt werden — siehe Protokoll.",
   "guard.shutdown": "Das Beenden wurde nicht sauber abgeschlossen — siehe Protokoll.",
   "guard.toggleHidden": "Das Skript konnte nicht aus- oder eingeblendet werden — siehe Protokoll.",
+  "language.de": "Deutsch",
+  "language.en": "Englisch",
+  "language.es": "Spanisch",
+  "language.fr": "Französisch",
+  "language.it": "Italienisch",
+  "language.ja": "Japanisch",
+  "language.ko": "Koreanisch",
+  "language.pt-BR": "Portugiesisch",
+  "language.ru": "Russisch",
+  "language.zh-Hans": "Chinesisch",
   "list.andMore": {
     "one": "und {count} weitere",
     "other": "und {count} weitere"

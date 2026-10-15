@@ -42,6 +42,22 @@ internal static class Languages
 
     internal static IReadOnlyList<string> Tags { get; } = All.Select(language => language.Tag).ToArray();
 
+    /// <summary>The catalogue key of <paramref name="tag"/>'s name in the interface language, as a System
+    /// entry names the language it resolves to ("System (Japanese)", "システム (日本語)").</summary>
+    internal static string InterfaceNameKey(string tag) => tag switch
+    {
+        "de" => "language.de",
+        "es" => "language.es",
+        "fr" => "language.fr",
+        "it" => "language.it",
+        "pt-BR" => "language.pt-BR",
+        "ru" => "language.ru",
+        "zh-Hans" => "language.zh-Hans",
+        "ja" => "language.ja",
+        "ko" => "language.ko",
+        _ => "language.en",
+    };
+
     /// <summary>The name <paramref name="tag"/> is shown under, or the tag itself if it is not in the set.</summary>
     internal static string NameOf(string tag) =>
         All.FirstOrDefault(language => language.Tag == tag).Name ?? tag;

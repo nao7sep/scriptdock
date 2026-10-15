@@ -108,7 +108,7 @@ public class LanguageChangeTests : WindowTest
         Assert.Equal(Languages.System, draft.LanguageOptions[0].Value);
         // System names the language it resolves to now (app-chrome-conventions, Theme: as every System choice does).
         Assert.Equal(
-            English.Of("settings.languageSystem", ("language", Languages.NameOf(Languages.Match(Localizer.ComputerLanguages)))),
+            English.Of("settings.languageSystem", ("language", English.Of(Languages.InterfaceNameKey(Languages.Match(Localizer.ComputerLanguages))))),
             draft.LanguageOptions[0].Name);
         Assert.Equal(Languages.Tags, draft.LanguageOptions.Skip(1).Select(option => option.Value));
 
