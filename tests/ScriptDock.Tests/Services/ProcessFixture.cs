@@ -18,7 +18,7 @@ internal sealed class ProcessFixture : IAsyncDisposable
 
     public ProcessFixture() => Directory.CreateDirectory(ShellHome);
 
-    public ProcessRunner Runner(TimeSpan? grace = null, Action<Process>? kill = null)
+    public ProcessRunner Runner(TimeSpan? grace = null, Action<Process>? kill = null, Action<ProcessStartInfo>? configure = null)
     {
         var runner = new ProcessRunner(Runs, grace ?? TimeSpan.FromSeconds(10),
             kill ?? (process => process.Kill(entireProcessTree: true)), configureStartInfo: start =>
@@ -28,6 +28,7 @@ internal sealed class ProcessFixture : IAsyncDisposable
                 start.Environment.Remove("BASH_ENV");
                 start.Environment.Remove("ENV");
                 if (OperatingSystem.IsWindows()) start.ArgumentList.Insert(0, "-NoProfile");
+                configure?.Invoke(start);
             });
         _runners.Add(runner);
         return runner;
