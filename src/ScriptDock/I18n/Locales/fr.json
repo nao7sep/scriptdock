@@ -210,8 +210,6 @@
   "settings.patternInvalid": "Ce motif n’est pas valide.",
   "settings.patternMultiline": "Un motif doit tenir sur une seule ligne.",
   "settings.pickRootTitle": "Ajouter un répertoire racine",
-  "settings.processes": "Processus",
-  "settings.processesHint": "ScriptDock gère les scripts qu’il lance. Une exécution se termine quand son script s’arrête\u00a0; ce que le script ouvre ou confie au système continue de fonctionner de lui-même. Quitter ScriptDock arrête tous les scripts encore en cours d’exécution.",
   "settings.resetExtensions": "Réinitialiser les extensions",
   "settings.resetIgnorePatterns": "Réinitialiser les motifs d’exclusion",
   "settings.roots": "Répertoires racines",

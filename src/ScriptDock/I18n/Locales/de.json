@@ -203,8 +203,6 @@
   "settings.patternInvalid": "Das ist kein gültiges Muster.",
   "settings.patternMultiline": "Ein Muster muss aus einer einzigen Zeile bestehen.",
   "settings.pickRootTitle": "Stammverzeichnis hinzufügen",
-  "settings.processes": "Prozesse",
-  "settings.processesHint": "ScriptDock verwaltet die Skripte, die es startet. Eine Ausführung endet, wenn ihr Skript beendet ist; was das Skript öffnet oder an das System übergibt, läuft eigenständig weiter. Beim Beenden von ScriptDock werden alle noch laufenden Skripte gestoppt.",
   "settings.resetExtensions": "Dateiendungen zurücksetzen",
   "settings.resetIgnorePatterns": "Ignoriermuster zurücksetzen",
   "settings.roots": "Stammverzeichnisse",

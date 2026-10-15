@@ -217,8 +217,6 @@
   "settings.patternInvalid": "Это недопустимый шаблон.",
   "settings.patternMultiline": "Шаблон должен быть в одну строку.",
   "settings.pickRootTitle": "Добавить корневой каталог",
-  "settings.processes": "Процессы",
-  "settings.processesHint": "ScriptDock управляет скриптами, которые запускает сам. Запуск заканчивается, когда его скрипт завершает работу; всё, что скрипт открывает или передаёт системе, продолжает работать самостоятельно. При выходе из ScriptDock все ещё выполняющиеся скрипты останавливаются.",
   "settings.resetExtensions": "Сбросить расширения",
   "settings.resetIgnorePatterns": "Сбросить шаблоны исключения",
   "settings.roots": "Корневые каталоги",

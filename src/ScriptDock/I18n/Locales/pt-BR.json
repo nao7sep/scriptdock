@@ -210,8 +210,6 @@
   "settings.patternInvalid": "Não é um padrão válido.",
   "settings.patternMultiline": "Um padrão deve ter uma única linha.",
   "settings.pickRootTitle": "Adicionar diretório raiz",
-  "settings.processes": "Processos",
-  "settings.processesHint": "O ScriptDock gerencia os scripts que inicia. Uma execução termina quando o script é encerrado; o que o script abrir ou repassar ao sistema continua funcionando por conta própria. Ao encerrar o ScriptDock, todos os scripts ainda em execução são parados.",
   "settings.resetExtensions": "Redefinir extensões",
   "settings.resetIgnorePatterns": "Redefinir padrões a ignorar",
   "settings.roots": "Diretórios raiz",

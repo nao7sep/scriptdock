@@ -196,8 +196,6 @@
   "settings.patternInvalid": "这不是有效的模式。",
   "settings.patternMultiline": "模式必须写在一行内。",
   "settings.pickRootTitle": "添加根目录",
-  "settings.processes": "进程",
-  "settings.processesHint": "ScriptDock 管理由它启动的脚本。脚本退出时，这次运行即告结束；脚本打开或交给系统的程序会独立继续运行。退出 ScriptDock 会停止所有仍在运行的脚本。",
   "settings.resetExtensions": "重置扩展名",
   "settings.resetIgnorePatterns": "重置忽略模式",
   "settings.roots": "根目录",

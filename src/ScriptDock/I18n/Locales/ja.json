@@ -196,8 +196,6 @@
   "settings.patternInvalid": "有効なパターンではありません。",
   "settings.patternMultiline": "パターンは 1 行で入力してください。",
   "settings.pickRootTitle": "ルートディレクトリを追加",
-  "settings.processes": "プロセス",
-  "settings.processesHint": "ScriptDock が管理するのは、自身が起動したスクリプトです。実行はスクリプトが終了した時点で終わり、スクリプトが開いたものやシステムに引き渡したものは、それとは別に動き続けます。ScriptDock を終了すると、実行中のスクリプトはすべて停止します。",
   "settings.resetExtensions": "拡張子をリセット",
   "settings.resetIgnorePatterns": "除外パターンをリセット",
   "settings.roots": "ルートディレクトリ",

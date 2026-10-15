@@ -203,8 +203,6 @@
   "settings.patternInvalid": "This is not a valid pattern.",
   "settings.patternMultiline": "A pattern must be a single line.",
   "settings.pickRootTitle": "Add root directory",
-  "settings.processes": "Processes",
-  "settings.processesHint": "ScriptDock manages the scripts it starts. A run ends when its script exits; anything the script opens or hands off to the system keeps running on its own. Quitting ScriptDock stops every script still running.",
   "settings.resetExtensions": "Reset extensions",
   "settings.resetIgnorePatterns": "Reset ignore patterns",
   "settings.roots": "Root directories",
