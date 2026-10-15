@@ -86,6 +86,53 @@ public sealed class WindowMinimumTests : WindowTest
         Assert.Equal(title.DesiredSize.Width, title.Bounds.Width, 0.5); // the title is not cut short
     }
 
+    public static TheoryData<string> InterfaceLanguages => new(Languages.Tags);
+
+    // An independent check on the derived minimums: the app adds up what layout gave each part, and this
+    // measures each whole band itself (fine in a test), so a control added to a header later that the
+    // arithmetic leaves out fails here in every language.
+    [AvaloniaTheory]
+    [MemberData(nameof(InterfaceLanguages))]
+    public void The_derived_minimums_hold_each_whole_band_as_measured(string language)
+    {
+        using var speaking = Localizer.Speaking(language);
+        var window = Show(NewMain());
+        Settle(window);
+        var body = window.FindControl<Grid>("BodyGrid")!;
+        var scriptsMin = body.ColumnDefinitions[0].MinWidth;
+        var recentMin = body.ColumnDefinitions[2].MinWidth;
+        var layoutMinHeight = window.FindControl<Control>("LayoutRoot")!.MinHeight;
+        // What the app derives before a column's floor applies, which in some languages hides it.
+        var scriptsNeeds = Needs(window, "ScriptsHeader", "ScriptsTitle", "ScriptsActions");
+        var recentNeeds = Needs(window, "RecentHeader", "RecentTitle", "RecentActions");
+        var rows = window.FindControl<Grid>("LeftPanesGrid")!.RowDefinitions.Select(row => row.MinHeight).ToList();
+
+        var scriptsHeader = Measured(window.FindControl<Border>("ScriptsHeader")!);
+        var recentHeader = Measured(window.FindControl<Border>("RecentHeader")!);
+        var headerBar = Measured(window.FindControl<Border>("HeaderBar")!);
+        var statusBar = Measured(window.FindControl<Border>("StatusBar")!);
+
+        Assert.True(scriptsNeeds >= scriptsHeader.Width - 0.5, $"{language}: Scripts header derived {scriptsNeeds} < measured {scriptsHeader.Width}");
+        Assert.True(recentNeeds >= recentHeader.Width - 0.5, $"{language}: Recent header derived {recentNeeds} < measured {recentHeader.Width}");
+        Assert.True(scriptsMin >= scriptsHeader.Width - 0.5, $"{language}: Scripts minimum {scriptsMin} < header {scriptsHeader.Width}");
+        Assert.True(recentMin >= recentHeader.Width - 0.5, $"{language}: Recent minimum {recentMin} < header {recentHeader.Width}");
+        Assert.True(layoutMinHeight >= WindowMetrics.MinHeightFor(rows, headerBar.Height, statusBar.Height) - 0.5,
+            $"{language}: minimum height {layoutMinHeight} does not hold the header and status bars");
+
+        var store = new FakeJsonStore<AppState>();
+        var records = Show(new RecordsWindow { DataContext = new RecordsWindowViewModel(new FakeRecordReader(), store, store.Value, new FakeTimeProvider()) });
+        Settle(records);
+        var filters = Measured(records.FindControl<Border>("FiltersBand")!);
+        Assert.True(records.MinHeight >= RecordsLayout.MinWindowHeight(filters.Height) - 0.5,
+            $"{language}: Records minimum height {records.MinHeight} does not hold the filters ({filters.Height})");
+    }
+
+    private static Size Measured(Control band)
+    {
+        band.Measure(Size.Infinity);
+        return band.DesiredSize;
+    }
+
     [AvaloniaFact]
     public void A_row_needs_its_shown_children_its_gaps_and_its_margin()
     {
