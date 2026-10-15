@@ -47,7 +47,8 @@ public partial class RecordsWindow : Window
             RememberNormalGeometry();
             ViewModel?.Start();
         };
-        Loaded += (_, _) => RecalculateMinimums();
+        // The height floor follows the filters as each layout pass leaves them.
+        LayoutUpdated += (_, _) => RecalculateMinimums();
         PositionChanged += (_, _) => Dispatcher.UIThread.Post(RememberNormalGeometry);
         Resized += (_, _) => Dispatcher.UIThread.Post(RememberNormalGeometry);
         Shell.PropertyChanged += (_, e) =>
@@ -122,11 +123,14 @@ public partial class RecordsWindow : Window
         }
     }
 
-    // The height floor follows the filters above the list, whose height depends on the font.
+    // The height floor follows the filters above the list, whose height depends on the font and the
+    // language. Read from the layout pass, never by measuring the live band, which left Avalonia's cached
+    // layout stale on the Mac after a language change (window-conventions, Content-based minimum size).
     private void RecalculateMinimums()
     {
-        FiltersBand.Measure(Size.Infinity);
-        MinHeight = RecordsLayout.MinWindowHeight(FiltersBand.DesiredSize.Height);
+        var minHeight = RecordsLayout.MinWindowHeight(FiltersBand.DesiredSize.Height);
+        if (minHeight != MinHeight)
+            MinHeight = minHeight;
     }
 
     // The shell fills the window inside its margin, so its width is what the window gives the panes.

@@ -199,8 +199,8 @@
                     <DockPanel>
                         <Border DockPanel.Dock="Top" Classes="sectionHeader" x:Name="ScriptsHeader">
                             <DockPanel>
-                                <TextBlock i18n:Localized.Text="scripts.title" Classes="cardHeader" VerticalAlignment="Center"/>
-                                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <TextBlock x:Name="ScriptsTitle" i18n:Localized.Text="scripts.title" Classes="cardHeader" VerticalAlignment="Center"/>
+                                <StackPanel x:Name="ScriptsActions" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
                                     <!-- Selection actions (act on the selected chip). -->
                                     <Button i18n:Localized.Content="scripts.run" Classes="tool" Command="{Binding RunScriptCommand}" CommandParameter="{Binding #ScriptsList.SelectedItem}"/>
                                     <!-- Label tracks the selected script: "Hide" for a visible one, "Show" for a hidden one. -->
@@ -309,8 +309,8 @@
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Classes="sectionHeader" x:Name="RecentHeader">
                         <DockPanel>
-                            <TextBlock i18n:Localized.Text="recent.title" Classes="cardHeader" VerticalAlignment="Center"/>
-                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <TextBlock x:Name="RecentTitle" i18n:Localized.Text="recent.title" Classes="cardHeader" VerticalAlignment="Center"/>
+                            <StackPanel x:Name="RecentActions" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
                                 <Button i18n:Localized.Content="recent.run" Classes="tool" Command="{Binding RunOrRestartCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
                                 <Button i18n:Localized.Content="recent.stop" Classes="tool" Command="{Binding StopEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>
                                 <Button i18n:Localized.Content="recent.dismiss" Classes="tool" Command="{Binding DismissEntryCommand}" CommandParameter="{Binding #RecentList.SelectedItem}"/>

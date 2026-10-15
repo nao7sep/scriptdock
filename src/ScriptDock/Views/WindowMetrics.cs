@@ -98,6 +98,26 @@ public static class WindowMetrics
     public const double StatusBarHeight = 31;
 
     /// <summary>
+    /// The width a one-row strip needs whatever room it has now: what each shown child of a horizontal
+    /// StackPanel asked for, which the panel measured at an unlimited width, with the gaps between them
+    /// and the panel's margin. Read after a layout pass, never by measuring the live strip
+    /// (window-conventions, Content-based minimum size).
+    /// </summary>
+    public static double RowWidth(Avalonia.Controls.StackPanel row)
+    {
+        var shown = row.Children.Where(child => child.IsVisible).ToList();
+        return shown.Sum(child => child.DesiredSize.Width)
+            + row.Spacing * Math.Max(0, shown.Count - 1)
+            + row.Margin.Left + row.Margin.Right;
+    }
+
+    /// <summary>The width a pane header needs: its title as laid out, beside its one row of actions,
+    /// inside the band's padding and border.</summary>
+    public static double HeaderWidth(Avalonia.Controls.Border band, Avalonia.Controls.Control title, Avalonia.Controls.StackPanel actions)
+        => band.Padding.Left + band.Padding.Right + band.BorderThickness.Left + band.BorderThickness.Right
+            + title.DesiredSize.Width + RowWidth(actions);
+
+    /// <summary>
     /// The minimum window width: the sum of the body columns' minimum widths plus the column
     /// splitter and the BodyGrid's horizontal margin.
     /// </summary>

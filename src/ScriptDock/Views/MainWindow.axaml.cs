@@ -59,6 +59,8 @@ public partial class MainWindow : Window
 
         _scriptsColumnFloor = BodyGrid.ColumnDefinitions[0].MinWidth;
         _recentColumnFloor = BodyGrid.ColumnDefinitions[2].MinWidth;
+        // The minimum follows the chrome as each layout pass leaves it (RecalculateMinimums).
+        LayoutUpdated += (_, _) => RecalculateMinimums();
         if (OperatingSystem.IsWindows())
         {
             using var iconStream = AssetLoader.Open(new Uri("avares://ScriptDock/Assets/icon-win.png"));
@@ -149,7 +151,6 @@ public partial class MainWindow : Window
 
             vm.PropertyChanged += OnViewModelPropertyChanged;
             vm.ConsoleInputFocusRequested += OnConsoleInputFocusRequested;
-            vm.UiFontChanged += OnUiFontChanged;
             vm.IsDialogOpen = () => OwnedWindows.OfType<DialogBase>().Any();
             vm.ConfirmHandler = request =>
                 ConfirmDialog.ConfirmDestructiveAsync(this, request.Title, request.Message, request.ConfirmLabelKey);
@@ -217,33 +218,31 @@ public partial class MainWindow : Window
         MinHeight = LayoutRoot.MinHeight;
     }
 
-    // Measure every font-dependent piece of fixed chrome against the CURRENT app font. The pane
-    // headers drive minimum width; the actual top/status/error bars drive minimum height. This runs
-    // at load and after a saved live font change or an operational-error row appears/disappears.
+    // The window's minimum follows its chrome as each layout pass leaves it, so a new language, label or
+    // UI font moves it with no measuring of its own: the pane headers drive the minimum width, and the top,
+    // status and error bars the minimum height. Measuring the live chrome here instead (Measure at an
+    // unlimited size, outside the pass) left Avalonia's cached layout stale on the Mac after a language
+    // change, keeping German button slots in Japanese until a resize (window-conventions, Content-based
+    // minimum size). Applied only when a value changes, so the pass it starts settles at once.
     private void RecalculateMinimums()
     {
-        ScriptsHeader.InvalidateMeasure();
-        RecentHeader.InvalidateMeasure();
-        HeaderBar.InvalidateMeasure();
-        StatusBar.InvalidateMeasure();
-        OperationalErrorBar.InvalidateMeasure();
+        var scriptsMin = Math.Max(_scriptsColumnFloor, WindowMetrics.HeaderWidth(ScriptsHeader, ScriptsTitle, ScriptsActions));
+        var recentMin = Math.Max(_recentColumnFloor, WindowMetrics.HeaderWidth(RecentHeader, RecentTitle, RecentActions));
+        var headerHeight = Math.Max(WindowMetrics.HeaderHeight, HeaderBar.DesiredSize.Height);
+        var statusHeight = Math.Max(WindowMetrics.StatusBarHeight, StatusBar.DesiredSize.Height);
+        var errorHeight = OperationalErrorBar.IsVisible ? OperationalErrorBar.DesiredSize.Height : 0;
+        if (scriptsMin == BodyGrid.ColumnDefinitions[0].MinWidth
+            && recentMin == BodyGrid.ColumnDefinitions[2].MinWidth
+            && headerHeight == _headerChromeHeight
+            && statusHeight == _statusChromeHeight
+            && errorHeight == _operationalErrorChromeHeight)
+            return;
 
-        ScriptsHeader.Measure(Size.Infinity);
-        RecentHeader.Measure(Size.Infinity);
-        HeaderBar.Measure(Size.Infinity);
-        StatusBar.Measure(Size.Infinity);
-        OperationalErrorBar.Measure(Size.Infinity);
-
-        BodyGrid.ColumnDefinitions[0].MinWidth =
-            Math.Max(_scriptsColumnFloor, ScriptsHeader.DesiredSize.Width);
-        BodyGrid.ColumnDefinitions[2].MinWidth =
-            Math.Max(_recentColumnFloor, RecentHeader.DesiredSize.Width);
-
-        _headerChromeHeight = Math.Max(WindowMetrics.HeaderHeight, HeaderBar.DesiredSize.Height);
-        _statusChromeHeight = Math.Max(WindowMetrics.StatusBarHeight, StatusBar.DesiredSize.Height);
-        _operationalErrorChromeHeight = ViewModel?.HasOperationalError == true
-            ? OperationalErrorBar.DesiredSize.Height
-            : 0;
+        BodyGrid.ColumnDefinitions[0].MinWidth = scriptsMin;
+        BodyGrid.ColumnDefinitions[2].MinWidth = recentMin;
+        _headerChromeHeight = headerHeight;
+        _statusChromeHeight = statusHeight;
+        _operationalErrorChromeHeight = errorHeight;
 
         LayoutRoot.MinWidth = WindowMetrics.MinWidthFor(BodyGrid.ColumnDefinitions.Select(c => c.MinWidth));
         LayoutRoot.MinHeight = WindowMetrics.MinHeightFor(
@@ -254,12 +253,6 @@ public partial class MainWindow : Window
         ApplyNativeMinimum();
         ClampPanesToWindow();
     }
-
-    // DynamicResource propagation and binding visibility settle on the next dispatcher turn; measure
-    // then, rather than measuring the old font or the pre-change collapsed error row.
-    private void ScheduleMinimumRemeasure() => Dispatcher.UIThread.Post(RecalculateMinimums);
-
-    private void OnUiFontChanged(object? sender, EventArgs e) => ScheduleMinimumRemeasure();
 
     // Set the fixed-pixel Recent column and console row to the size the current window can fit for the
     // user's stored INTENT: WindowMetrics.DisplayFromIntent(intent, min, maxFit). A fixed track doesn't
@@ -623,10 +616,6 @@ public partial class MainWindow : Window
         {
             // The theme is app-wide: when Settings commits a new one, every window and title bar follows.
             AppTheme.Apply(vm.Theme);
-        }
-        else if (e.PropertyName == nameof(MainWindowViewModel.HasOperationalError))
-        {
-            ScheduleMinimumRemeasure();
         }
     }
 
