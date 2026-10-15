@@ -43,6 +43,9 @@ public partial class App : Application
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            // Closing the main window ends the app on every platform, through its quit flow, and the
+            // Records window goes with it (window-conventions); a macOS app does not linger windowless.
+            desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
             // The one macOS menu bar, set before any window so every window, a startup failure notice
             // included, shows the same bar. About and Settings are enabled while the main window is in
             // front, so never over one of its dialogs.

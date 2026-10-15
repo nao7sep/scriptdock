@@ -452,7 +452,7 @@ public partial class MainWindow : Window
             UnsavedQuitChoice choice;
             try
             {
-                choice = await UnsavedSettingsQuitDialog.AskAsync(this, vm.SettingsStillSavingAtQuit);
+                choice = await UnsavedSettingsQuitDialog.AskAsync(QuitQuestionOwner(), vm.SettingsStillSavingAtQuit);
             }
             catch (Exception ex)
             {
@@ -558,13 +558,17 @@ public partial class MainWindow : Window
         return true;
     }
 
+    // A quit can come from the Dock or the app menu while this window is minimized: its questions attach
+    // to a window that is showing, or stand alone, and never bring this one back (window-conventions).
+    private Window? QuitQuestionOwner() => DialogBase.ShowingOwner(this, Records?.Window);
+
     private async Task<bool> ConfirmQuitAsync(MainWindowViewModel vm)
     {
         _quitPromptOpen = true;
         try
         {
             return await ConfirmDialog.ConfirmDestructiveAsync(
-                this,
+                QuitQuestionOwner(),
                 Message.Of("quit.title"),
                 Message.Of("quit.message", ("count", vm.RunningCount)),
                 "quit.confirm");

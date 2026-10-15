@@ -60,10 +60,10 @@ public sealed class UnsavedSettingsQuitDialog : DialogBase
     };
 
     /// <summary>Asks over <paramref name="owner"/>; every way of dismissing it settles on staying open.</summary>
-    public static async Task<UnsavedQuitChoice> AskAsync(Window owner, bool stillSaving = false)
+    public static async Task<UnsavedQuitChoice> AskAsync(Window? owner, bool stillSaving = false)
     {
         var dialog = new UnsavedSettingsQuitDialog(stillSaving);
-        await dialog.ShowBoundedAsync(owner);
+        await dialog.ShowOverAsync(owner);
         return dialog.Choice;
     }
 }

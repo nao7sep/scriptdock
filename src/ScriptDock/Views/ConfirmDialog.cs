@@ -47,10 +47,10 @@ public sealed class ConfirmDialog : DialogBase
     /// <paramref name="cancelLabelKey"/> names it more plainly, as the discard prompt's Keep editing does.
     /// </summary>
     public static async Task<bool> ConfirmDestructiveAsync(
-        Window owner, Message title, Message message, string confirmLabelKey, string cancelLabelKey = "common.cancel")
+        Window? owner, Message title, Message message, string confirmLabelKey, string cancelLabelKey = "common.cancel")
     {
         var dialog = new ConfirmDialog(title, message, confirmLabelKey, cancelLabelKey);
-        await dialog.ShowBoundedAsync(owner);
+        await dialog.ShowOverAsync(owner);
         return dialog.Confirmed;
     }
 }

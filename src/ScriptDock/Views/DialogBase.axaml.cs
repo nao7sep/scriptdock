@@ -148,6 +148,30 @@ public partial class DialogBase : Window
     }
 
     /// <summary>
+    /// Shows the dialog over <paramref name="owner"/> when there is one, or as a standalone window when
+    /// no window is showing, so a question never attaches to a hidden or minimized window or brings it
+    /// back (window-conventions, Background visibility and activation).
+    /// </summary>
+    public Task ShowOverAsync(Window? owner)
+    {
+        if (owner is not null)
+            return ShowBoundedAsync(owner);
+
+        BoundHeightToScreen();
+        ShowAsOnlyWindow(this);
+        var closed = new TaskCompletionSource();
+        Closed += (_, _) => closed.TrySetResult();
+        Show();
+        return closed.Task;
+    }
+
+    /// <summary>The first of <paramref name="candidates"/> that is showing — visible and not minimized —
+    /// for a question to attach to, or null for a standalone one.</summary>
+    internal static Window? ShowingOwner(params Window?[] candidates) =>
+        System.Linq.Enumerable.FirstOrDefault(candidates, window =>
+            window is { IsVisible: true } && window.WindowState != WindowState.Minimized);
+
+    /// <summary>
     /// Bounds a dialog that will be shown without an owner — the startup-failure shell, which is the
     /// application's only window — to the screen alone. Call it before the window is shown.
     /// </summary>
