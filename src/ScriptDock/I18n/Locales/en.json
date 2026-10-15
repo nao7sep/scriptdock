@@ -2,7 +2,7 @@
   "about.closeResult": "Close result",
   "about.description": "Find the start scripts across your projects, run them from one dashboard, and restart them cleanly with their ports freed.",
   "about.github": "GitHub",
-  "about.licence": "© 2026 Yoshinao Inoguchi — GNU GPL v3 or later",
+  "about.licence": "© 2026 Yoshinao Inoguchi · GNU GPL v3 or later",
   "about.openGitHubFailed": "Couldn’t open GitHub. Check the log and try again.",
   "about.openIssuesFailed": "Couldn’t open Issues on GitHub. Check the log and try again.",
   "about.reportIssue": "Report Issue",

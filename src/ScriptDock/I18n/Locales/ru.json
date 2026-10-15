@@ -2,7 +2,7 @@
   "about.closeResult": "Закрыть результат",
   "about.description": "Находите стартовые скрипты в ваших проектах, запускайте их из одной панели и перезапускайте их аккуратно, освобождая их порты.",
   "about.github": "GitHub",
-  "about.licence": "© 2026 Yoshinao Inoguchi — GNU GPL v3 или новее",
+  "about.licence": "© 2026 Yoshinao Inoguchi · GNU GPL v3 или новее",
   "about.openGitHubFailed": "Не удалось открыть GitHub. Проверьте журнал и повторите попытку.",
   "about.openIssuesFailed": "Не удалось открыть трекер проблем на GitHub. Проверьте журнал и повторите попытку.",
   "about.reportIssue": "Сообщить о проблеме",

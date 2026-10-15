@@ -2,7 +2,7 @@
   "about.closeResult": "Fermer le résultat",
   "about.description": "Trouvez les scripts de démarrage de vos projets, exécutez-les depuis un tableau de bord unique, et redémarrez-les proprement en libérant leurs ports.",
   "about.github": "GitHub",
-  "about.licence": "© 2026 Yoshinao Inoguchi — GNU GPL v3 ou ultérieure",
+  "about.licence": "© 2026 Yoshinao Inoguchi · GNU GPL v3 ou ultérieure",
   "about.openGitHubFailed": "Impossible d’ouvrir GitHub. Consultez le journal, puis réessayez.",
   "about.openIssuesFailed": "Impossible d’ouvrir les Issues sur GitHub. Consultez le journal, puis réessayez.",
   "about.reportIssue": "Signaler un problème",

@@ -2,7 +2,7 @@
   "about.closeResult": "Fechar resultado",
   "about.description": "Encontre os scripts de inicialização dos seus projetos, execute-os a partir de um único painel e reinicie-os de forma limpa, liberando suas portas.",
   "about.github": "GitHub",
-  "about.licence": "© 2026 Yoshinao Inoguchi — GNU GPL v3 ou posterior",
+  "about.licence": "© 2026 Yoshinao Inoguchi · GNU GPL v3 ou posterior",
   "about.openGitHubFailed": "Não foi possível abrir o GitHub. Verifique o log e tente novamente.",
   "about.openIssuesFailed": "Não foi possível abrir Issues no GitHub. Verifique o log e tente novamente.",
   "about.reportIssue": "Relatar Problema",
