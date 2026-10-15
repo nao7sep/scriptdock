@@ -8,7 +8,7 @@ namespace ScriptDock.Tests.I18n;
 
 /// <summary>
 /// A choice that follows something outside the app names what it resolves to now, the word and the value
-/// both in the interface language; a zone name appears as is (localization-conventions, Translation).
+/// both in the interface language and in its punctuation, so Japanese and Chinese use full-width brackets; a zone name appears as is (localization-conventions, Translation).
 /// </summary>
 public sealed class SystemEntryTests
 {
@@ -28,7 +28,7 @@ public sealed class SystemEntryTests
         With("en", ["ja-JP"], () =>
             Assert.Equal("System (Japanese)", new SettingsDialogViewModel(new AppConfig()).LanguageOptions[0].Name));
         With("ja", ["ja-JP"], () =>
-            Assert.Equal("システム (日本語)", new SettingsDialogViewModel(new AppConfig()).LanguageOptions[0].Name));
+            Assert.Equal("システム（日本語）", new SettingsDialogViewModel(new AppConfig()).LanguageOptions[0].Name));
         With("de", ["fr-FR"], () =>
             Assert.Equal("System (Französisch)", new SettingsDialogViewModel(new AppConfig()).LanguageOptions[0].Name));
     }
@@ -39,7 +39,7 @@ public sealed class SystemEntryTests
         With("ja", ["ja-JP"], () =>
         {
             var draft = new SettingsDialogViewModel(new AppConfig()) { SystemThemeIsDark = true };
-            Assert.Equal("システム (ダーク)", draft.ThemeSystemLabel);
+            Assert.Equal("システム（ダーク）", draft.ThemeSystemLabel);
         });
     }
 
@@ -49,7 +49,7 @@ public sealed class SystemEntryTests
         With("ja", ["ja-JP"], () =>
         {
             var zone = ScriptDock.Services.DisplayTime.NameOf(System.TimeZoneInfo.Local);
-            Assert.Equal($"システム ({zone})", new SettingsDialogViewModel(new AppConfig()).TimeZoneOptions[0].Name);
+            Assert.Equal($"システム（{zone}）", new SettingsDialogViewModel(new AppConfig()).TimeZoneOptions[0].Name);
         });
     }
 
