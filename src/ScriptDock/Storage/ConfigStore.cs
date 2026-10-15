@@ -50,6 +50,9 @@ public sealed class ConfigStore : IConfigStore
             try
             {
                 ConfigSets.Apply(config, key, value);
+                // v0.1.0 stored its seed list, not a user's choice: it follows today's built-in.
+                if (key == "ignorePatterns" && SameMembers(config.IgnorePatterns, ConfigDefaults.V010SeededIgnorePatterns))
+                    config.IgnorePatterns = [.. ConfigDefaults.BuiltInIgnorePatterns];
             }
             catch (Exception ex) when (ex is JsonException or InvalidOperationException)
             {
@@ -59,6 +62,9 @@ public sealed class ConfigStore : IConfigStore
         }
         return config;
     }
+
+    private static bool SameMembers(IEnumerable<string> a, IEnumerable<string> b) =>
+        new HashSet<string>(a, StringComparer.OrdinalIgnoreCase).SetEquals(b);
 
     public Task SaveAsync(AppConfig value, IReadOnlyCollection<string>? replaced = null)
     {
