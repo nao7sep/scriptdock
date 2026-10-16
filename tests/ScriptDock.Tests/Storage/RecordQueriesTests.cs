@@ -12,6 +12,7 @@ using ScriptDock.Models;
 using ScriptDock.Services;
 using ScriptDock.Storage;
 using ScriptDock.ViewModels;
+using ScriptDock.Tests.Fakes;
 using Xunit;
 
 namespace ScriptDock.Tests.Storage;

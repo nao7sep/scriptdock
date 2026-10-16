@@ -137,6 +137,7 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
             Execute(connection, "PRAGMA journal_mode = WAL;");
             Execute(connection, "PRAGMA synchronous = NORMAL;");
             Execute(connection, Schema);
+            MaxOutputBytes = RecordQueries.MaxStoredBytes(connection);
             _connection = connection;
         }
         catch (NewerFormatVersionException)
@@ -258,21 +259,65 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
     public Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id) =>
         WindowRead(connection => RecordQueries.ReadDetail(connection, kind, id));
 
-    public Task<byte[]?> ReadRunOutputAsync(long id) =>
-        WindowRead(connection => RecordQueries.ReadRunOutput(connection, id));
+    public Task<bool> ReadRunOutputAsync(long id, Action<Stream> read) =>
+        WindowRead(connection => RecordQueries.ReadRunOutput(connection, id, read));
 
     public Task<RecordSources> ReadRecordSourcesAsync() =>
         WindowRead(connection => new RecordSources(Session, RecordQueries.ReadSessions(connection)));
 
-    public Task AddRunOutputAsync(RunRecord run, byte[] output) =>
+    /// <summary>The largest output one record can hold, as the database engine allows it.</summary>
+    public long MaxOutputBytes { get; private set; } = long.MaxValue;
+
+    /// <summary>
+    /// Stores <paramref name="length"/> bytes of <paramref name="output"/> as the run's output, copied in pieces
+    /// straight into the record (volume-handling-conventions, Data size), so memory stays at one buffer
+    /// whatever the size. One transaction: a failure part-way leaves the earlier record, or none.
+    /// </summary>
+    public Task AddRunOutputAsync(RunRecord run, Stream output, long length) =>
         Write(connection =>
         {
-            Execute(connection,
-                "INSERT INTO run_outputs (session, run, time, output) VALUES ($session, $run, $time, $output) " +
-                "ON CONFLICT (session, run) DO UPDATE SET time = excluded.time, output = excluded.output",
-                ("$session", run.Session), ("$run", run.Run),
-                ("$time", TimestampConventions.IsoMillis(DateTimeOffset.UtcNow)), ("$output", output));
+            using var transaction = connection.BeginTransaction();
+            using (var insert = connection.CreateCommand())
+            {
+                insert.Transaction = transaction;
+                insert.CommandText =
+                    "INSERT INTO run_outputs (session, run, time, output) VALUES ($session, $run, $time, zeroblob($length)) " +
+                    "ON CONFLICT (session, run) DO UPDATE SET time = excluded.time, output = excluded.output";
+                insert.Parameters.AddWithValue("$session", run.Session);
+                insert.Parameters.AddWithValue("$run", run.Run);
+                insert.Parameters.AddWithValue("$time", TimestampConventions.IsoMillis(DateTimeOffset.UtcNow));
+                insert.Parameters.AddWithValue("$length", length);
+                insert.ExecuteNonQuery();
+            }
+
+            long id;
+            using (var find = connection.CreateCommand())
+            {
+                find.Transaction = transaction;
+                find.CommandText = "SELECT id FROM run_outputs WHERE session = $session AND run = $run";
+                find.Parameters.AddWithValue("$session", run.Session);
+                find.Parameters.AddWithValue("$run", run.Run);
+                id = (long)find.ExecuteScalar()!;
+            }
+
+            using (var blob = new SqliteBlob(connection, "run_outputs", "output", id))
+            {
+                var buffer = new byte[CopyBufferBytes];
+                var left = length;
+                while (left > 0)
+                {
+                    var read = output.Read(buffer, 0, (int)Math.Min(buffer.Length, left));
+                    if (read == 0)
+                        throw new EndOfStreamException("The output ended before its recorded length.");
+                    blob.Write(buffer, 0, read);
+                    left -= read;
+                }
+            }
+            transaction.Commit();
         }, fallbackLine: null);
+
+    // One piece of a copy into or out of a record: a working buffer, not a limit on the output.
+    internal const int CopyBufferBytes = 1024 * 1024;
 
     /// <summary>Waits, within a bound, until everything queued so far is written.</summary>
     public void Flush()

@@ -142,6 +142,7 @@
   "records.openFullOutput": "出力全体を開く",
   "records.openOutputFailed": "出力全体を開けませんでした。ログを確認して、もう一度お試しください。",
   "records.output": "出力",
+  "records.outputKeptAsFile": "この出力は記録に保存するには大きすぎるため（{size} MB）、出力ファイルに残しています。ここには最初の 1 MB だけを表示しています。「出力全体を開く」でテキストエディタに全体を表示できます。検索の対象にはなりません。",
   "records.outputLinesShortened": "とても長い行はここでは短縮しています。「出力全体を開く」で全体を表示できます。",
   "records.outputMore": "ここには最初の 1 MB だけを表示しています。残りの {more} MB も保存されています。「出力全体を開く」でテキストエディターに全体を表示でき、検索も全体が対象です。",
   "records.outputFile": "出力ファイル",

@@ -248,8 +248,13 @@
                 <Border Grid.Row="2" Classes="card" Padding="0">
                     <DockPanel>
                         <Border DockPanel.Dock="Top" Classes="sectionHeader">
-                            <Grid ColumnDefinitions="Auto,*">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
                                 <TextBlock i18n:Localized.Text="output.title" Classes="cardHeader" VerticalAlignment="Center"/>
+                                <!-- The run's whole output, as the console shows it, in the text editor: the console
+                                     draws only its latest part, and long lines shortened. -->
+                                <Button Grid.Column="2" Classes="tool" Margin="8,0,0,0" VerticalAlignment="Center"
+                                        i18n:Localized.Content="records.openFullOutput"
+                                        Command="{Binding OpenRunOutputCommand}" IsEnabled="{Binding CanOpenRunOutput}"/>
                                 <!-- The selected script's name as a colored pill, floated right, so the
                                      console makes clear whose output it is shown only when a run is selected.
                                      It takes the room the title leaves and may shorten the name. -->
@@ -291,12 +296,23 @@
                                  IsEnabled="{Binding CanSendInput}"
                                  i18n:Localized.PlaceholderText="output.inputPlaceholder"
                                  Submitted="OnConsoleInputSubmitted"/>
-                        <!-- Recessed terminal-like field so the log reads as its own surface, not part of the header. -->
-                        <Border Classes="well" Margin="10" Padding="10,8">
-                            <ScrollViewer x:Name="ConsoleScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                                <SelectableTextBlock Text="{Binding SelectedOutput}" TextWrapping="NoWrap"
-                                                     FontFamily="Menlo,Consolas,monospace" FontSize="12"/>
-                            </ScrollViewer>
+                        <!-- Recessed terminal-like field so the log reads as its own surface, not part of the header.
+                             One row per line, virtualized, so only the lines on screen are laid out and new output
+                             is appended rather than redrawn (volume-handling-conventions). Lines are selected whole:
+                             a click, Shift-click for a range, Cmd/Ctrl-click to add one; the command key and C
+                             copies them. -->
+                        <Border Classes="well" Margin="10" Padding="4">
+                            <ListBox x:Name="ConsoleList" Classes="console" ItemsSource="{Binding ConsoleLines}"
+                                     SelectionMode="Multiple" KeyDown="OnConsoleKeyDown"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                     i18n:Localized.AutomationName="output.title">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ConsoleLine">
+                                        <TextBlock Text="{Binding Shown}" TextWrapping="NoWrap"
+                                                   FontFamily="Menlo,Consolas,monospace" FontSize="12"/>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
                         </Border>
                     </DockPanel>
                 </Border>

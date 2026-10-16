@@ -117,7 +117,8 @@ public sealed record RunRecordDetail(
     int? ExitCode,
     string? ImportedAt,
     byte[]? Output,
-    long? OutputLength = null)
+    long? OutputLength = null,
+    bool OutputKeptAsFile = false)
     : RecordDetail(RecordKind.Run, Id, Session, Time, Level)
 {
     public const int PreviewBytes = 1024 * 1024;

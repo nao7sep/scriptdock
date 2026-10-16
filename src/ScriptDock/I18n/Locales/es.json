@@ -150,6 +150,7 @@
   "records.openFullOutput": "Abrir salida completa",
   "records.openOutputFailed": "No se pudo abrir la salida completa. Revisa el registro e inténtalo de nuevo.",
   "records.output": "Salida",
+  "records.outputKeptAsFile": "Esta salida es demasiado grande para guardarla en el registro ({size} MB), así que se queda en su archivo de salida. Aquí solo se muestra el primer 1 MB: Abrir salida completa la muestra entera en tu editor de texto. La búsqueda no la incluye.",
   "records.outputLinesShortened": "Aquí se acortan las líneas muy largas; «Abrir salida completa» las muestra enteras.",
   "records.outputMore": "Aquí solo se muestra el primer MB. Hay {more} MB más guardados: «Abrir salida completa» muestra toda la salida en tu editor de texto, y la búsqueda también la abarca.",
   "records.outputFile": "Archivo de salida",

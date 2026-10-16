@@ -146,6 +146,7 @@
   "records.openFullOutput": "Open full output",
   "records.openOutputFailed": "The full output could not be opened. Check the log and try again.",
   "records.output": "Output",
+  "records.outputKeptAsFile": "This output is too large to keep in Records ({size} MB), so it stays in its output file. Only the first 1 MB is shown here: Open full output shows all of it in your text editor. Search does not cover it.",
   "records.outputLinesShortened": "Very long lines are shortened here; Open full output shows them whole.",
   "records.outputMore": "Only the first 1 MB is shown here. {more} MB more is stored: Open full output shows all of it in your text editor, and search covers all of it.",
   "records.outputFile": "Output file",

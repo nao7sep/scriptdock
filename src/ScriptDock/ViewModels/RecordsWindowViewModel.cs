@@ -47,7 +47,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     private readonly IJsonStore<AppState> _stateStore;
     private readonly AppState _state;
     private readonly TimeProvider _time;
-    private readonly Func<RunRecordDetail, byte[], bool> _openOutput;
+    private readonly Func<RunRecordDetail, Stream, bool> _openOutput;
 
     // The filters the list is read for; a page's own cursor is added per read.
     private RecordsQuery _filters = RecordsQuery.All;
@@ -82,7 +82,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         IJsonStore<AppState> stateStore,
         AppState state,
         TimeProvider? time = null,
-        Func<RunRecordDetail, byte[], bool>? openOutput = null)
+        Func<RunRecordDetail, Stream, bool>? openOutput = null)
     {
         _reader = reader;
         _stateStore = stateStore;
@@ -553,9 +553,11 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
                 Add("records.launch", RecordFormat.Launch(run.Session, _reader.Session));
                 if (RecordFormat.Output(run.Output, totalBytes: run.OutputLength) is { } output)
                 {
+                    // An output too large to keep in Records stays in its file, which search does not read.
                     string[] notes =
                     [
-                        .. output.MoreBytes == 0 ? [] : new[] { Localizer.T("records.outputMore", ("more", Megabytes(output.MoreBytes))) },
+                        .. run.OutputKeptAsFile ? new[] { Localizer.T("records.outputKeptAsFile", ("size", Megabytes(run.OutputLength ?? 0))) } : [],
+                        .. output.MoreBytes == 0 || run.OutputKeptAsFile ? [] : new[] { Localizer.T("records.outputMore", ("more", Megabytes(output.MoreBytes))) },
                         .. output.LinesShortened ? new[] { Localizer.T("records.outputLinesShortened") } : [],
                     ];
                     DetailBlocks.Add(new RecordBlock(
@@ -595,9 +597,11 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         bool opened;
         try
         {
-            var output = await _reader.ReadRunOutputAsync(run.Id);
-            opened = output is not null && await Task.Run(() => _openOutput(run, output));
-            if (output is null)
+            // Streamed from the record into the file on the Records reader's thread, in pieces.
+            var written = false;
+            var found = await _reader.ReadRunOutputAsync(run.Id, output => written = _openOutput(run, output));
+            opened = found && written;
+            if (!found)
                 Log.Error("records: run has no stored output to open", new { run = run.Id });
         }
         catch (Exception ex)
@@ -613,12 +617,12 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void DismissOpenOutputError() => OpenOutputFailed = false;
 
-    private static bool OpenInEditor(RunRecordDetail run, byte[] output)
+    private static bool OpenInEditor(RunRecordDetail run, Stream output)
     {
         string path;
         try
         {
-            path = RunOutputFile.Write(StorageRoot.Directory, run.Script, run.Id, output);
+            path = RunOutputFile.Write(StorageRoot.Directory, run.Script, run.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), output);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

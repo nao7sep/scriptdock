@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using Microsoft.Data.Sqlite;
 using ScriptDock.Models;
 
@@ -170,7 +172,7 @@ internal static class RecordQueries
                 using var reader = command.ExecuteReader();
                 if (!reader.Read())
                     return null;
-                return new RunRecordDetail(
+                var detail = new RunRecordDetail(
                     reader.GetInt64(0),
                     reader.GetString(1),
                     reader.GetString(2),
@@ -186,6 +188,20 @@ internal static class RecordQueries
                     TextOrNull(reader, 12),
                     reader.IsDBNull(13) ? null : (byte[])reader.GetValue(13),
                     reader.IsDBNull(14) ? null : reader.GetInt64(14));
+                reader.Close();
+                // An output too large for one record stays as the run's file; the detail previews it from there.
+                if (detail.Output is null && KeptOutput(connection, detail.OutputPath) is { } kept)
+                {
+                    try
+                    {
+                        return detail with { Output = FilePrefix(kept), OutputLength = new FileInfo(kept).Length, OutputKeptAsFile = true };
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        return detail;
+                    }
+                }
+                return detail;
             }
 
             case RecordKind.ScanReport:
@@ -203,14 +219,66 @@ internal static class RecordQueries
         }
     }
 
-    /// <summary>A run's whole stored output, or null when the run has none.</summary>
-    public static byte[]? ReadRunOutput(SqliteConnection connection, long id)
+    /// <summary>The largest value the database engine stores in one field.</summary>
+    public static long MaxStoredBytes(SqliteConnection connection) =>
+        SQLitePCL.raw.sqlite3_limit(connection.Handle, SQLitePCL.raw.SQLITE_LIMIT_LENGTH, -1);
+
+    /// <summary>Hands <paramref name="read"/> the run's whole output as a stream read in pieces: its record, or
+    /// its own file when the output was too large to store. False when it has neither.</summary>
+    public static bool ReadRunOutput(SqliteConnection connection, long id, Action<Stream> read)
     {
-        using var command = connection.CreateCommand();
-        command.Parameters.AddWithValue("$id", id);
-        command.CommandText = $"SELECT o.output FROM {RunsWithOutput} WHERE r.id = $id";
-        using var reader = command.ExecuteReader();
-        return reader.Read() && !reader.IsDBNull(0) ? (byte[])reader.GetValue(0) : null;
+        long? outputId;
+        string? path;
+        using (var command = connection.CreateCommand())
+        {
+            command.Parameters.AddWithValue("$id", id);
+            command.CommandText = $"SELECT o.id, r.output_path FROM {RunsWithOutput} WHERE r.id = $id";
+            using var reader = command.ExecuteReader();
+            if (!reader.Read())
+                return false;
+            outputId = reader.IsDBNull(0) ? null : reader.GetInt64(0);
+            path = reader.IsDBNull(1) ? null : reader.GetString(1);
+        }
+
+        if (outputId is { } stored)
+        {
+            using var blob = new SqliteBlob(connection, "run_outputs", "output", stored, readOnly: true);
+            read(blob);
+            return true;
+        }
+        if (KeptOutput(connection, path) is not { } kept)
+            return false;
+        using var file = new FileStream(kept, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        read(file);
+        return true;
+    }
+
+    // A run's output file that is too large for one record, which the import leaves where it is.
+    private static string? KeptOutput(SqliteConnection connection, string? path)
+    {
+        if (path is null)
+            return null;
+        try
+        {
+            var file = new FileInfo(path);
+            return file.Exists && file.Length > MaxStoredBytes(connection) ? path : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    // The first bytes of a kept output file, as much as the detail shows plus one, for its preview.
+    private static byte[] FilePrefix(string path)
+    {
+        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        var buffer = new byte[RunRecordDetail.PreviewBytes + 1];
+        var count = 0;
+        int read;
+        while (count < buffer.Length && (read = file.Read(buffer, count, buffer.Length - count)) > 0)
+            count += read;
+        return buffer[..count];
     }
 
     public static IReadOnlyList<string> ReadSessions(SqliteConnection connection)

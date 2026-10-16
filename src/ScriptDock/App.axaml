@@ -510,6 +510,17 @@
             <Setter Property="Background" Value="{DynamicResource SelectionHoverBrush}"/>
         </Style>
 
+        <!-- The console's lines sit in its recessed well: the list adds no surface of its own, and each line
+             is a compact row whose selection uses the list's fill. -->
+        <Style Selector="ListBox.console">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+        <Style Selector="ListBox.console ListBoxItem">
+            <Setter Property="Padding" Value="6,0"/>
+            <Setter Property="CornerRadius" Value="0"/>
+        </Style>
+
         <!-- Identifying text (interface-styling-conventions, Labels): a name or path that tells items apart
              takes one line and ends with one ellipsis; a name keeps its beginning, a path its first and final
              segments. -->

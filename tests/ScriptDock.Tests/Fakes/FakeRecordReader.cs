@@ -55,10 +55,14 @@ public sealed class FakeRecordReader : IRecordReader
         return Detail(kind, id);
     }
 
-    public Task<byte[]?> ReadRunOutputAsync(long id)
+    public async Task<bool> ReadRunOutputAsync(long id, Action<System.IO.Stream> read)
     {
         OutputReads.Add(id);
-        return Output(id);
+        if (await Output(id) is not { } output)
+            return false;
+        using var stream = new System.IO.MemoryStream(output, writable: false);
+        read(stream);
+        return true;
     }
 
     public Task<RecordSources> ReadRecordSourcesAsync()

@@ -146,6 +146,7 @@
   "records.openFullOutput": "Vollständige Ausgabe öffnen",
   "records.openOutputFailed": "Die vollständige Ausgabe konnte nicht geöffnet werden. Prüfen Sie das Protokoll und versuchen Sie es erneut.",
   "records.output": "Ausgabe",
+  "records.outputKeptAsFile": "Diese Ausgabe ist zu groß für das Protokoll ({size} MB) und bleibt deshalb in ihrer Ausgabedatei. Hier wird nur das erste 1 MB angezeigt: „Vollständige Ausgabe öffnen“ zeigt alles in Ihrem Texteditor. Die Suche erfasst sie nicht.",
   "records.outputLinesShortened": "Sehr lange Zeilen werden hier gekürzt; „Vollständige Ausgabe öffnen“ zeigt sie vollständig.",
   "records.outputMore": "Hier wird nur das erste MB angezeigt. Weitere {more} MB sind gespeichert: „Vollständige Ausgabe öffnen“ zeigt die gesamte Ausgabe in Ihrem Texteditor, und die Suche umfasst sie ebenfalls.",
   "records.outputFile": "Ausgabedatei",

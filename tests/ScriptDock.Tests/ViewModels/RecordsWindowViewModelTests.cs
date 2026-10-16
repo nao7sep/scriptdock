@@ -220,7 +220,9 @@ public sealed class RecordsWindowViewModelTests
         var succeeds = true;
         var vm = new RecordsWindowViewModel(_reader, _stateStore, _stateStore.Value, _time, (run, output) =>
         {
-            opened.Add((run.Id, output));
+            using var copy = new System.IO.MemoryStream();
+            output.CopyTo(copy);
+            opened.Add((run.Id, copy.ToArray()));
             return succeeds;
         });
         vm.Start();
@@ -230,7 +232,7 @@ public sealed class RecordsWindowViewModelTests
 
         await vm.OpenFullOutputCommand.ExecuteAsync(null);
         Assert.Equal([4L], _reader.OutputReads);
-        Assert.Same(stored, Assert.Single(opened).Output);
+        Assert.Equal(stored, Assert.Single(opened).Output); // streamed whole, not held as one value
         Assert.False(vm.OpenOutputFailed);
 
         succeeds = false;

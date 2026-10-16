@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -106,7 +107,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(OperationalErrorCountText))]
     private int _operationalErrorCount;
     [ObservableProperty] private RecentEntry? _selectedRecentEntry;
-    [ObservableProperty] private string _selectedOutput = string.Empty;
+    /// <summary>The selected run's console: its latest lines, appended as its log grows (<see cref="ConsoleFeed"/>).</summary>
+    public ObservableCollection<ConsoleLine> ConsoleLines { get; } = [];
+
+    /// <summary>The selected run has a log of its own to open whole.</summary>
+    public bool CanOpenRunOutput => SelectedRecentEntry?.Process?.LogFilePath is not null;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RecentActionError))]
@@ -1129,11 +1134,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         RefreshOutput();
     }
 
-    // The process and the exact line list last rendered into SelectedOutput. ReadOutput returns the
-    // same cached list instance while the run's log hasn't grown, so on a steady tick this lets us
-    // skip re-joining a large tail (up to 256 KB) into a string that would only be discarded as equal.
-    private ScriptProcess? _renderedOutputProcess;
-    private IReadOnlyList<string>? _renderedOutputLines;
+    // The run the console shows and its feed, the line still arriving (drawn last, replaced on each read),
+    // and about how much the console holds, which keeps it to the feed's shown amount.
+    private ScriptProcess? _consoleProcess;
+    private ConsoleFeed? _consoleFeed;
+    private ConsoleLine? _consoleOpenLine;
+    private long _consoleChars;
 
     // The selected run's output is read off the interface thread, one read at a time; a refresh asked for
     // while one runs is folded into one more pass, and a read whose run is no longer selected is dropped.
@@ -1158,9 +1164,23 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 _outputRefreshAgain = false;
                 var selected = SelectedRecentEntry;
                 var process = selected?.Process;
+                if (!ReferenceEquals(process, _consoleProcess))
+                {
+                    _consoleProcess = process;
+                    _consoleFeed = null;
+                    ClearConsole();
+                    OnPropertyChanged(nameof(CanOpenRunOutput));
+                }
+                if (_consoleFeed is null && process?.LogFilePath is { } log)
+                {
+                    _consoleFeed = new ConsoleFeed(log);
+                    OnPropertyChanged(nameof(CanOpenRunOutput));
+                }
+
                 try
                 {
-                    var lines = process is null ? null : await Task.Run(process.ReadOutput);
+                    var feed = _consoleFeed;
+                    var update = feed is null ? null : await Task.Run(() => ReadFeed(feed));
                     if (!ReferenceEquals(SelectedRecentEntry, selected))
                     {
                         _outputRefreshAgain = true;
@@ -1168,14 +1188,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                     }
                     if (selected is not null)
                         ResolveProcessActionError(selected.Path, "read-output");
-
-                    // Cache hit: same run, same (reference-identical) tail as last render — nothing to redo.
-                    if (ReferenceEquals(process, _renderedOutputProcess) && ReferenceEquals(lines, _renderedOutputLines))
-                        continue;
-
-                    _renderedOutputProcess = process;
-                    _renderedOutputLines = lines;
-                    SelectedOutput = lines is null ? string.Empty : string.Join(Environment.NewLine, lines);
+                    if (update is not null && ReferenceEquals(feed, _consoleFeed))
+                        ApplyConsoleUpdate(update);
                 }
                 catch (Exception ex)
                 {
@@ -1190,6 +1204,91 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             _outputReading = false;
         }
+    }
+
+    // A log the shell has not created yet is no output yet, not a failure.
+    private static ConsoleUpdate? ReadFeed(ConsoleFeed feed)
+    {
+        try
+        {
+            return feed.Read();
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return null;
+        }
+    }
+
+    private void ClearConsole()
+    {
+        ConsoleLines.Clear();
+        _consoleOpenLine = null;
+        _consoleChars = 0;
+    }
+
+    // Appends what the log gained: the line still arriving is replaced, finished lines are added after the
+    // ones shown, and the oldest leave once the console holds more than the feed shows.
+    internal void ApplyConsoleUpdate(ConsoleUpdate update)
+    {
+        if (update.Reset)
+            ClearConsole();
+        if (_consoleOpenLine is { } open && ConsoleLines.Count > 0 && ReferenceEquals(ConsoleLines[^1], open))
+        {
+            ConsoleLines.RemoveAt(ConsoleLines.Count - 1);
+            _consoleChars -= open.Text.Length + 1;
+        }
+        _consoleOpenLine = null;
+
+        foreach (var text in update.Completed)
+            AddConsoleLine(new ConsoleLine(text));
+        if (update.Open.Length > 0)
+            AddConsoleLine(_consoleOpenLine = new ConsoleLine(update.Open));
+
+        while (_consoleChars > ConsoleFeed.ShownBytes && ConsoleLines.Count > 1)
+        {
+            _consoleChars -= ConsoleLines[0].Text.Length + 1;
+            ConsoleLines.RemoveAt(0);
+        }
+    }
+
+    private void AddConsoleLine(ConsoleLine line)
+    {
+        ConsoleLines.Add(line);
+        _consoleChars += line.Text.Length + 1;
+    }
+
+    /// <summary>Opens a file in its default app; tests stand in for the editor.</summary>
+    internal Func<string, bool> OpenFile { get; set; } = ExternalLauncher.Open;
+
+    /// <summary>
+    /// Opens the selected run's whole output, as the console shows it, in the default text editor: streamed
+    /// from its log into a disposable view file (<see cref="RunOutputFile"/>), while it runs or after.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenRunOutputAsync()
+    {
+        if (SelectedRecentEntry is not { Process: { LogFilePath: { } log } process } entry)
+            return;
+
+        var opened = await Task.Run(() =>
+        {
+            try
+            {
+                using var stream = new FileStream(log, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                var path = RunOutputFile.Write(StorageRoot.Directory, process.ScriptPath, $"live-{process.Id}", stream);
+                return OpenFile(path);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("ui: open run output failed", ex, new { run = process.Id });
+                return false;
+            }
+        });
+
+        if (opened)
+            ResolveProcessActionError(entry.Path, "open-output");
+        else
+            ReportProcessActionError(entry.Path, "open-output", Message.Of("records.openOutputFailed"));
     }
 
     private void Guard(string action, Message failure, Action body)

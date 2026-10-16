@@ -30,20 +30,25 @@ public sealed class RunOutputFileTests : IDisposable
         File.WriteAllText(earlier, "old");
 
         var large = new string('x', 3 * 1024 * 1024);
-        var path = RunOutputFile.Write(_root, "/repo/dev server.command", 42,
-            Encoding.UTF8.GetBytes("\u001b[31mboom\u001b[0m\r\nprogress 1\rprogress 9\n" + large + "\nfar end\n"));
+        var path = Write("/repo/dev server.command", "42", Encoding.UTF8.GetBytes("\u001b[31mboom\u001b[0m\r\nprogress 1\rprogress 9\n" + large + "\nfar end\n"));
 
         Assert.Equal(Path.Combine(directory, "dev server-42.txt"), path);
         Assert.Equal("boom\nprogress 9\n" + large + "\nfar end\n", File.ReadAllText(path));
         Assert.False(File.Exists(earlier));
 
-        var other = RunOutputFile.Write(_root, "/repo/build.sh", 43, Encoding.UTF8.GetBytes("built\n"));
-        RunOutputFile.Write(_root, "/repo/dev server.command", 42, Encoding.UTF8.GetBytes("again\n"));
+        var other = Write("/repo/build.sh", "43", Encoding.UTF8.GetBytes("built\n"));
+        Write("/repo/dev server.command", "42", Encoding.UTF8.GetBytes("again\n"));
 
         Assert.Equal("again\n", File.ReadAllText(path));
         Assert.Equal("built\n", File.ReadAllText(other));
         Assert.Equal(
             new[] { "build-43.txt", "dev server-42.txt" },
             Directory.GetFiles(directory).Select(Path.GetFileName).OrderBy(name => name, StringComparer.Ordinal).ToArray());
+    }
+
+    private string Write(string script, string id, byte[] output)
+    {
+        using var stream = new MemoryStream(output, writable: false);
+        return RunOutputFile.Write(_root, script, id, stream);
     }
 }

@@ -55,7 +55,14 @@ public sealed class FakeRecordStore : IRecordStore
             .Where(run => run.OutputPath is not null && outputPaths.Contains(run.OutputPath))
             .ToDictionary(run => run.OutputPath!));
 
-    public Task AddRunOutputAsync(RunRecord run, byte[] output) => Write(() => Outputs[(run.Session, run.Run)] = output);
+    public long MaxOutputBytes { get; set; } = long.MaxValue;
+
+    public Task AddRunOutputAsync(RunRecord run, System.IO.Stream output, long length) => Write(() =>
+    {
+        var bytes = new byte[length];
+        output.ReadExactly(bytes);
+        Outputs[(run.Session, run.Run)] = bytes;
+    });
 
     private Task Write(Action write)
     {

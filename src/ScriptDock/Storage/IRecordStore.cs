@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using ScriptDock.Models;
 
@@ -39,5 +40,8 @@ public interface IRecordStore
     Task<IReadOnlyDictionary<string, RunRecord>> FindRunsByOutputPathAsync(IReadOnlyCollection<string> outputPaths);
 
     /// <summary>Stores a run's whole output, replacing an earlier import of the same run.</summary>
-    Task AddRunOutputAsync(RunRecord run, byte[] output);
+    Task AddRunOutputAsync(RunRecord run, Stream output, long length);
+
+    /// <summary>The largest output one record can hold; a larger one stays as its file.</summary>
+    long MaxOutputBytes { get; }
 }

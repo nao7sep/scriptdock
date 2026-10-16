@@ -150,6 +150,7 @@
   "records.openFullOutput": "Apri output completo",
   "records.openOutputFailed": "Impossibile aprire l’output completo. Controlla il log e riprova.",
   "records.output": "Output",
+  "records.outputKeptAsFile": "Questo output è troppo grande per essere conservato nel registro ({size} MB), quindi resta nel suo file di output. Qui è mostrato solo il primo 1 MB: Apri output completo lo mostra per intero nel tuo editor di testo. La ricerca non lo include.",
   "records.outputLinesShortened": "Qui le righe molto lunghe sono accorciate; «Apri output completo» le mostra per intero.",
   "records.outputMore": "Qui viene mostrato solo il primo MB. Gli altri {more} MB sono salvati: «Apri output completo» mostra l’intero output nel tuo editor di testo, e la ricerca lo copre tutto.",
   "records.outputFile": "File di output",

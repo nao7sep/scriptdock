@@ -150,6 +150,7 @@
   "records.openFullOutput": "Ouvrir la sortie complète",
   "records.openOutputFailed": "Impossible d’ouvrir la sortie complète. Consultez le journal, puis réessayez.",
   "records.output": "Sortie",
+  "records.outputKeptAsFile": "Cette sortie est trop volumineuse pour être conservée dans le journal ({size} Mo) ; elle reste donc dans son fichier de sortie. Seul le premier 1 Mo est affiché ici : Ouvrir la sortie complète l’affiche en entier dans votre éditeur de texte. La recherche ne la couvre pas.",
   "records.outputLinesShortened": "Les lignes très longues sont raccourcies ici\u00a0; «\u00a0Ouvrir la sortie complète\u00a0» les affiche en entier.",
   "records.outputMore": "Seul le premier Mo est affiché ici. Le reste ({more} Mo) est enregistré\u00a0: «\u00a0Ouvrir la sortie complète\u00a0» affiche toute la sortie dans votre éditeur de texte, et la recherche porte aussi sur toute la sortie.",
   "records.outputFile": "Fichier de sortie",

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -7,6 +8,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
@@ -30,6 +32,7 @@ public partial class MainWindow : Window
     private IReadOnlyList<ShortcutItem> _shortcuts = [];
     private bool _consolePinnedToBottom = true;
     private bool _scrollConsolePending = true; // follow the console on the next layout after output/selection changes
+    private ScrollViewer? _consoleScroll; // the console list's own scroller
     private bool _quitConfirmed; // set once the user confirms quitting with scripts running, so the re-close proceeds
     private bool _quitPromptOpen; // a quit prompt is up, so a second quit request is dropped rather than asking twice
 
@@ -91,8 +94,15 @@ public partial class MainWindow : Window
         Screens.Changed += OnScreensChanged;
         Closed += (_, _) => Screens.Changed -= OnScreensChanged;
         Closing += OnClosing;
-        ConsoleScroll.ScrollChanged += OnConsoleScrollChanged;
-        ConsoleScroll.LayoutUpdated += OnConsoleLayoutUpdated;
+        ConsoleList.TemplateApplied += (_, e) =>
+        {
+            if (_consoleScroll is not null)
+                _consoleScroll.ScrollChanged -= OnConsoleScrollChanged;
+            _consoleScroll = e.NameScope.Find<ScrollViewer>("PART_ScrollViewer");
+            if (_consoleScroll is not null)
+                _consoleScroll.ScrollChanged += OnConsoleScrollChanged;
+        };
+        ConsoleList.LayoutUpdated += OnConsoleLayoutUpdated;
     }
 
     private async void OnLoaded(object? sender, RoutedEventArgs e)
@@ -150,6 +160,7 @@ public partial class MainWindow : Window
             _shortcuts = ShortcutCatalog.Build(this);
 
             vm.PropertyChanged += OnViewModelPropertyChanged;
+            vm.ConsoleLines.CollectionChanged += OnConsoleLinesChanged;
             vm.ConsoleInputFocusRequested += OnConsoleInputFocusRequested;
             vm.IsDialogOpen = () => OwnedWindows.OfType<DialogBase>().Any();
             vm.ConfirmHandler = request =>
@@ -608,10 +619,6 @@ public partial class MainWindow : Window
             _consolePinnedToBottom = true; // a freshly-selected run starts pinned to its latest line
             _scrollConsolePending = true;
         }
-        else if (e.PropertyName == nameof(MainWindowViewModel.SelectedOutput) && _consolePinnedToBottom)
-        {
-            _scrollConsolePending = true; // follow new output — but only after it has been laid out
-        }
         else if (e.PropertyName == nameof(MainWindowViewModel.Theme) && sender is MainWindowViewModel vm)
         {
             // The theme is app-wide: when Settings commits a new one, every window and title bar follows.
@@ -632,7 +639,9 @@ public partial class MainWindow : Window
         if (e.ExtentDelta.Y != 0)
             return;
 
-        var distanceFromBottom = ConsoleScroll.Extent.Height - ConsoleScroll.Viewport.Height - ConsoleScroll.Offset.Y;
+        if (_consoleScroll is not { } scroll)
+            return;
+        var distanceFromBottom = scroll.Extent.Height - scroll.Viewport.Height - scroll.Offset.Y;
         _consolePinnedToBottom = distanceFromBottom <= ConsolePinThreshold;
     }
 
@@ -646,8 +655,34 @@ public partial class MainWindow : Window
             return;
 
         _scrollConsolePending = false;
-        var maxY = Math.Max(0, ConsoleScroll.Extent.Height - ConsoleScroll.Viewport.Height);
-        ConsoleScroll.Offset = new Vector(ConsoleScroll.Offset.X, maxY);
+        if (ViewModel is { ConsoleLines.Count: > 0 } vm)
+            ConsoleList.ScrollIntoView(vm.ConsoleLines.Count - 1);
+    }
+
+    // New lines keep the console on its latest line while it is pinned there.
+    private void OnConsoleLinesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (_consolePinnedToBottom)
+            _scrollConsolePending = true;
+    }
+
+    // The command key and C copies the selected lines, whole and in order, as the console holds them.
+    private async void OnConsoleKeyDown(object? sender, KeyEventArgs e)
+    {
+        try
+        {
+            if (e.Key != Key.C || e.KeyModifiers != ShortcutCatalog.CommandModifier(this) || ViewModel is not { } vm)
+                return;
+            var indexes = ConsoleList.Selection.SelectedIndexes.Where(index => index >= 0 && index < vm.ConsoleLines.Count).Order().ToList();
+            if (indexes.Count == 0 || Clipboard is not { } clipboard)
+                return;
+            e.Handled = true;
+            await clipboard.SetTextAsync(string.Join(Environment.NewLine, indexes.Select(index => vm.ConsoleLines[index].Text)));
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("ui: copying console lines failed", ex);
+        }
     }
 
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)

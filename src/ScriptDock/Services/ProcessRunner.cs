@@ -337,6 +337,10 @@ public sealed class ProcessRunner : IProcessRunner
     /// while its run's process (by process id and start time) is alive, while it has changed within
     /// <see cref="OutputQuietPeriod"/>, and when no run record names it. An import replaces any earlier
     /// import of the same run, so a file whose deletion failed is imported again in full on a later pass.
+    /// Each file is copied in pieces, so memory stays at one buffer whatever its size, and each is its own
+    /// attempt: one that fails stays for a later pass without holding up the rest. A file larger than one
+    /// record can hold is known from its size alone and stays where it is as the run's output, unread and not
+    /// retried; the Records window reads it from there (volume-handling-conventions).
     /// </summary>
     public async Task ImportFinishedOutputAsync(IRecordStore records, CancellationToken cancellationToken)
     {
@@ -354,8 +358,16 @@ public sealed class ProcessRunner : IProcessRunner
             if (!runs.TryGetValue(path, out var run) || IsAlive(run))
                 continue;
 
-            var output = await Task.Run(() => ReadShared(path), cancellationToken).ConfigureAwait(false);
-            await records.AddRunOutputAsync(run, output).ConfigureAwait(false);
+            try
+            {
+                if (!await ImportOneAsync(records, run, path).ConfigureAwait(false))
+                    continue;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log.Warn("run output: import failed; the file stays for a later pass", ex, new { path });
+                continue;
+            }
             imported++;
             try
             {
@@ -382,12 +394,15 @@ public sealed class ProcessRunner : IProcessRunner
                 .ToList()
             : [];
 
-    private static byte[] ReadShared(string path)
+    // False when the file is too large for one record and stays as the run's output.
+    private static async Task<bool> ImportOneAsync(IRecordStore records, RunRecord run, string path)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var buffer = new MemoryStream();
-        stream.CopyTo(buffer);
-        return buffer.ToArray();
+        var length = stream.Length;
+        if (length > records.MaxOutputBytes)
+            return false;
+        await records.AddRunOutputAsync(run, stream, length).ConfigureAwait(false);
+        return true;
     }
 
     private static bool IsAlive(RunRecord run)

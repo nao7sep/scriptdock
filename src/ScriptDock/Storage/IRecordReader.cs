@@ -20,8 +20,10 @@ public interface IRecordReader
     /// <summary>One record whole, or null when there is no such record.</summary>
     Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id);
 
-    /// <summary>A run's whole stored output, beyond what its detail shows; null when it has none.</summary>
-    Task<byte[]?> ReadRunOutputAsync(long id);
+    /// <summary>Hands <paramref name="read"/> a stream over a run's whole output, beyond what its detail shows:
+    /// the stored record, or the run's own file when the output was too large to store. Read in pieces; the
+    /// stream is valid only during the call. False when the run has neither.</summary>
+    Task<bool> ReadRunOutputAsync(long id, Action<System.IO.Stream> read);
 
     /// <summary>Every launch that has a record the window lists.</summary>
     Task<RecordSources> ReadRecordSourcesAsync();

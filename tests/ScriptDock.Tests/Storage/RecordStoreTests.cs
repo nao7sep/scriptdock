@@ -6,6 +6,7 @@ using Microsoft.Data.Sqlite;
 using ScriptDock;
 using ScriptDock.Models;
 using ScriptDock.Storage;
+using ScriptDock.Tests.Fakes;
 using Xunit;
 
 namespace ScriptDock.Tests.Storage;

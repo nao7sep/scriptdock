@@ -19,14 +19,15 @@ public static class RunOutputFile
     private static string? _clearedDirectory;
 
     /// <summary>Writes <paramref name="output"/> as the console shows it (<see cref="RunLog.Lines"/>), whole,
-    /// and returns the file's path. Throws when the file cannot be written.</summary>
-    public static string Write(string root, string script, long id, byte[] output)
+    /// and returns the file's path. Streamed through in pieces (<see cref="RunLog.Copy"/>), so memory stays at
+    /// a working buffer whatever the output's size. Throws when the file cannot be written; a part-written
+    /// file is removed.</summary>
+    public static string Write(string root, string script, string id, Stream output)
     {
         var directory = Path.Combine(root, DirectoryName);
         var stem = Path.GetFileNameWithoutExtension(script) is { Length: > 0 } name ? name : "output";
         var path = Path.Combine(directory, $"{stem}-{id}.txt");
         var temp = Path.Combine(directory, $"{stem}-{id}-{NanoId.New()}.tmp");
-        var text = string.Join("\n", RunLog.Lines(Encoding.UTF8.GetString(output)));
 
         lock (Gate)
         {
@@ -41,7 +42,8 @@ public static class RunOutputFile
         // Published whole by a rename, so an editor never opens a half-written file; a reopen replaces it.
         try
         {
-            File.WriteAllText(temp, text, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            using (var writer = new StreamWriter(temp, append: false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
+                RunLog.Copy(output, writer);
             File.Move(temp, path, overwrite: true);
         }
         catch
