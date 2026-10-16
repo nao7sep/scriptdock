@@ -8,6 +8,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using ScriptDock.Models;
 using ScriptDock.Services;
 using ScriptDock.Storage;
@@ -114,5 +115,31 @@ public sealed class ConsoleViewTests : WindowTest, IDisposable
         Assert.NotNull(opened);
         Assert.Equal("ready\nprogress 9\n", File.ReadAllText(opened!));
         Assert.StartsWith(Path.Combine(_root, RunOutputFile.DirectoryName), opened);
+    }
+
+    // The console follows new output while it shows the latest line, and stays where the reader scrolled
+    // to once they scroll up to read.
+    [AvaloniaFact]
+    public void The_console_follows_new_lines_until_the_reader_scrolls_up()
+    {
+        var vm = NewVm();
+        var window = Show(new MainWindow { DataContext = vm, Width = 1100, Height = 760 });
+        vm.ApplyConsoleUpdate(new ConsoleUpdate(true, [.. Enumerable.Range(0, 500).Select(i => $"line {i}")], ""));
+        Settle(window);
+        var list = window.FindControl<ListBox>("ConsoleList")!;
+        var scroll = list.GetVisualDescendants().OfType<ScrollViewer>().First();
+        bool AtBottom() => scroll.Extent.Height - scroll.Viewport.Height - scroll.Offset.Y <= 24;
+        Assert.True(AtBottom());
+
+        vm.ApplyConsoleUpdate(new ConsoleUpdate(false, [.. Enumerable.Range(500, 50).Select(i => $"line {i}")], ""));
+        Settle(window);
+        Assert.True(AtBottom());
+        Assert.Contains(list.GetRealizedContainers(), container => container.DataContext == vm.ConsoleLines[^1]);
+
+        scroll.Offset = new Avalonia.Vector(0, 0); // the reader scrolls to the top
+        Settle(window);
+        vm.ApplyConsoleUpdate(new ConsoleUpdate(false, ["line 550"], ""));
+        Settle(window);
+        Assert.Equal(0, scroll.Offset.Y);
     }
 }
