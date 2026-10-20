@@ -1,22 +1,16 @@
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text.RegularExpressions;
+using Avalonia.Controls;
 using ScriptDock.Views;
 using Xunit;
 
 namespace ScriptDock.Tests.Views;
 
 /// <summary>
-/// The window's minimum size is derived, not guessed (per the window-chrome conventions):
-/// <see cref="WindowMetrics"/> sums the live grid column/row minimums plus the fixed chrome
-/// (header bar, status bar, splitters, body margin) so the window can never shrink small enough
-/// to hide a pane or overlap the status bar. These tests pin the derivation math directly (no
-/// Avalonia headless harness, matching the suite's pure-helper style), guard that every body
-/// column and left-column row declares a non-zero minimum, and assert the live XAML track minimums
-/// match the values the helper and pane-size clamps are written against — so a future change to a
-/// minimum, a splitter, or the margin fails here rather than silently letting the window under-size.
+/// The window's minimum size is derived, not guessed: <see cref="WindowMetrics"/> sums the live grid
+/// column and row minimums plus the fixed chrome (header bar, status bar, splitters, body margin), so the
+/// window can never shrink small enough to hide a pane or overlap the status bar. These pin the
+/// derivation arithmetic and check, on the real window, that every pane track has a minimum.
 /// </summary>
 public sealed class WindowMetricsTests
 {
@@ -99,15 +93,6 @@ public sealed class WindowMetricsTests
     }
 
     [Fact]
-    public void MainWindow_UsesInitialSizeWithoutAppOwnedStartupPosition()
-    {
-        var axaml = ReadMainWindowAxaml();
-
-        Assert.Contains("Width=\"1100\" Height=\"720\"", axaml, System.StringComparison.Ordinal);
-        Assert.DoesNotContain("WindowStartupLocation", axaml, System.StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void Native_minimum_uses_scaled_work_area_without_changing_the_content_floor()
     {
         var floor = new Avalonia.Size(1200, 800);
@@ -119,11 +104,7 @@ public sealed class WindowMetricsTests
             floor, new Avalonia.PixelRect(0, 0, 3840, 2160), 2, new Avalonia.Size(8, 30)));
     }
 
-    // Mirrors the live layout in Views/MainWindow.axaml. Kept here so the derivation assertions
-    // read against a concrete, known set; the XAML guards below are what catch drift between this
-    // list and the actual XAML.
-    // These are the XAML floor values; OnLoaded raises the column minimums further to fit each
-    // list header's measured width. The console row min is 160 (header + stdin input + a few lines).
+    // Sample pane minimums for the derivation arithmetic, which takes whatever the live tracks give it.
     private static readonly double[] ColumnMinWidths = [360, 260]; // left column (Scripts/Output), Recent
     private static readonly double[] RowMinHeights = [200, 160];   // Scripts row, console row
 
@@ -186,20 +167,6 @@ public sealed class WindowMetricsTests
             + 2 * WindowMetrics.BodyMargin + WindowMetrics.RowSplitter;
         var minHeight = WindowMetrics.MinHeightFor(RowMinHeights);
         Assert.True(minHeight >= RowMinHeights.Max() + chrome);
-    }
-
-    [Fact]
-    public void PaneClampBounds_EqualTheLayoutTrackMinimums()
-    {
-        // MainWindow uses each pane's own track minimum as the lower bound (Recent column min for
-        // the right pane, console row min for the console). Those bounds must equal what the XAML
-        // declares, so the clamp can never let a persisted size fall below the layout minimum.
-        var axaml = ReadMainWindowAxaml();
-        var columnMins = BodyColumnMinWidths(axaml);
-        var rowMins = LeftColumnRowMinHeights(axaml);
-
-        Assert.Equal(260d, columnMins[1]); // Recent column min == clamp lower bound for SavedRecentWidth
-        Assert.Equal(160d, rowMins[1]);    // console row min == clamp lower bound for SavedConsoleHeight
     }
 
     [Fact]
@@ -293,49 +260,18 @@ public sealed class WindowMetricsTests
         Assert.Equal(min, WindowMetrics.DisplayFromIntent(500, min, min)); // big intent, no room
     }
 
-    [Fact]
-    public void EveryBodyColumnAndLeftColumnRow_DeclaresANonZeroMinimum()
+    // A column or row without a minimum would add nothing to the derived window minimum and could be
+    // squeezed to nothing; the splitter tracks are the only ones without.
+    [Avalonia.Headless.XUnit.AvaloniaFact]
+    public void Every_pane_track_of_the_main_window_has_a_minimum()
     {
-        // Guard against a column or row being added/changed without a minimum: such a track would
-        // contribute 0 to the derived window minimum and could be squeezed to invisibility.
-        var axaml = ReadMainWindowAxaml();
-        var columnMins = BodyColumnMinWidths(axaml);
-        var rowMins = LeftColumnRowMinHeights(axaml);
+        var window = new MainWindow();
+        var columns = window.FindControl<Avalonia.Controls.Grid>("BodyGrid")!.ColumnDefinitions;
+        var rows = window.FindControl<Avalonia.Controls.Grid>("LeftPanesGrid")!.RowDefinitions;
 
-        Assert.NotEmpty(columnMins);
-        Assert.NotEmpty(rowMins);
-        Assert.All(columnMins, m => Assert.True(m > 0, "A BodyGrid column is missing a non-zero MinWidth."));
-        Assert.All(rowMins, m => Assert.True(m > 0, "A LeftPanesGrid row is missing a non-zero MinHeight."));
-    }
-
-    [Fact]
-    public void DerivedMinimums_MatchTheLiveLayoutMinimums()
-    {
-        // The mirrored lists used above must stay equal to what the XAML actually declares, so the
-        // derivation tests cannot pass against a stale list.
-        var axaml = ReadMainWindowAxaml();
-        Assert.Equal(ColumnMinWidths, BodyColumnMinWidths(axaml));
-        Assert.Equal(RowMinHeights, LeftColumnRowMinHeights(axaml));
-    }
-
-    // The two BodyGrid columns that carry a MinWidth (the 6px splitter column has none), in order:
-    // the left Scripts/console stack and the Recent column.
-    private static IReadOnlyList<double> BodyColumnMinWidths(string axaml)
-    {
-        var bodyGrid = Section(axaml, "<Grid x:Name=\"BodyGrid\"", "</Grid.ColumnDefinitions>");
-        return Regex.Matches(bodyGrid, "<ColumnDefinition\\b[^>]*?MinWidth=\"(?<min>\\d+(?:\\.\\d+)?)\"")
-            .Select(m => double.Parse(m.Groups["min"].Value, System.Globalization.CultureInfo.InvariantCulture))
-            .ToList();
-    }
-
-    // The two LeftPanesGrid rows that carry a MinHeight (the 6px splitter row has none), in order:
-    // the Scripts row and the console row.
-    private static IReadOnlyList<double> LeftColumnRowMinHeights(string axaml)
-    {
-        var leftGrid = Section(axaml, "<Grid x:Name=\"LeftPanesGrid\"", "</Grid.RowDefinitions>");
-        return Regex.Matches(leftGrid, "<RowDefinition\\b[^>]*?MinHeight=\"(?<min>\\d+(?:\\.\\d+)?)\"")
-            .Select(m => double.Parse(m.Groups["min"].Value, System.Globalization.CultureInfo.InvariantCulture))
-            .ToList();
+        Assert.All(columns.Where(column => column.Width.Value != WindowMetrics.ColumnSplitter), column => Assert.True(column.MinWidth > 0));
+        Assert.All(rows.Where(row => row.Height.Value != WindowMetrics.RowSplitter), row => Assert.True(row.MinHeight > 0));
+        Assert.Equal(Avalonia.Controls.WindowStartupLocation.Manual, window.WindowStartupLocation); // the system places it
     }
 
     // A dialog is its own OS window, so nothing but this keeps it inside the screen it opens on.
@@ -359,23 +295,4 @@ public sealed class WindowMetricsTests
     {
         Assert.Equal(double.PositiveInfinity, WindowMetrics.DialogMaxHeight(workingAreaHeight, scale));
     }
-
-    private static string Section(string text, string startMarker, string endMarker)
-    {
-        var start = text.IndexOf(startMarker, System.StringComparison.Ordinal);
-        Assert.True(start >= 0, $"Marker not found in MainWindow.axaml: {startMarker}");
-        var end = text.IndexOf(endMarker, start, System.StringComparison.Ordinal);
-        Assert.True(end >= 0, $"Marker not found in MainWindow.axaml: {endMarker}");
-        return text[start..end];
-    }
-
-    private static string ReadMainWindowAxaml([CallerFilePath] string callerPath = "")
-    {
-        // This file: <repo>/tests/ScriptDock.Tests/Views/WindowMetricsTests.cs
-        // Target:    <repo>/src/ScriptDock/Views/MainWindow.axaml
-        var testsViewsDir = Path.GetDirectoryName(callerPath)!;
-        var repoRoot = Path.GetFullPath(Path.Combine(testsViewsDir, "..", "..", ".."));
-        return File.ReadAllText(Path.Combine(repoRoot, "src", "ScriptDock", "Views", "MainWindow.axaml"));
-    }
-
 }

@@ -25,7 +25,7 @@ function Write-Step {
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoDir = Split-Path -Parent $scriptDir
-$exePath = Join-Path $repoDir "bin/Release/net10.0/win-x64/publish/ScriptDock.exe"
+$exePath = Join-Path $repoDir "publish/ScriptDock.exe"
 $projectFile = Join-Path $repoDir "src/ScriptDock/ScriptDock.csproj"
 $runtimeToken = [guid]::NewGuid().ToString("N")
 
@@ -44,13 +44,13 @@ try {
 
     $builtAt = (Get-Item $exePath).LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
     Claim-LauncherRuntime -Token $runtimeToken -RepoDir $repoDir
-    Stop-OwnedRuntime -Kind dotnet -Label "ScriptDock" -RepoDir $repoDir -ProjectFile $projectFile -ExecutableName "ScriptDock" -BuiltExecutable $exePath
+    Stop-OwnedRuntime -Label "ScriptDock" -RepoDir $repoDir -ProjectFile $projectFile -ExecutableName "ScriptDock" -BuiltExecutable $exePath
     Write-Step "Launching the existing build (built: $builtAt)"
     Write-Host "If you changed source since then, run rebuild instead."
 
     # GUI app: launch non-blocking via Start-Process.
     Start-Process -FilePath $exePath | Out-Null
-    Wait-OwnedRuntime -Kind dotnet -Label "ScriptDock" -RepoDir $repoDir -ProjectFile "" -ExecutableName "ScriptDock" -BuiltExecutable $exePath -TimeoutSeconds 30
+    Wait-OwnedRuntime -Label "ScriptDock" -RepoDir $repoDir -ProjectFile "" -ExecutableName "ScriptDock" -BuiltExecutable $exePath -TimeoutSeconds 30
 }
 catch {
     Write-Host ""

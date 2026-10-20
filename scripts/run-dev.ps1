@@ -48,7 +48,7 @@ function Invoke-Native {
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoDir = Split-Path -Parent $scriptDir
 $projectFile = Join-Path $repoDir "src/ScriptDock/ScriptDock.csproj"
-$builtExecutable = Join-Path $repoDir "bin/Release/net10.0/win-x64/publish/ScriptDock.exe"
+$builtExecutable = Join-Path $repoDir "publish/ScriptDock.exe"
 $runtimeToken = [guid]::NewGuid().ToString("N")
 
 try {
@@ -60,14 +60,14 @@ try {
 
     Write-Step "Replacing any existing ScriptDock runtime"
     Claim-LauncherRuntime -Token $runtimeToken -RepoDir $repoDir
-    Stop-OwnedRuntime -Kind dotnet -Label "ScriptDock" -RepoDir $repoDir -ProjectFile $projectFile -ExecutableName "ScriptDock" -BuiltExecutable $builtExecutable
+    Stop-OwnedRuntime -Label "ScriptDock" -RepoDir $repoDir -ProjectFile $projectFile -ExecutableName "ScriptDock" -BuiltExecutable $builtExecutable
 
     Write-Step "Restoring packages required for launch"
     Invoke-Native -FilePath "dotnet" -ArgumentList @("restore", $projectFile)
 
     Write-Step "Starting ScriptDock (Debug, from source)"
     $devProcess = Start-Process -FilePath "dotnet" -ArgumentList @("run", "--project", $projectFile) -NoNewWindow -PassThru
-    Wait-OwnedRuntime -Kind dotnet -Label "ScriptDock" -RepoDir $repoDir -ProjectFile "" -ExecutableName "ScriptDock" -BuiltExecutable $builtExecutable -TimeoutSeconds 120
+    Wait-OwnedRuntime -Label "ScriptDock" -RepoDir $repoDir -ProjectFile "" -ExecutableName "ScriptDock" -BuiltExecutable $builtExecutable -TimeoutSeconds 120
     Write-Step "ScriptDock is ready"
     $devProcess.WaitForExit()
     if ($devProcess.ExitCode -notin @(0, 130, -1073741510)) {
@@ -81,7 +81,7 @@ catch {
 }
 finally {
     if (Test-LauncherRuntimeOwner -Token $runtimeToken -RepoDir $repoDir) {
-        Stop-OwnedRuntime -Kind dotnet -Label "ScriptDock" -RepoDir $repoDir -ProjectFile $projectFile -ExecutableName "ScriptDock" -BuiltExecutable $builtExecutable
+        Stop-OwnedRuntime -Label "ScriptDock" -RepoDir $repoDir -ProjectFile $projectFile -ExecutableName "ScriptDock" -BuiltExecutable $builtExecutable
         Release-LauncherRuntime -Token $runtimeToken -RepoDir $repoDir
         Read-Host "Press Enter to close" | Out-Null
     }

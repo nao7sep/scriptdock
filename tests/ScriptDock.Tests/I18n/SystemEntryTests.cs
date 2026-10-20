@@ -54,10 +54,14 @@ public sealed class SystemEntryTests
     }
 
     [Fact]
-    public void Every_language_has_a_name_in_every_interface_language()
+    public void Every_language_has_a_name_in_the_interface_language()
     {
+        // Each name is a catalogue entry the language list names, so a language added to the list without
+        // its name shows its key here (every catalogue holds the same keys, CatalogueTests).
         foreach (var tag in Languages.Tags)
-            Assert.StartsWith("language.", Languages.InterfaceNameKey(tag));
-        Assert.Equal("language.ja", Languages.InterfaceNameKey("ja"));
+        {
+            var key = Languages.InterfaceNameKey(tag);
+            Assert.NotEqual(key, English.Of(key));
+        }
     }
 }

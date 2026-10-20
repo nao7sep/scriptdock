@@ -22,24 +22,6 @@ if (Get-ChildItem -LiteralPath publish-win -Recurse -File -Filter *.pdb) {
     throw "Debug symbols remain in publish-win after release cleanup."
 }
 Copy-Item -LiteralPath LICENSE -Destination publish-win/LICENSE.txt
-$NuGetPackages = if ($env:NUGET_PACKAGES) {
-    $env:NUGET_PACKAGES
-} else {
-    Join-Path $env:USERPROFILE ".nuget/packages"
-}
-# Take the notice from the SkiaSharp native package this publish actually resolved, as the macOS
-# bundle target does, so a SkiaSharp upgrade cannot leave the appended notice pointing at an old version.
-$Deps = Get-Content -LiteralPath "publish-win/$AppName.deps.json" -Raw | ConvertFrom-Json
-$SkiaNative = @($Deps.libraries.PSObject.Properties.Name | Where-Object { $_ -like "SkiaSharp.NativeAssets.Win32/*" })
-if ($SkiaNative.Count -ne 1) {
-    throw "Could not resolve the published SkiaSharp.NativeAssets.Win32 version from $AppName.deps.json."
-}
-$NativeNotices = Join-Path $NuGetPackages ("skiasharp.nativeassets.win32/" + $SkiaNative[0].Split("/")[1] + "/THIRD-PARTY-NOTICES.txt")
-if (-not (Test-Path -LiteralPath $NativeNotices)) {
-    throw "SkiaSharp native notices were not restored: $NativeNotices"
-}
-Copy-Item -LiteralPath THIRD_PARTY_NOTICES -Destination publish-win/THIRD_PARTY_NOTICES.txt
-Add-Content -LiteralPath publish-win/THIRD_PARTY_NOTICES.txt -Value (Get-Content -LiteralPath $NativeNotices -Raw)
 
 # Portable: zip the self-contained folder as-is.
 Compress-Archive -Path publish-win/* -DestinationPath "dist/$AppName-$Version-win.zip" -Force

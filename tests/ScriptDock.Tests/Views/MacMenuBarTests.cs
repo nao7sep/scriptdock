@@ -148,11 +148,15 @@ public sealed class MacMenuBarTests
     public void The_bar_turns_off_Avalonias_own_macOS_menus() =>
         Assert.True(PlatformOptions().DisableNativeMenus);
 
+    private static readonly Regex NativeMenuDeclaration = new(@"<NativeMenu|NativeMenu\.(Set)?Menu|new NativeMenu");
+
     [Fact]
     public void No_window_or_the_app_declares_an_Avalonia_NativeMenu()
     {
         // With Avalonia's menus off, one would be silently ignored; the bar is MacMenuBar's alone.
-        var declaration = new Regex(@"<NativeMenu|NativeMenu\.(Set)?Menu|new NativeMenu");
+        var declaration = NativeMenuDeclaration;
+        Assert.True(declaration.IsMatch("<NativeMenu.Menu>") && declaration.IsMatch("NativeMenu.SetMenu(app, menu)"),
+            "the scan must find a planted declaration");
         var offenders = Directory.EnumerateFiles(Path.Combine(RepoRoot(), "src", "ScriptDock"), "*.*", SearchOption.AllDirectories)
             .Where(path => path.EndsWith(".axaml", StringComparison.Ordinal) || path.EndsWith(".cs", StringComparison.Ordinal))
             .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)

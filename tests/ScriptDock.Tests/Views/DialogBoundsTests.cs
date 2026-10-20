@@ -358,7 +358,9 @@ public sealed class DialogBoundsTests : WindowTest
     [Fact]
     public void No_dialog_opens_through_the_unbounded_ShowDialog()
     {
-        // The shell's own call is the one place the dialog is already bounded when it runs.
+        // The shell's own call is the one place the dialog is already bounded when it runs, and the scan
+        // must still find it there, or the exception names a call that no longer exists.
+        Assert.Contains("ShowDialog(", File.ReadAllText(Path.Combine(ViewsDirectory(), "DialogBase.axaml.cs")));
         var bypasses = Directory
             .EnumerateFiles(ViewsDirectory(), "*.cs")
             .Where(file => Path.GetFileName(file) != "DialogBase.axaml.cs")

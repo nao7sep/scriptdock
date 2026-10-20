@@ -3,19 +3,18 @@
     <OutputType>WinExe</OutputType>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- Windows: embeds icon.ico into the .exe. macOS uses macOS/icon.icns (classic,
-         CFBundleIconFile) and macOS/Assets.car (Liquid Glass, CFBundleIconName) instead;
-         see scripts/rebuild.command. Icon provenance: company/assets/scriptdock/icons. -->
+         CFBundleIconFile) and macOS/Assets.car (Liquid Glass, CFBundleIconName) instead, which the
+         bundle assembly in Directory.Build.targets copies into the .app. -->
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <AssemblyTitle>ScriptDock</AssemblyTitle>
-    <Description>Find the start scripts across your projects, run them from one dashboard, and restart them cleanly with their ports freed.</Description>
-    <RuntimeIdentifiers>osx-arm64;osx-x64;win-x64</RuntimeIdentifiers>
+    <RuntimeIdentifiers>osx-arm64;win-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- The interface languages ship inside the assembly, so a catalogue cannot be separated from the
          build that was tested against it and a language change never reads the disk. The logical name
-         is the default one, ScriptDock.I18n.Locales.<tag>.json (see I18n/Catalogue.cs). -->
+         is the default one, ScriptDock.I18n.Locales.<tag>.json, which the catalogue loads by tag. -->
     <EmbeddedResource Include="I18n\Locales\*.json" />
   </ItemGroup>
 

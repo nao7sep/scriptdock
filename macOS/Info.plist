@@ -12,8 +12,8 @@
     <string>ScriptDock</string>
     <!-- App icon, dual-key: older macOS reads CFBundleIconFile -> Resources/icon.icns
          (classic flat tile); macOS 26 (Tahoe) reads CFBundleIconName -> Resources/Assets.car
-         (the Liquid Glass tile). Both are staged into Contents/Resources by
-         scripts/rebuild.command. Icon provenance: company/assets/scriptdock/icons. -->
+         (the Liquid Glass tile). The bundle assembly in Directory.Build.targets copies both
+         into Contents/Resources. -->
     <key>CFBundleIconFile</key>
     <string>icon</string>
     <key>CFBundleIconName</key>
