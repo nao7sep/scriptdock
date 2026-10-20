@@ -5,9 +5,12 @@ $ErrorActionPreference = "Stop"
 $Repo = Split-Path -Parent $PSScriptRoot
 Set-Location $Repo
 
-$AppName = "ScriptDock"
+# The product's name, publisher and version come from Directory.Build.props, the one place they are stated.
+$Props = Get-Content Directory.Build.props -Raw
+$AppName = ([regex]::Match($Props, '<Product>(.*?)</Product>')).Groups[1].Value
+$Publisher = ([regex]::Match($Props, '<Company>(.*?)</Company>')).Groups[1].Value
 $Project = "src/ScriptDock/ScriptDock.csproj"
-$Version = ([regex]::Match((Get-Content Directory.Build.props -Raw), '<Version>(.*?)</Version>')).Groups[1].Value
+$Version = ([regex]::Match($Props, '<Version>(.*?)</Version>')).Groups[1].Value
 
 Remove-Item -Recurse -Force publish-win, dist -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path dist | Out-Null
@@ -41,6 +44,6 @@ if (-not $iscc) {
 if (-not $iscc) {
     throw "Inno Setup compiler not found. Install Inno Setup 6 for the current user or machine, or add ISCC.exe to PATH."
 }
-& $iscc "/DMyAppVersion=$Version" scripts/scriptdock.iss
+& $iscc "/DMyAppVersion=$Version" "/DMyAppName=$AppName" "/DMyAppPublisher=$Publisher" scripts/scriptdock.iss
 
 Get-ChildItem dist

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Sourced by the macOS launchers (run-dev, run-built, rebuild): claims this checkout's launcher slot,
+# stops the ScriptDock instance a previous launcher started (by its executable or project path), and
+# waits for the new one to come up.
 
 claim_launcher_runtime() {
   local token="$1" repo_dir="$2"

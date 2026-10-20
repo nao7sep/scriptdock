@@ -1,76 +1,39 @@
-using System;
-using System.IO;
-using System.Text.RegularExpressions;
+using System.Linq;
+using System.Xml.Linq;
 using Xunit;
 
 namespace ScriptDock.Tests;
 
 /// <summary>
-/// The app version has one source of truth — <c>Directory.Build.props</c>' <c>&lt;Version&gt;</c>, per the
-/// app-release-conventions — with kept-in-sync copies nothing derives automatically: <c>macOS/Info.plist</c>
-/// (<c>CFBundleVersion</c> and <c>CFBundleShortVersionString</c>) and <c>src/ScriptDock/app.manifest</c> (a
-/// four-part <c>assemblyIdentity version</c>, always ending <c>.0</c>). This test guards those copies
-/// against drifting from the SSOT on a version bump.
+/// The app's version and product name have one source of truth, Directory.Build.props, with copies nothing
+/// derives automatically: macOS/Info.plist (its bundle versions and names) and src/ScriptDock/app.manifest
+/// (a four-part assemblyIdentity version, always ending .0). These check the copies against it, read as the
+/// XML each file is, so a version bump or a rename cannot leave one behind.
 /// </summary>
 public sealed class VersionConsistencyTests
 {
     [Fact]
     public void Info_Plist_And_App_Manifest_Match_The_Directory_Build_Props_Version()
     {
-        var repoRoot = FindRepoRoot();
+        var version = SourceScan.BuildProperty("Version");
+        var plist = SourceScan.PropertyList(SourceScan.RepoFile("macOS", "Info.plist"));
+        Assert.Equal(version, plist["CFBundleVersion"].Value);
+        Assert.Equal(version, plist["CFBundleShortVersionString"].Value);
 
-        var propsPath = Path.Combine(repoRoot, "Directory.Build.props");
-        var version = ReadFirstMatch(propsPath, @"<Version>([^<]+)</Version>");
-
-        var plistPath = Path.Combine(repoRoot, "macOS", "Info.plist");
-        var plistText = File.ReadAllText(plistPath);
-        AssertPlistKeyMatches(plistText, "CFBundleVersion", version, plistPath, propsPath);
-        AssertPlistKeyMatches(plistText, "CFBundleShortVersionString", version, plistPath, propsPath);
-
-        var manifestPath = Path.Combine(repoRoot, "src", "ScriptDock", "app.manifest");
-        var manifestVersion = ReadFirstMatch(manifestPath, "assemblyIdentity version=\"([^\"]+)\"");
-        var expectedManifestVersion = version + ".0";
-        Assert.True(
-            manifestVersion == expectedManifestVersion,
-            $"{manifestPath}: assemblyIdentity version is '{manifestVersion}' but expected " +
-            $"'{expectedManifestVersion}' (derived from {propsPath}'s Version '{version}').");
+        var manifest = XDocument.Load(SourceScan.RepoFile("src", "ScriptDock", "app.manifest"));
+        var identity = manifest.Root!.Elements().Single(element => element.Name.LocalName == "assemblyIdentity");
+        Assert.Equal(version + ".0", (string?)identity.Attribute("version"));
     }
 
-    private static void AssertPlistKeyMatches(string plistText, string key, string expected, string plistPath, string propsPath)
+    // The bundle's names follow the product name the props state; the bundle file itself is named after
+    // the assembly.
+    [Fact]
+    public void Info_Plist_Names_The_Directory_Build_Props_Product()
     {
-        var match = Regex.Match(plistText, $@"<key>{Regex.Escape(key)}</key>\s*<string>([^<]+)</string>");
-        Assert.True(match.Success, $"{plistPath}: could not find a <key>{key}</key> entry with a <string> value.");
-
-        var actual = match.Groups[1].Value;
-        Assert.True(
-            actual == expected,
-            $"{plistPath}: {key} is '{actual}' but expected '{expected}' (from {propsPath}'s Version).");
-    }
-
-    private static string ReadFirstMatch(string path, string pattern)
-    {
-        var text = File.ReadAllText(path);
-        var match = Regex.Match(text, pattern);
-        Assert.True(match.Success, $"{path}: no match for /{pattern}/.");
-        return match.Groups[1].Value;
-    }
-
-    /// <summary>Walks up from the test assembly's directory to find the repo root, identified by
-    /// <c>ScriptDock.slnx</c> — robust regardless of Debug/Release output subfolders.</summary>
-    private static string FindRepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Combine(dir.FullName, "ScriptDock.slnx")))
-            {
-                return dir.FullName;
-            }
-
-            dir = dir.Parent;
-        }
-
-        throw new InvalidOperationException(
-            "Could not locate the repository root (ScriptDock.slnx) above " + AppContext.BaseDirectory);
+        var product = SourceScan.BuildProperty("Product");
+        var plist = SourceScan.PropertyList(SourceScan.RepoFile("macOS", "Info.plist"));
+        Assert.Equal(product, plist["CFBundleName"].Value);
+        Assert.Equal(product, plist["CFBundleDisplayName"].Value);
+        Assert.Equal(product, AppInfo.Product); // the running app reads the same value
     }
 }

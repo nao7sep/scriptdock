@@ -19,8 +19,6 @@ public sealed class AboutDialog : DialogBase
     private readonly Border _launchError;
     private readonly TextBlock _launchErrorMessage;
 
-    /// <summary>The app's name, which is a brand and so identical in every language.</summary>
-    private const string AppName = "ScriptDock";
 
     public AboutDialog() : this(ExternalLauncher.Open) { }
 
@@ -91,7 +89,7 @@ public sealed class AboutDialog : DialogBase
             Spacing = 0,
             Children =
             {
-                new TextBlock { Text = AppName, FontSize = 20, FontWeight = FontWeight.Bold, Margin = new Thickness(0, 0, 0, 4) },
+                new TextBlock { Text = AppInfo.Product, FontSize = 20, FontWeight = FontWeight.Bold, Margin = new Thickness(0, 0, 0, 4) },
                 new TextBlock { Text = I18n.Localizer.T("about.version", ("version", version)), FontSize = 13, Margin = new Thickness(0, 0, 0, 12) }
                     .Themed(TextBlock.ForegroundProperty, "TextSecondaryBrush"),
                 new TextBlock

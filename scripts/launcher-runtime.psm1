@@ -1,3 +1,7 @@
+# Imported by the Windows launchers (run-dev, run-built, rebuild): claims this checkout's launcher slot,
+# stops the ScriptDock instance a previous launcher started (by its executable or project path), and
+# waits for the new one to come up.
+
 function Get-LauncherOwnerFile {
     param([Parameter(Mandatory = $true)][string]$RepoDir)
     return Join-Path (Join-Path $RepoDir '.git') 'launcher-runtime-owner'

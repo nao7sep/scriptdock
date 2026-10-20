@@ -31,6 +31,7 @@ public partial class App : Application
 
     public override void Initialize()
     {
+        Name = AppInfo.Product;
         AvaloniaXamlLoader.Load(this);
         MenuGestureColumn.Install();
     }
@@ -50,7 +51,7 @@ public partial class App : Application
             // included, shows the same bar. About and Settings are enabled while the main window is in
             // front, so never over one of its dialogs.
             MacMenuBar.Install(
-                "ScriptDock",
+                AppInfo.Product,
                 showAbout: () => _mainWindow?.ShowAboutFromMenu(),
                 showSettings: () => _mainWindow?.ShowSettingsFromMenu(),
                 quit: () => _ = QuitFromMenuAsync(desktop),

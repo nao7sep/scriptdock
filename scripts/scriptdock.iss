@@ -1,12 +1,17 @@
-; Inno Setup script — builds dist\ScriptDock-<version>-setup.exe from the
-; self-contained win-x64 publish in publish-win\. The version is passed in by
-; scripts/package.ps1 via /DMyAppVersion. iscc is pre-installed on windows-latest.
+; Inno Setup script — builds dist\<name>-<version>-setup.exe from the
+; self-contained win-x64 publish in publish-win\. The product name, publisher and
+; version come from Directory.Build.props, passed in by scripts/package.ps1 via /D.
+; iscc is pre-installed on windows-latest.
 
-#define MyAppName "ScriptDock"
-#define MyAppPublisher "Yoshinao Inoguchi"
 #define MyAppExe "ScriptDock.exe"
 #ifndef MyAppVersion
   #error MyAppVersion is not defined - pass it via  iscc /DMyAppVersion=x.y.z
+#endif
+#ifndef MyAppName
+  #error MyAppName is not defined - pass it via  iscc /DMyAppName=<Product>
+#endif
+#ifndef MyAppPublisher
+  #error MyAppPublisher is not defined - pass it via  iscc /DMyAppPublisher=<Company>
 #endif
 
 [Setup]

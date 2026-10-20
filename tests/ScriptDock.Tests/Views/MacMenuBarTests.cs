@@ -148,23 +148,30 @@ public sealed class MacMenuBarTests
     public void The_bar_turns_off_Avalonias_own_macOS_menus() =>
         Assert.True(PlatformOptions().DisableNativeMenus);
 
-    private static readonly Regex NativeMenuDeclaration = new(@"<NativeMenu|NativeMenu\.(Set)?Menu|new NativeMenu");
-
     [Fact]
     public void No_window_or_the_app_declares_an_Avalonia_NativeMenu()
     {
         // With Avalonia's menus off, one would be silently ignored; the bar is MacMenuBar's alone.
-        var declaration = NativeMenuDeclaration;
-        Assert.True(declaration.IsMatch("<NativeMenu.Menu>") && declaration.IsMatch("NativeMenu.SetMenu(app, menu)"),
+        Assert.True(DeclaresNativeMenu("<Window xmlns=\"https://github.com/avaloniaui\"><NativeMenu.Menu><NativeMenu/></NativeMenu.Menu></Window>", markup: true)
+            && DeclaresNativeMenu("class C { void M() { NativeMenu.SetMenu(app, new NativeMenu()); } }", markup: false),
             "the scan must find a planted declaration");
-        var offenders = Directory.EnumerateFiles(Path.Combine(RepoRoot(), "src", "ScriptDock"), "*.*", SearchOption.AllDirectories)
-            .Where(path => path.EndsWith(".axaml", StringComparison.Ordinal) || path.EndsWith(".cs", StringComparison.Ordinal))
-            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
-            .Where(path => declaration.IsMatch(File.ReadAllText(path)))
+        var offenders = SourceScan.Files(".axaml").Where(file => DeclaresNativeMenu(File.ReadAllText(file), markup: true))
+            .Concat(SourceScan.Files(".cs").Where(file => DeclaresNativeMenu(File.ReadAllText(file), markup: false)))
             .ToList();
         Assert.Empty(offenders);
     }
+
+    // A NativeMenu element or attached property in markup; in code, one constructed or attached.
+    private static bool DeclaresNativeMenu(string text, bool markup) => markup
+        ? SourceScan.Markup(text).Descendants().Any(element =>
+            element.Name.LocalName.StartsWith("NativeMenu", System.StringComparison.Ordinal)
+            || element.Attributes().Any(attribute => attribute.Name.LocalName.StartsWith("NativeMenu.", System.StringComparison.Ordinal)))
+        : SourceScan.Code(text).DescendantNodes().Any(node => node switch
+        {
+            Microsoft.CodeAnalysis.CSharp.Syntax.ObjectCreationExpressionSyntax creation => creation.Type.ToString() == "NativeMenu",
+            Microsoft.CodeAnalysis.CSharp.Syntax.InvocationExpressionSyntax call => SourceScan.Receiver(call) == "NativeMenu",
+            _ => false,
+        });
 
     [AvaloniaFact]
     public void The_headless_test_app_does_not_install_the_bar() =>

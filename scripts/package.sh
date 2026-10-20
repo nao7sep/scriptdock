@@ -10,7 +10,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO"
 
-APP_NAME="ScriptDock"
+# The product's name and version come from Directory.Build.props, the one place they are stated; the
+# bundle is named after the assembly.
+APP_NAME="$(grep -m1 '<Product>' Directory.Build.props | sed -E 's/.*<Product>(.*)<\/Product>.*/\1/')"
 PROJECT="src/ScriptDock/ScriptDock.csproj"
 VERSION="$(grep -m1 '<Version>' Directory.Build.props | sed -E 's/.*<Version>(.*)<\/Version>.*/\1/')"
 
@@ -21,7 +23,7 @@ mkdir -p dist
 # assembles and ad-hoc-signs publish/ScriptDock.app as part of the publish.
 dotnet publish "$PROJECT" -c Release -r osx-arm64 --self-contained true -o publish
 
-APP="publish/$APP_NAME.app"
+APP="publish/ScriptDock.app"
 [ -d "$APP" ] || { echo "expected $APP was not produced by publish" >&2; exit 1; }
 
 # Portable: retain AppleDouble metadata because deep signing stores managed-DLL

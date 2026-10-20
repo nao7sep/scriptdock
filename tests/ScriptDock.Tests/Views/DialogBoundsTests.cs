@@ -353,6 +353,12 @@ public sealed class DialogBoundsTests : WindowTest
         }
     }
 
+    // The lines that call ShowDialog, read from the syntax tree.
+    private static IEnumerable<int> ShowDialogCalls(string code) =>
+        SourceScan.Code(code).DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.InvocationExpressionSyntax>()
+            .Where(call => SourceScan.CalledName(call) == "ShowDialog")
+            .Select(call => call.GetLocation().GetLineSpan().StartLinePosition.Line + 1);
+
     // Avalonia's own ShowDialog stays callable, and a new dialog that reached for it would be unbounded
     // again with nothing else to say so.
     [Fact]
@@ -360,14 +366,10 @@ public sealed class DialogBoundsTests : WindowTest
     {
         // The shell's own call is the one place the dialog is already bounded when it runs, and the scan
         // must still find it there, or the exception names a call that no longer exists.
-        Assert.Contains("ShowDialog(", File.ReadAllText(Path.Combine(ViewsDirectory(), "DialogBase.axaml.cs")));
-        var bypasses = Directory
-            .EnumerateFiles(ViewsDirectory(), "*.cs")
+        Assert.NotEmpty(ShowDialogCalls(File.ReadAllText(Path.Combine(ViewsDirectory(), "DialogBase.axaml.cs"))));
+        var bypasses = SourceScan.Files(".cs", ViewsDirectory())
             .Where(file => Path.GetFileName(file) != "DialogBase.axaml.cs")
-            .SelectMany(file => File.ReadAllLines(file)
-                .Select((line, index) => (file, number: index + 1, line))
-                .Where(entry => entry.line.Contains("ShowDialog(", StringComparison.Ordinal)))
-            .Select(entry => $"{Path.GetFileName(entry.file)}:{entry.number}")
+            .SelectMany(file => ShowDialogCalls(File.ReadAllText(file)).Select(line => $"{Path.GetFileName(file)}:{line}"))
             .ToList();
 
         Assert.True(
