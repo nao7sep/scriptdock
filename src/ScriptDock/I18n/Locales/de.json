@@ -223,7 +223,7 @@
   "settings.tabs": "Einstellungsbereiche",
   "settings.tabGeneral": "Allgemein",
   "settings.tabIgnorePatterns": "Ignoriermuster",
-  "settings.ignorePatternsHint": "Beim Scannen werden alle Ordner und Skripte übersprungen, auf die ein Muster zutrifft; Groß- und Kleinschreibung spielt dabei keine Rolle. Ein Muster, das auf / endet, trifft nur auf Ordner zu. In einem Platzhaltermuster steht * für beliebige Zeichen innerhalb eines Namens, ? für ein einzelnes Zeichen, [abc] für eines der Zeichen in den eckigen Klammern und ** für beliebig viele Ordner; ein bloßer Name trifft in jeder Tiefe zu, ein Muster mit einem / vor seinem Ende gilt ab dem Stammverzeichnis. Ein regulärer Ausdruck kann an beliebiger Stelle im vollständigen Pfad zutreffen.",
+  "settings.ignorePatternsHint": "Beim Scannen wird übersprungen, worauf diese Muster zutreffen; Groß- und Kleinschreibung spielt keine Rolle, und ein abschließender / beschränkt ein Muster auf Ordner. Ein Platzhaltermuster trifft auf einen Namen in jedem Ordner zu, es sei denn, ein / vor seinem Ende verankert es am Stammverzeichnis. Ein regulärer Ausdruck kann an beliebiger Stelle im vollständigen Pfad zutreffen.",
   "settings.ignorePatternsEmpty": "Keine Ignoriermuster, daher wird jeder Ordner gescannt.",
   "settings.patternKind": "Mustertyp",
   "settings.patternWildcard": "Platzhalter",

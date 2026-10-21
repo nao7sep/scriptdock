@@ -230,7 +230,7 @@
   "settings.tabs": "Secciones de configuración",
   "settings.tabGeneral": "General",
   "settings.tabIgnorePatterns": "Patrones de exclusión",
-  "settings.ignorePatternsHint": "El escaneo omite cualquier carpeta o script que coincida con un patrón, sin distinguir mayúsculas de minúsculas. Un patrón que termina en / solo coincide con carpetas. En un patrón con comodines, * representa cualquier secuencia de caracteres dentro de un nombre, ? un solo carácter, [abc] uno de los caracteres entre corchetes y ** cualquier número de carpetas; un nombre por sí solo coincide en cualquier nivel, y un patrón con una / antes del final coincide desde el directorio raíz. Una expresión regular se busca en cualquier parte de la ruta completa.",
+  "settings.ignorePatternsHint": "El escaneo omite lo que coincide con estos patrones, sin distinguir mayúsculas de minúsculas; una / final indica solo carpetas. Un patrón con comodines coincide con un nombre en cualquier carpeta, salvo que una / antes del final lo ancle al directorio raíz. Una expresión regular se busca en cualquier parte de la ruta completa.",
   "settings.ignorePatternsEmpty": "No hay patrones de exclusión, así que se escanean todas las carpetas.",
   "settings.patternKind": "Tipo de patrón",
   "settings.patternWildcard": "Comodines",

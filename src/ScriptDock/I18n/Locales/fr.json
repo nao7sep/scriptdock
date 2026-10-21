@@ -230,7 +230,7 @@
   "settings.tabs": "Sections des paramètres",
   "settings.tabGeneral": "Général",
   "settings.tabIgnorePatterns": "Motifs d’exclusion",
-  "settings.ignorePatternsHint": "L’analyse exclut tout dossier ou script auquel correspond un motif, sans distinction de casse. Un motif terminé par / ne correspond qu’à des dossiers. Dans un motif à caractères génériques, * représente toute suite de caractères dans un nom, ? un seul caractère, [abc] l’un des caractères entre crochets et ** un nombre quelconque de dossiers\u00a0; un nom seul s’applique à tous les niveaux, et un motif contenant une / ailleurs qu’à la fin part du répertoire racine. Une expression régulière est recherchée n’importe où dans le chemin complet.",
+  "settings.ignorePatternsHint": "L’analyse exclut ce à quoi correspondent ces motifs, sans distinction de casse\u00a0; une / finale limite le motif aux dossiers. Un motif à caractères génériques correspond à un nom dans n’importe quel dossier, sauf si une / ailleurs qu’à la fin l’ancre au répertoire racine. Une expression régulière est recherchée n’importe où dans le chemin complet.",
   "settings.ignorePatternsEmpty": "Aucun motif d’exclusion\u00a0: tous les dossiers sont analysés.",
   "settings.patternKind": "Type de motif",
   "settings.patternWildcard": "Caractères génériques",

@@ -223,7 +223,7 @@
   "settings.tabs": "Settings sections",
   "settings.tabGeneral": "General",
   "settings.tabIgnorePatterns": "Ignore patterns",
-  "settings.ignorePatternsHint": "Scanning skips any folder or script a pattern matches, ignoring case. A pattern ending in / matches folders only. In a wildcard pattern, * stands for any characters in a name, ? for one character, [abc] for one of the characters in the brackets and ** for any number of folders; a name alone matches at any depth, and a pattern with a / before its end matches from the root directory. A regular expression is searched for anywhere in the full path.",
+  "settings.ignorePatternsHint": "Scanning skips what these patterns match, ignoring case; a trailing / means folders only. A wildcard pattern matches a name in any folder, unless a / before its end anchors it at the root directory. A regular expression is searched for anywhere in the full path.",
   "settings.ignorePatternsEmpty": "No ignore patterns, so every folder is scanned.",
   "settings.patternKind": "Pattern type",
   "settings.patternWildcard": "Wildcard",
