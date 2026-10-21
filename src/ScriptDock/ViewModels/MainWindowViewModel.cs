@@ -182,6 +182,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         // has new words: an empty name tells the bindings to re-read them all.
         Localizer.Changed += OnLanguageChanged;
         DisplayTime.Changed += OnLanguageChanged; // the Recent rows' times are rendered again too
+        ExitCodes.Changed += OnLanguageChanged; // and their state pills, which read the exit code
     }
 
     /// <summary>
@@ -454,6 +455,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         BeginShutdown();
         Localizer.Changed -= OnLanguageChanged;
         DisplayTime.Changed -= OnLanguageChanged;
+        ExitCodes.Changed -= OnLanguageChanged;
         _outputTimer?.Stop();
         _outputImportTimer?.Stop();
         _catalogResultTimer?.Stop();
@@ -572,6 +574,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _config.Theme = candidate.Theme;
         _config.Language = candidate.Language;
         _config.TimeZone = candidate.TimeZone;
+        _config.NonZeroExitIsError = candidate.NonZeroExitIsError;
         if (themeChanged)
             OnPropertyChanged(nameof(Theme));
 
@@ -579,6 +582,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         // key is re-read, and the view models re-render what they hold.
         Localizer.Use(candidate.Language, ComputerLanguages);
         DisplayTime.Use(candidate.TimeZone);
+        ExitCodes.Use(candidate.NonZeroExitIsError);
         ApplyUiFont();
         if (fontChanged)
             UiFontChanged?.Invoke(this, EventArgs.Empty);
@@ -846,6 +850,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                     UiFontFamily = _config.UiFontFamily,
                     Language = _config.Language,
                     TimeZone = _config.TimeZone,
+                    NonZeroExitIsError = _config.NonZeroExitIsError,
                     Theme = _config.Theme,
                     RootDirs = _config.RootDirs,
                     Extensions = _config.Extensions,

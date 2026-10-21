@@ -204,6 +204,7 @@ public partial class App : Application
 
         var config = configStore.Load();
         DisplayTime.Use(config.TimeZone);
+        ExitCodes.Use(config.NonZeroExitIsError);
         var state = stateStore.Load();
         var knownPaths = knownPathsStore.Load();
 

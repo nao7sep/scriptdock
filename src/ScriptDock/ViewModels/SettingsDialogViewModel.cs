@@ -68,6 +68,11 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsDirty))]
     private TimeZoneOption _timeZone;
 
+    // Whether an exit code other than 0 reads as an error, applied on Save with its neighbours.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDirty))]
+    private bool _nonZeroExitIsError;
+
     // Whether the computer's appearance is dark now, which the System theme entry names. The view keeps
     // it current while the dialog is open.
     [ObservableProperty]
@@ -96,6 +101,7 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         TimeZoneOptions = TimeZoneOption.All();
         _timeZone = TimeZoneOption.For(config.TimeZone, TimeZoneOptions);
         _uiFontFamily = config.UiFontFamily;
+        _nonZeroExitIsError = config.NonZeroExitIsError;
 
         RootDirs = new ObservableCollection<string>(config.RootDirs);
         Extensions = new ObservableCollection<EditableItem>(config.Extensions.Select(text => new EditableItem(text)));
@@ -129,6 +135,7 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     partial void OnTimeZoneChanged(TimeZoneOption value) => Chose("timeZone");
     partial void OnThemeChanged(ThemePreference value) => Chose("theme");
     partial void OnUiFontFamilyChanged(string value) => Chose("uiFontFamily");
+    partial void OnNonZeroExitIsErrorChanged(bool value) => Chose("nonZeroExitIsError");
 
     private void Chose(string set)
     {
@@ -155,6 +162,7 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         Theme = Theme,
         Language = Language.Value,
         TimeZone = TimeZone.Value,
+        NonZeroExitIsError = NonZeroExitIsError,
     };
 
     /// <summary>The draft differs from the opened settings, or chooses a value for a set the app kept

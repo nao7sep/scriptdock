@@ -67,6 +67,9 @@ public sealed record RecordsQuery(
     RecordCursor? After,
     RecordCursor? Through = null)
 {
+    /// <summary>Whether a run that exited with a code other than 0 reads as an error (<see cref="Services.ExitCodes"/>).</summary>
+    public bool NonZeroExitIsError { get; init; }
+
     public static readonly RecordsQuery All = new(null, null, null, string.Empty, null);
 }
 

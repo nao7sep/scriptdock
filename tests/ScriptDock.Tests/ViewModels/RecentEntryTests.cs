@@ -27,14 +27,7 @@ public sealed class RecentEntryTests
         Assert.False(entry.IsRunning);
     }
 
-    [Fact]
-    public void A_recorded_non_zero_exit_reads_its_code_and_tints_red()
-    {
-        var entry = Recorded(new RecordedEnd("exited", 3));
-
-        Assert.Equal(Localizer.T("recent.stateExitedWithCode", ("code", 3)), entry.StatePillText);
-        Assert.True(entry.IsPillFailed);
-    }
+    // A recorded non-zero exit follows the exit-code setting (ExitCodesTests).
 
     [Theory]
     [InlineData(null)]

@@ -23,6 +23,7 @@ public static class ConfigSets
             c.Language = Languages.TryParse(String(v), out var language) ? language : throw new JsonException("Unknown language")),
         ["timeZone"] = new(c => c.TimeZone, (c, v) =>
             c.TimeZone = Services.DisplayTime.TryParse(String(v), out var zone) ? zone : throw new JsonException("Unknown time zone")),
+        ["nonZeroExitIsError"] = new(c => c.NonZeroExitIsError, (c, v) => c.NonZeroExitIsError = Boolean(v)),
         ["theme"] = new(c => c.Theme, (c, v) =>
         {
             var name = String(v);
@@ -88,6 +89,12 @@ public static class ConfigSets
     private static string Raw(AppConfig config, string key) => Value(config, key).GetRawText();
 
     private static string String(JsonElement value) => value.GetString() ?? throw new JsonException("Expected a string");
+    private static bool Boolean(JsonElement value) => value.ValueKind switch
+    {
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        _ => throw new JsonException("Expected true or false"),
+    };
     private static List<string> Strings(JsonElement value) => value.EnumerateArray().Select(String).ToList();
 
     // Each member is checked before cleanup, which could otherwise conceal what makes it invalid.

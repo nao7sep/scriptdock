@@ -26,6 +26,9 @@ public sealed class RecordQueriesTests : IDisposable
     private static readonly DateTimeOffset SessionStart = new(2026, 10, 2, 3, 0, 0, TimeSpan.Zero);
     private const string Session = "2026-10-02T03:00:00.000Z";
 
+    // The reads as they are with an exit code other than 0 counted as an error; the default is off.
+    private static readonly RecordsQuery NonZeroIsError = RecordsQuery.All with { NonZeroExitIsError = true };
+
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "scriptdock-record-queries-tests", NanoId.New());
 
     public void Dispose()
@@ -122,7 +125,7 @@ public sealed class RecordQueriesTests : IDisposable
         using var records = new RecordStore(_dir, SessionStart);
         for (var index = 1; index <= 120; index++) await records.AddRunAsync(Run(index, $"/{index}.command"));
         var floor = new RecordCursor(At(10), RecordKind.Run, 10);
-        var query = RecordsQuery.All with { Level = RecordLevelFilter.Info, Through = floor };
+        var query = NonZeroIsError with { Level = RecordLevelFilter.Info, Through = floor };
         var before = await Page(records, query);
         Assert.Equal(111, before.Records.Count);
         Assert.True(before.More);
@@ -168,7 +171,7 @@ public sealed class RecordQueriesTests : IDisposable
     {
         using var records = await Seeded();
 
-        var page = await Page(records, RecordsQuery.All);
+        var page = await Page(records, NonZeroIsError);
 
         // A run is listed at its start, whenever its output was imported.
         Assert.False(page.More);
@@ -234,10 +237,10 @@ public sealed class RecordQueriesTests : IDisposable
         Log(records, At(8), "error", "scan failed");
         Log(records, At(9), "debug", "poll");
 
-        var attention = await Page(records, RecordsQuery.All with { Level = RecordLevelFilter.Attention });
-        var errors = await Page(records, RecordsQuery.All with { Level = RecordLevelFilter.Error });
-        var info = await Page(records, RecordsQuery.All with { Level = RecordLevelFilter.Info });
-        var debug = await Page(records, RecordsQuery.All with { Level = RecordLevelFilter.Debug });
+        var attention = await Page(records, NonZeroIsError with { Level = RecordLevelFilter.Attention });
+        var errors = await Page(records, NonZeroIsError with { Level = RecordLevelFilter.Error });
+        var info = await Page(records, NonZeroIsError with { Level = RecordLevelFilter.Info });
+        var debug = await Page(records, NonZeroIsError with { Level = RecordLevelFilter.Debug });
 
         Assert.Equal(["scan failed", "/code/a/dev.command", "run: terminate failed"], attention.Records.Select(record => record.Title));
         Assert.Equal(["scan failed", "/code/a/dev.command"], errors.Records.Select(record => record.Title));
@@ -245,6 +248,36 @@ public sealed class RecordQueriesTests : IDisposable
             [RecordKind.Run, RecordKind.ScanReport, RecordKind.Log],
             info.Records.Select(record => record.Kind));
         Assert.Equal("poll", Assert.Single(debug.Records).Title);
+    }
+
+    // The level is read under the setting, never stored, so the same runs read either way, and the exit code
+    // stays in the detail. A run that could not start is an error whatever the setting.
+    [Fact]
+    public async Task A_non_zero_exit_is_an_error_only_under_the_setting()
+    {
+        using var records = await Seeded();
+        await records.AddRunAsync(new RunRecord(Session, 9, SessionStart.AddMinutes(9), "/code/d/broken.command", null, null, "/runs/9.log"));
+        await records.AddRunEndAsync(new RunEnd(Session, 9, SessionStart.AddMinutes(9), "failed", null));
+
+        var off = await Page(records, RecordsQuery.All with { Kind = RecordKind.Run });
+        var offAttention = await Page(records, RecordsQuery.All with { Level = RecordLevelFilter.Attention });
+        var on = await Page(records, NonZeroIsError with { Kind = RecordKind.Run });
+        var onAttention = await Page(records, NonZeroIsError with { Level = RecordLevelFilter.Attention });
+
+        Assert.Equal(
+            [("/code/d/broken.command", LogLevel.Error), ("/code/b/build.command", LogLevel.Info), ("/code/a/dev.command", LogLevel.Info)],
+            off.Records.Select(record => (record.Title, record.Level)));
+        Assert.Equal(["/code/d/broken.command", "run: terminate failed"], offAttention.Records.Select(record => record.Title));
+        Assert.Equal(
+            [("/code/d/broken.command", LogLevel.Error), ("/code/b/build.command", LogLevel.Info), ("/code/a/dev.command", LogLevel.Error)],
+            on.Records.Select(record => (record.Title, record.Level)));
+        Assert.Equal(["/code/d/broken.command", "/code/a/dev.command", "run: terminate failed"], onAttention.Records.Select(record => record.Title));
+
+        var id = off.Records.Single(record => record.Title == "/code/a/dev.command").Id;
+        var plain = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, id));
+        var flagged = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, id, nonZeroExitIsError: true));
+        Assert.Equal((LogLevel.Info, "exited", 3), (plain.Level, plain.EndState, plain.ExitCode));
+        Assert.Equal((LogLevel.Error, "exited", 3), (flagged.Level, flagged.EndState, flagged.ExitCode));
     }
 
     [Fact]
@@ -269,12 +302,12 @@ public sealed class RecordQueriesTests : IDisposable
     public async Task Reads_each_kind_of_record_whole()
     {
         using var records = await Seeded();
-        var page = await Page(records, RecordsQuery.All);
+        var page = await Page(records, NonZeroIsError);
         RecordSummary Of(RecordKind kind, string title) =>
             page.Records.First(record => record.Kind == kind && (title == "" || record.Title == title));
 
         var log = Assert.IsType<LogRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Log, Of(RecordKind.Log, "run: terminate failed").Id));
-        var run = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, Of(RecordKind.Run, "/code/a/dev.command").Id));
+        var run = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, Of(RecordKind.Run, "/code/a/dev.command").Id, nonZeroExitIsError: true));
         var scan = Assert.IsType<ScanReportRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.ScanReport, Of(RecordKind.ScanReport, "").Id));
 
         Assert.Equal((At(2), LogLevel.Warn, "run: terminate failed"), (log.Time, log.Level, log.Message));
@@ -302,10 +335,10 @@ public sealed class RecordQueriesTests : IDisposable
         await records.AddRunAsync(new RunRecord(Session, 9, SessionStart.AddMinutes(9), "/code/d/broken.command", null, null, "/runs/9.log"));
         await records.AddRunEndAsync(new RunEnd(Session, 9, SessionStart.AddMinutes(9), "failed", null));
 
-        var page = await Page(records, RecordsQuery.All);
-        var runs = await Page(records, RecordsQuery.All with { Kind = RecordKind.Run });
-        var errors = await Page(records, RecordsQuery.All with { Level = RecordLevelFilter.Error });
-        var found = await Page(records, RecordsQuery.All with { Search = "serve" });
+        var page = await Page(records, NonZeroIsError);
+        var runs = await Page(records, NonZeroIsError with { Kind = RecordKind.Run });
+        var errors = await Page(records, NonZeroIsError with { Level = RecordLevelFilter.Error });
+        var found = await Page(records, NonZeroIsError with { Search = "serve" });
 
         Assert.Equal(
             [("/code/d/broken.command", LogLevel.Error), ("/code/c/serve.command", LogLevel.Info)],
@@ -314,13 +347,13 @@ public sealed class RecordQueriesTests : IDisposable
         Assert.Equal(["/code/d/broken.command", "/code/a/dev.command"], errors.Records.Select(record => record.Title));
         Assert.Equal("/code/c/serve.command", Assert.Single(found.Records).Title);
 
-        var running = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, page.Records[1].Id));
+        var running = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, page.Records[1].Id, nonZeroExitIsError: true));
         Assert.Equal((At(8), LogLevel.Info), (running.Time, running.Level));
         Assert.Null(running.EndState);
         Assert.Null(running.ImportedAt);
         Assert.Null(running.Output);
         Assert.False(running.Settled);
-        var broken = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, page.Records[0].Id));
+        var broken = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, page.Records[0].Id, nonZeroExitIsError: true));
         Assert.Equal(("failed", null, null), (broken.EndState, broken.Pid, broken.Output));
     }
 

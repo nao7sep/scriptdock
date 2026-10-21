@@ -37,6 +37,10 @@ public sealed class AppConfig
     /// each launch. A missing value means system (timestamp-conventions, Time zones).</summary>
     public string TimeZone { get; set; } = Services.DisplayTime.System;
 
+    /// <summary>Whether a script that exits with a code other than 0 reads as an error (<see cref="Services.ExitCodes"/>).
+    /// Off by default: such a run reads as any other exit.</summary>
+    public bool NonZeroExitIsError { get; set; }
+
     /// <summary>The app theme. System follows the OS; applied app-wide before the main window exists
     /// and again on each Save.</summary>
     public ThemePreference Theme { get; set; } = ThemePreference.System;

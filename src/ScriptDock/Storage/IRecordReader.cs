@@ -17,8 +17,9 @@ public interface IRecordReader
     /// <summary>A filtered page of summaries, newest first.</summary>
     Task<RecordsPage> ReadRecordsPageAsync(RecordsQuery query);
 
-    /// <summary>One record whole, or null when there is no such record.</summary>
-    Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id);
+    /// <summary>One record whole, or null when there is no such record. A run's level follows
+    /// <paramref name="nonZeroExitIsError"/> as a page's does (<see cref="RecordsQuery.NonZeroExitIsError"/>).</summary>
+    Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id, bool nonZeroExitIsError = false);
 
     /// <summary>Hands <paramref name="read"/> a stream over a run's whole output, beyond what its detail shows:
     /// the stored record, or the run's own file when the output was too large to store. Read in pieces; the

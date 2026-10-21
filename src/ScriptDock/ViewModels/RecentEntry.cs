@@ -59,21 +59,21 @@ public sealed class RecentEntry
 
     /// <summary>Whether the state pill reads as a failure. With <see cref="IsRunning"/> it is the
     /// pill's colour state, which the view maps to theme brushes: green when running, red on a
-    /// failure or non-zero exit, muted gray for done/unknown. Distinguishes states at a glance
-    /// without relying on the text alone.</summary>
+    /// failure, or on a non-zero exit when that reads as an error, muted gray for done/unknown.
+    /// Distinguishes states at a glance without relying on the text alone.</summary>
     public bool IsPillFailed => Kind is PillKind.Failed or PillKind.ExitedError;
 
     // The run's display lifecycle, derived once so the pill text and brush can't disagree, and so
     // the "no live process reads the recorded end" and "Exited 0/null vs non-zero" rules live in one
-    // place rather than being re-derived at each call site.
+    // place rather than being re-derived at each call site. A non-zero exit reads as an error only
+    // under that setting (ExitCodes); otherwise it is a plain exit, its code kept for the run's detail.
     private enum PillKind { Unknown, Running, ExitedOk, ExitedError, Stopped, Failed }
 
     private PillKind Kind => Process switch
     {
         null => RecordedKind(LastEnd),
         { State: RunState.Running } => PillKind.Running,
-        { State: RunState.Exited, ExitCode: 0 or null } => PillKind.ExitedOk,
-        { State: RunState.Exited } => PillKind.ExitedError,
+        { State: RunState.Exited } process => ExitedKind(process.ExitCode),
         { State: RunState.Terminated } => PillKind.Stopped,
         _ => PillKind.Unknown,
     };
@@ -82,9 +82,12 @@ public sealed class RecentEntry
     // bound) says nothing about how the run ended, and neither does any other value.
     private static PillKind RecordedKind(RecordedEnd? end) => end?.State switch
     {
-        "exited" => end.ExitCode is 0 or null ? PillKind.ExitedOk : PillKind.ExitedError,
+        "exited" => ExitedKind(end.ExitCode),
         "terminated" => PillKind.Stopped,
         "failed" => PillKind.Failed,
         _ => PillKind.Unknown,
     };
+
+    private static PillKind ExitedKind(int? code) =>
+        code is 0 or null || !ExitCodes.NonZeroIsError ? PillKind.ExitedOk : PillKind.ExitedError;
 }

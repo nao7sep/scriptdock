@@ -181,6 +181,16 @@
             </Grid>
         </StackPanel>
 
+        <!-- Whether a script that exits with a code other than 0 reads as an error, in Recent and in
+             Records; off by default. Records keeps the code either way. -->
+        <StackPanel Spacing="8">
+            <TextBlock i18n:Localized.Text="settings.exitCodes" Classes="cardHeader"/>
+            <CheckBox x:Name="NonZeroExitIsError" IsChecked="{Binding NonZeroExitIsError}"
+                      i18n:Localized.Content="settings.nonZeroExitIsError"/>
+            <TextBlock i18n:Localized.Text="settings.nonZeroExitIsErrorHint"
+                       Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
+        </StackPanel>
+
         <Grid x:Name="SaveErrorResult" IsVisible="{Binding HasSaveError}"
               AutomationProperties.LiveSetting="Assertive">
             <TextBlock Text="{Binding SaveError}"

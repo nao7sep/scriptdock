@@ -15,10 +15,11 @@ internal static class RecordQueries
 {
     public const int PageSize = 100;
 
-    // A run reads as an error when its latest recorded end is a failure or an exit with another code than
-    // 0; with no recorded end it reads as info.
+    // A run reads as an error when its latest recorded end is a failure, or an exit with another code than
+    // 0 while $nonZeroExitIsError is set (ExitCodes); with no recorded end it reads as info. The level is
+    // read, never stored, so every run follows the setting as it is now.
     private const string RunLevel = """
-        COALESCE((SELECT CASE WHEN e.state = 'failed' OR (e.state = 'exited' AND COALESCE(e.exit_code, 0) <> 0)
+        COALESCE((SELECT CASE WHEN e.state = 'failed' OR ($nonZeroExitIsError AND e.state = 'exited' AND COALESCE(e.exit_code, 0) <> 0)
                               THEN 'error' ELSE 'info' END
                   FROM run_ends e WHERE e.run_session = r.session AND e.run = r.run
                   ORDER BY e.time DESC, e.id DESC LIMIT 1), 'info')
@@ -40,6 +41,7 @@ internal static class RecordQueries
         using var command = connection.CreateCommand();
         var parts = new List<string>();
         var search = LikePattern(query.Search);
+        command.Parameters.AddWithValue("$nonZeroExitIsError", query.NonZeroExitIsError);
         if (query.Session is not null)
             command.Parameters.AddWithValue("$session", query.Session);
         if (search is not null)
@@ -145,10 +147,11 @@ internal static class RecordQueries
         return new RecordsPage(records, more);
     }
 
-    public static RecordDetail? ReadDetail(SqliteConnection connection, RecordKind kind, long id)
+    public static RecordDetail? ReadDetail(SqliteConnection connection, RecordKind kind, long id, bool nonZeroExitIsError = false)
     {
         using var command = connection.CreateCommand();
         command.Parameters.AddWithValue("$id", id);
+        command.Parameters.AddWithValue("$nonZeroExitIsError", nonZeroExitIsError);
         switch (kind)
         {
             case RecordKind.Log:

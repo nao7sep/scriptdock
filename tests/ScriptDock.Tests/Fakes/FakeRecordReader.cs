@@ -49,7 +49,7 @@ public sealed class FakeRecordReader : IRecordReader
         return _pages.TryDequeue(out var answer) ? answer(query) : Task.FromResult(Page);
     }
 
-    public Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id)
+    public Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id, bool nonZeroExitIsError = false)
     {
         DetailReads.Add((kind, id));
         return Detail(kind, id);

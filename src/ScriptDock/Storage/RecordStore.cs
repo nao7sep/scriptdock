@@ -256,8 +256,8 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
     public Task<RecordsPage> ReadRecordsPageAsync(RecordsQuery query) =>
         WindowRead(connection => RecordQueries.ReadPage(connection, query));
 
-    public Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id) =>
-        WindowRead(connection => RecordQueries.ReadDetail(connection, kind, id));
+    public Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id, bool nonZeroExitIsError = false) =>
+        WindowRead(connection => RecordQueries.ReadDetail(connection, kind, id, nonZeroExitIsError));
 
     public Task<bool> ReadRunOutputAsync(long id, Action<Stream> read) =>
         WindowRead(connection => RecordQueries.ReadRunOutput(connection, id, read));

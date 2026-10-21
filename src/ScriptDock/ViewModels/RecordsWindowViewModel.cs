@@ -50,7 +50,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     private readonly Func<RunRecordDetail, Stream, bool> _openOutput;
 
     // The filters the list is read for; a page's own cursor is added per read.
-    private RecordsQuery _filters = RecordsQuery.All;
+    private RecordsQuery _filters = RecordsQuery.All with { NonZeroExitIsError = ExitCodes.NonZeroIsError };
     // Moves with every new set of filters, so a page read for older filters is dropped.
     private int _generation;
     private bool _more;
@@ -196,6 +196,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         _reader.Stored += OnStored;
         Localizer.Changed += OnLanguageChanged;
         DisplayTime.Changed += OnLanguageChanged; // every shown time is rendered again too
+        ExitCodes.Changed += OnExitCodesChanged;
         _ = ReadSourcesAsync();
         _ = ReloadAsync();
     }
@@ -255,6 +256,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         _reader.Stored -= OnStored;
         Localizer.Changed -= OnLanguageChanged;
         DisplayTime.Changed -= OnLanguageChanged;
+        ExitCodes.Changed -= OnExitCodesChanged;
         _liveTimer?.Dispose();
         _searchTimer?.Dispose();
     }
@@ -476,7 +478,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         RecordDetail? detail;
         try
         {
-            detail = await Bounded(_reader.ReadRecordDetailAsync(summary.Kind, summary.Id));
+            detail = await Bounded(_reader.ReadRecordDetailAsync(summary.Kind, summary.Id, _filters.NonZeroExitIsError));
         }
         catch (Exception ex)
         {
@@ -643,7 +645,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         RecordDetail? detail;
         try
         {
-            detail = await Bounded(_reader.ReadRecordDetailAsync(shown.Kind, shown.Id));
+            detail = await Bounded(_reader.ReadRecordDetailAsync(shown.Kind, shown.Id, _filters.NonZeroExitIsError));
         }
         catch (Exception ex)
         {
@@ -729,6 +731,15 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         _selectedRecord = _selectedKey is null ? null : Rows.FirstOrDefault(row => row.Key == _selectedKey);
         OnPropertyChanged(nameof(SelectedRecord));
         OnPropertyChanged(nameof(ShowEmptyNote));
+    }
+
+    // A run's level is read under the setting, so the list is read again, a level filter's members
+    // included, and a shown run's level with it.
+    private void OnExitCodesChanged()
+    {
+        SetFilters(_filters with { NonZeroExitIsError = ExitCodes.NonZeroIsError });
+        if (_detail is RunRecordDetail run)
+            _ = RefreshRunDetailAsync(run);
     }
 
     private void OnLanguageChanged()
