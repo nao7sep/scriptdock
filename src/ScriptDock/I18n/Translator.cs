@@ -128,14 +128,7 @@ internal sealed class Translator
             };
         }
 
-        // The product's own name and copyright fill any sentence that names them, from the one place
-        // the build states them (AppInfo), so no catalogue repeats them.
-        return name switch
-        {
-            "app" => AppInfo.Product,
-            "copyright" => AppInfo.Copyright,
-            _ => null,
-        };
+        return null;
     }
 
     /// <summary>A whole number, grouped for the reader's locale.</summary>

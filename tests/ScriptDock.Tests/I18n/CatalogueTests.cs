@@ -230,6 +230,19 @@ public class CatalogueTests
         Assert.True(failures.Count == 0, string.Join("; ", failures));
     }
 
+    // Each catalogue writes the product's name and copyright line out in full, as its sentences need them
+    // (localization conventions), so this holds them to the one place the build states them.
+    [Fact]
+    public void every_catalogue_names_the_product_and_its_copyright_as_the_build_states_them()
+    {
+        foreach (var tag in Tags)
+        {
+            var catalogue = Read(tag);
+            Assert.StartsWith(AppInfo.Copyright + " ", catalogue["about.licence"].GetString());
+            Assert.Contains(AppInfo.Product, catalogue["about.title"].GetString());
+        }
+    }
+
     [Fact]
     public void the_macos_bundle_declares_every_language()
     {
@@ -250,7 +263,7 @@ public class CatalogueTests
         foreach (var tag in Tags)
         {
             var catalogue = Read(tag);
-            var native = catalogue["nativeMenu.about"].GetString();
+            var native = catalogue["nativeMenu.about"].GetString()!.Replace("{app}", AppInfo.Product);
             var menu = catalogue["menu.about"].GetString();
             var title = catalogue["about.title"].GetString();
             if (menu != native)
@@ -293,14 +306,9 @@ public class CatalogueTests
     private static IReadOnlyList<string> Placeholders(JsonElement entry) =>
         Forms(entry).SelectMany(form => PlaceholdersIn(form.Text)).Distinct().OrderBy(name => name, StringComparer.Ordinal).ToArray();
 
-    // The product's name and copyright fill any sentence (the translator supplies them), so a translation
-    // may name the app where English says "it"; only the values a caller passes must match.
-    private static readonly string[] AmbientPlaceholders = ["app", "copyright"];
-
     private static IReadOnlyList<string> PlaceholdersIn(string text) =>
         Regex.Matches(text, @"\{([a-zA-Z]+)\}")
             .Select(match => match.Groups[1].Value)
-            .Where(name => !AmbientPlaceholders.Contains(name))
             .Distinct()
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToArray();
