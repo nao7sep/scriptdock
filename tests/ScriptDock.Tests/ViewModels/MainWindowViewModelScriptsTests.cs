@@ -421,7 +421,7 @@ public sealed class MainWindowViewModelScriptsTests : IAsyncLifetime
         await vm.InitializeAsync();
 
         var scan = vm.CreateSettingsDraft();
-        scan.IgnorePatterns.Add(new EditableItem("*.tmp"));
+        scan.AddIgnorePattern().Text = "*.tmp";
         Assert.True(await vm.TryApplySettingsAsync(scan));
         Assert.Equal("scan.configChanged", vm.CatalogResultMessage?.Key);
 
@@ -469,7 +469,7 @@ public sealed class MainWindowViewModelScriptsTests : IAsyncLifetime
         Assert.Equal(ScriptFlag.New, FlagOf(vm, "a.command"));
 
         var scan = vm.CreateSettingsDraft();
-        scan.IgnorePatterns.Add(new EditableItem("*.tmp"));
+        scan.AddIgnorePattern().Text = "*.tmp";
         Assert.True(await vm.TryApplySettingsAsync(scan));
         Assert.Equal(ScriptFlag.None, FlagOf(vm, "a.command"));
     }

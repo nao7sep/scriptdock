@@ -441,6 +441,15 @@
             <Setter Property="MinHeight" Value="46"/>
             <Setter Property="Padding" Value="10,0"/>
         </Style>
+        <!-- A tab in a dialog's band: Fluent's underlined tab, at the size of the body's own headers rather
+             than its display size, so the strip reads as chrome above the form, not a title. -->
+        <Style Selector="TabStripItem">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="MinHeight" Value="36"/>
+            <Setter Property="Padding" Value="10,0"/>
+        </Style>
+
         <Style Selector="TextBlock.cardHeader">
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="13"/>

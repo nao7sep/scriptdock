@@ -46,8 +46,14 @@ public class LabelFitTests : WindowTest
     {
         using var speaking = Localizer.Speaking(tag);
 
-        var dialog = Show(new SettingsDialog(new SettingsDialogViewModel(new AppConfig()), _ => Task.FromResult(true)));
+        var draft = new SettingsDialogViewModel(new AppConfig());
+        var dialog = Show(new SettingsDialog(draft, _ => Task.FromResult(true)));
 
+        AssertNothingClipped(dialog, tag, atLeast: 8);
+
+        // The ignore patterns' tab: the tab labels, each row's type choice and the list's buttons.
+        draft.Tab = SettingsTab.IgnorePatterns;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
         AssertNothingClipped(dialog, tag, atLeast: 8);
     }
 

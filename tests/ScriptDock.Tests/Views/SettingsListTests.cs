@@ -69,7 +69,10 @@ public sealed class SettingsListTests : WindowTest
     public void A_failing_row_shows_its_message_on_the_row()
     {
         var (view, vm) = ShowSettings(new AppConfig());
-        vm.IgnorePatterns.Add(new EditableItem("["));
+        vm.Tab = SettingsTab.IgnorePatterns;
+        var bad = vm.AddIgnorePattern();
+        bad.Text = "[";
+        bad.Kind = IgnorePatternKind.Regex;
         Dispatcher.UIThread.RunJobs();
 
         Assert.False(vm.Validate());
@@ -85,7 +88,9 @@ public sealed class SettingsListTests : WindowTest
     public void Save_with_a_failing_row_stays_open_and_does_not_save()
     {
         var draft = new SettingsDialogViewModel(new AppConfig());
-        draft.IgnorePatterns.Add(new EditableItem("["));
+        var bad = draft.AddIgnorePattern();
+        bad.Text = "[";
+        bad.Kind = IgnorePatternKind.Regex;
         var saves = 0;
         var dialog = Show(new SettingsDialog(draft, _ => { saves++; return System.Threading.Tasks.Task.FromResult(true); }));
         var save = dialog.GetVisualDescendants().OfType<Button>().Single(button => Equals(button.Tag, "save"));
@@ -96,6 +101,7 @@ public sealed class SettingsListTests : WindowTest
         Assert.Equal(0, saves);
         Assert.True(dialog.IsVisible);
         Assert.False(draft.HasSaveError); // the row says what is wrong, not a failed save
-        Assert.True(draft.IgnorePatterns.Last().HasError);
+        Assert.True(bad.HasError);
+        Assert.Equal(SettingsTab.IgnorePatterns, draft.Tab); // the failing row's tab is shown
     }
 }

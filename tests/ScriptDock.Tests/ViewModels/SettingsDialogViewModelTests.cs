@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
+using ScriptDock.I18n;
 using ScriptDock.Models;
 using ScriptDock.ViewModels;
 using System.Linq;
@@ -17,7 +18,7 @@ public sealed class SettingsDialogViewModelTests
     {
         RootDirs = { "/code" },
         Extensions = [".command"],
-        IgnorePatterns = ["/node_modules/"],
+        IgnorePatterns = [new("node_modules/")],
     };
 
     [Fact]
@@ -181,47 +182,92 @@ public sealed class SettingsDialogViewModelTests
     }
 
     [Fact]
-    public void AddIgnorePattern_RejectsLineBreak_ButKeepsInteriorSpaces()
+    public void A_pattern_row_is_checked_on_Save_by_its_kind()
     {
         var vm = new SettingsDialogViewModel(Seed());
+        var multiline = vm.AddIgnorePattern();
+        multiline.Text = "node_modules/\nobj/";
+        var regex = vm.AddIgnorePattern();
+        regex.Text = "[";
+        regex.Kind = IgnorePatternKind.Regex;
+        var wildcard = vm.AddIgnorePattern();
+        wildcard.Text = "[";
+        var spaced = vm.AddIgnorePattern();
+        spaced.Text = "My Projects/";
 
-        // A multi-line paste — reject rather than flatten (flattening a newline to a space would
-        // silently change what the regex matches).
-        Assert.False(vm.AddIgnorePattern("/node_modules/\n/obj/"));
-        Assert.NotEqual(string.Empty, vm.PatternError);
+        Assert.False(vm.Validate());
+        // A multi-line paste is rejected rather than flattened, which would change what it matches.
+        Assert.True(multiline.HasError);
+        Assert.Contains("[", regex.Error);
+        Assert.Contains(Localizer.T("settings.patternInvalidRegex"), regex.Error);
+        // A bracket is itself in a wildcard, and an interior space is part of a path.
+        Assert.False(wildcard.HasError);
+        Assert.False(spaced.HasError);
+        Assert.Equal(SettingsTab.IgnorePatterns, vm.Tab);
 
-        // An interior space is legitimate regex content — a path can contain one — so it is kept.
-        Assert.True(vm.AddIgnorePattern("/My Projects/"));
-        Assert.Contains("/My Projects/", vm.IgnorePatterns.Select(row => row.Text));
-        Assert.Equal(string.Empty, vm.PatternError);
+        regex.Text = "\\.bak$";
+        Assert.False(regex.HasError); // editing clears the mark until the next Save
+        multiline.Text = "obj/";
+        Assert.True(vm.Validate());
     }
 
     [Fact]
-    public void AddIgnorePattern_RejectsInvalidRegex_AndReportsIt()
+    public void A_failing_row_on_the_other_tab_brings_that_tab_forward()
     {
-        var vm = new SettingsDialogViewModel(Seed());
+        var vm = new SettingsDialogViewModel(Seed()) { Tab = SettingsTab.IgnorePatterns };
+        vm.Extensions[0].Text = ".com mand";
 
-        Assert.False(vm.AddIgnorePattern("["));
-        Assert.NotEqual(string.Empty, vm.PatternError);
-        Assert.DoesNotContain("[", vm.IgnorePatterns.Select(row => row.Text));
-
-        Assert.True(vm.AddIgnorePattern("/obj/"));
-        Assert.Equal(string.Empty, vm.PatternError);
-        Assert.False(vm.HasPatternError);
-        Assert.Equal(string.Empty, vm.PatternItemStatus);
+        Assert.False(vm.Validate());
+        Assert.Equal(SettingsTab.General, vm.Tab);
     }
 
     [Fact]
-    public void AddIgnorePattern_BlankAndDuplicateExposeInvalidState()
+    public void Add_appends_a_blank_wildcard_row_that_Save_drops()
     {
         var vm = new SettingsDialogViewModel(Seed());
 
-        Assert.False(vm.AddIgnorePattern("  "));
-        Assert.True(vm.HasPatternError);
-        Assert.Equal("Invalid", vm.PatternItemStatus);
+        var row = vm.AddIgnorePattern();
 
-        Assert.False(vm.AddIgnorePattern("/NODE_MODULES/"));
-        Assert.Contains("already", vm.PatternError, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal((string.Empty, IgnorePatternKind.Wildcard, null), (row.Text, row.Kind, row.Id));
+        Assert.Same(row, vm.IgnorePatterns[^1]);
+        Assert.True(vm.Validate());
+        Assert.Equal([new IgnorePattern("node_modules/")], vm.ToConfig().IgnorePatterns);
+        Assert.False(vm.IsDirty);
+    }
+
+    // A built-in keeps its id and note while the row holds it; edited away it is the user's own, and edited
+    // back, or typed anew, it is that built-in again.
+    [Fact]
+    public void A_built_in_row_keeps_its_note_while_it_holds_that_built_in()
+    {
+        var vm = new SettingsDialogViewModel(new AppConfig());
+        var git = vm.IgnorePatterns[0];
+        Assert.Equal(("dev.git", Localizer.T("ignoreNote.git")), (git.Id, git.Note));
+        Assert.True(git.HasNote);
+
+        git.Text = ".hg/";
+        Assert.Null(git.Id);
+        Assert.False(git.HasNote);
+        git.Text = " .GIT/ ";
+        Assert.Equal("dev.git", git.Id);
+
+        var typed = vm.AddIgnorePattern();
+        typed.Text = "/bin/(Debug|Release)/";
+        Assert.Null(typed.Id); // the built-in is a regular expression
+        typed.Kind = IgnorePatternKind.Regex;
+        Assert.Equal("dotnet.bin", typed.Id);
+    }
+
+    [Fact]
+    public void Reset_restores_exactly_the_built_ins()
+    {
+        var vm = new SettingsDialogViewModel(new AppConfig { IgnorePatterns = [new("*.tmp"), new("/old/", IgnorePatternKind.Regex)] });
+
+        vm.ResetIgnorePatterns();
+
+        Assert.Equal(ConfigDefaults.BuiltInIgnorePatterns, vm.ToConfig().IgnorePatterns);
+        Assert.True(vm.IsDirty);
+        Assert.Contains("ignorePatterns", vm.ChosenSets);
     }
 
     [Fact]
@@ -241,16 +287,20 @@ public sealed class SettingsDialogViewModelTests
     [Fact]
     public void Each_row_edits_in_place_and_Save_trims_drops_blanks_and_merges_case()
     {
-        var vm = new SettingsDialogViewModel(new AppConfig { Extensions = [".command"], IgnorePatterns = ["/a/"] });
+        var vm = new SettingsDialogViewModel(new AppConfig { Extensions = [".command"], IgnorePatterns = [new("a/")] });
         vm.Extensions[0].Text = "  sh  ";
         vm.Extensions.Add(new EditableItem("   "));
         vm.Extensions.Add(new EditableItem(".SH"));
-        vm.IgnorePatterns[0].Text = " /b/ ";
-        vm.IgnorePatterns.Add(new EditableItem("/B/"));
+        vm.IgnorePatterns[0].Text = " b/ ";
+        vm.AddIgnorePattern().Text = "B/";
+        vm.AddIgnorePattern().Text = "  ";
+        var regex = vm.AddIgnorePattern();
+        regex.Text = "b/";
+        regex.Kind = IgnorePatternKind.Regex; // the same text read another way is another pattern
 
         Assert.True(vm.Validate());
         Assert.Equal([".sh"], vm.ToConfig().Extensions);
-        Assert.Equal(["/b/"], vm.ToConfig().IgnorePatterns);
+        Assert.Equal([new IgnorePattern("b/"), new IgnorePattern("b/", IgnorePatternKind.Regex)], vm.ToConfig().IgnorePatterns);
         Assert.True(vm.IsDirty);
     }
 
@@ -258,8 +308,9 @@ public sealed class SettingsDialogViewModelTests
     public void A_row_that_fails_its_check_is_marked_with_a_message_naming_it_and_holds_Save()
     {
         var vm = new SettingsDialogViewModel(new AppConfig());
-        var bad = new EditableItem("[");
-        vm.IgnorePatterns.Add(bad);
+        var bad = vm.AddIgnorePattern();
+        bad.Text = "[";
+        bad.Kind = IgnorePatternKind.Regex;
         vm.Extensions[0].Text = ".com mand";
 
         Assert.False(vm.Validate());

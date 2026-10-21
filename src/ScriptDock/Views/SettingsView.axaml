@@ -34,7 +34,10 @@
         </Style>
     </UserControl.Styles>
 
+    <!-- Two tabs, chosen in the dialog's band above this body: General, and the ignore patterns, whose list
+         fills its tab. Only the shown tab's panel takes room, so the dialog fits the tab it shows. -->
     <StackPanel Spacing="20">
+    <StackPanel x:Name="GeneralPanel" Spacing="20" IsVisible="{Binding IsGeneralTab}">
 
         <!-- Appearance: the theme and the UI (chrome) font lead, set apart from the scanning/process
              settings. The theme is the platform radio group (one tab stop, arrow keys move and select),
@@ -153,34 +156,6 @@
             </Grid>
         </StackPanel>
 
-        <!-- Ignore patterns -->
-        <StackPanel Spacing="8">
-            <DockPanel>
-                <Button x:Name="ResetIgnorePatterns" DockPanel.Dock="Right" Classes="tool" VerticalAlignment="Center"
-                        i18n:Localized.Content="settings.resetIgnorePatterns" Click="OnResetIgnorePatternsClick"/>
-                <TextBlock i18n:Localized.Text="settings.ignorePatterns" Classes="cardHeader" VerticalAlignment="Center" TextWrapping="Wrap"/>
-            </DockPanel>
-            <!-- One editable row per item (config-sets-conventions, In the interface): any item changes in
-                 place, Save trims each row and drops blank ones, and a row that fails its check is marked
-                 with a message naming it. Each row removes itself. -->
-            <ScrollViewer MaxHeight="168" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                <ItemsControl x:Name="PatternList" ItemsSource="{Binding IgnorePatterns}" ItemTemplate="{StaticResource EditableRow}"/>
-            </ScrollViewer>
-            <DockPanel>
-                <Button i18n:Localized.Content="common.add" DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnAddPatternClick"/>
-                <ctl:ComposingTextBox x:Name="PatternEntry" PlaceholderText="/node_modules/" SubmitOnEnter="True" Submitted="OnPatternSubmitted"
-                                      Classes.invalid="{Binding HasPatternError}"
-                                      i18n:Localized.AutomationName="settings.ignorePattern"
-                                      AutomationProperties.HelpText="{Binding PatternError}"
-                                      AutomationProperties.ItemStatus="{Binding PatternItemStatus}"/>
-            </DockPanel>
-            <Grid x:Name="PatternErrorResult" IsVisible="{Binding HasPatternError}"
-                  AutomationProperties.LiveSetting="Assertive">
-                <TextBlock Text="{Binding PatternError}"
-                           Foreground="{DynamicResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"/>
-            </Grid>
-        </StackPanel>
-
         <!-- Whether a script that exits with a code other than 0 reads as an error, in Recent and in
              Records; off by default. Records keeps the code either way. -->
         <StackPanel Spacing="8">
@@ -190,6 +165,61 @@
             <TextBlock i18n:Localized.Text="settings.nonZeroExitIsErrorHint"
                        Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
         </StackPanel>
+
+    </StackPanel>
+
+    <!-- The ignore patterns, checked in order; the first that matches a folder or script names why the scan
+         left it out. One editable row per pattern (config-sets-conventions, In the interface): its text, how
+         that text reads, and its own remove button, with a built-in's note under it in the interface
+         language. Add appends a blank row to type into; Save trims each row, drops blank ones, and marks a
+         row that fails its check with a message naming it. -->
+    <StackPanel x:Name="IgnorePatternsPanel" Spacing="12" IsVisible="{Binding IsIgnorePatternsTab}">
+        <TextBlock i18n:Localized.Text="settings.ignorePatternsHint"
+                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
+        <TextBlock x:Name="PatternsEmpty" i18n:Localized.Text="settings.ignorePatternsEmpty"
+                   IsVisible="{Binding !IgnorePatterns.Count}"
+                   Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+        <!-- The type column takes the width of its widest choice in every row, so the fields line up. -->
+        <ItemsControl x:Name="PatternList" ItemsSource="{Binding IgnorePatterns}" Grid.IsSharedSizeScope="True">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:IgnorePatternRow">
+                    <StackPanel Spacing="2" Margin="0,0,0,10">
+                        <Grid ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="PatternKind"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <ctl:ComposingTextBox Text="{Binding Text}" Classes.invalid="{Binding HasError}"
+                                                  i18n:Localized.AutomationName="settings.ignorePattern"
+                                                  AutomationProperties.HelpText="{Binding Error}"/>
+                            <ComboBox Grid.Column="1" SelectedIndex="{Binding KindIndex}" VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                                      i18n:Localized.AutomationName="settings.patternKind">
+                                <ComboBoxItem i18n:Localized.Content="settings.patternWildcard"/>
+                                <ComboBoxItem i18n:Localized.Content="settings.patternRegex"/>
+                            </ComboBox>
+                            <Button Grid.Column="2" Classes="resultClose" VerticalAlignment="Center" Click="OnRemoveRowClick"
+                                    i18n:Localized.AutomationName="common.remove" i18n:Localized.ToolTip="common.remove">
+                                <Path Width="10" Height="10" Stretch="Uniform"
+                                      Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1.8"
+                                      StrokeLineCap="Round" Data="M1,1 L9,9 M9,1 L1,9"/>
+                            </Button>
+                        </Grid>
+                        <TextBlock Text="{Binding Note}" IsVisible="{Binding HasNote}"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}"
+                                   Foreground="{DynamicResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <!-- The list's reset closes it, beside Add (config-sets-conventions, Reset). -->
+        <DockPanel>
+            <Button x:Name="ResetIgnorePatterns" DockPanel.Dock="Right" Classes="tool" VerticalAlignment="Center"
+                    i18n:Localized.Content="settings.resetIgnorePatterns" Click="OnResetIgnorePatternsClick"/>
+            <Button x:Name="AddPatternButton" HorizontalAlignment="Left" i18n:Localized.Content="common.add" Click="OnAddPatternClick"/>
+        </DockPanel>
+    </StackPanel>
 
         <Grid x:Name="SaveErrorResult" IsVisible="{Binding HasSaveError}"
               AutomationProperties.LiveSetting="Assertive">

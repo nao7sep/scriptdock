@@ -149,7 +149,7 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         File.WriteAllText(old, "# fixture");
         File.WriteAllText(deleted, "# fixture");
         _known.Paths = [old, deleted];
-        var config = new AppConfig { RootDirs = [subtree, _root], Extensions = [".command"], IgnorePatterns = ["/parked/"] };
+        var config = new AppConfig { RootDirs = [subtree, _root], Extensions = [".command"], IgnorePatterns = [new("parked/")] };
         var vm = _vm = new MainWindowViewModel(new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState>(), _store, new FakeRecordStore(), config, new AppState(), _known,
             new ScriptScanner(), new FakeProcessRunner());

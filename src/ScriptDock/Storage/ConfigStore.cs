@@ -50,8 +50,11 @@ public sealed class ConfigStore : IConfigStore
             try
             {
                 ConfigSets.Apply(config, key, value);
-                // v0.1.0 stored its seed list, not a user's choice: it follows today's built-in.
-                if (key == "ignorePatterns" && SameMembers(config.IgnorePatterns, ConfigDefaults.V010SeededIgnorePatterns))
+                // v0.1.0 stored its seed list, not a user's choice: it follows today's built-in. Its patterns
+                // were strings, which read as regular expressions with no id.
+                if (key == "ignorePatterns"
+                    && config.IgnorePatterns.All(pattern => pattern is { Kind: IgnorePatternKind.Regex, Id: null })
+                    && SameMembers(config.IgnorePatterns.Select(pattern => pattern.Pattern), ConfigDefaults.V010SeededIgnorePatterns))
                     config.IgnorePatterns = [.. ConfigDefaults.BuiltInIgnorePatterns];
             }
             catch (Exception ex) when (ex is JsonException or InvalidOperationException)

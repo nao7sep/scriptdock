@@ -3,6 +3,7 @@ using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.VisualTree;
 using ScriptDock.Services;
 using ScriptDock.ViewModels;
 
@@ -44,8 +45,6 @@ public partial class SettingsView : UserControl
     // on a real Enter — never the IME's candidate-commit (Key.ImeProcessed) — per the
     // text-input-ime-conventions, so a composed Enter never adds a half-finished item.
     private void OnExtSubmitted(object? sender, RoutedEventArgs e) => AddExtension();
-
-    private void OnPatternSubmitted(object? sender, RoutedEventArgs e) => AddPattern();
 
     // Root directories are chosen with the OS folder picker. The picker is an external boundary,
     // so its work is wrapped per the crash guard's Layer-1 contract — a failure logs, never crashes.
@@ -106,10 +105,15 @@ public partial class SettingsView : UserControl
 
     private void OnRemoveRowClick(object? sender, RoutedEventArgs e)
     {
-        if (Vm is null || (sender as Control)?.DataContext is not EditableItem row)
-            return;
-        if (!Vm.Extensions.Remove(row))
-            Vm.IgnorePatterns.Remove(row);
+        switch ((sender as Control)?.DataContext)
+        {
+            case EditableItem row:
+                Vm?.RemoveExtension(row);
+                break;
+            case IgnorePatternRow row:
+                Vm?.RemoveIgnorePattern(row);
+                break;
+        }
     }
 
     private void AddExtension()
@@ -121,12 +125,14 @@ public partial class SettingsView : UserControl
         ExtEntry.Focus();
     }
 
+    // The new row's field takes focus once the list has laid it out, for the pattern to be typed.
     private void AddPattern()
     {
         if (Vm is null)
             return;
-        if (Vm.AddIgnorePattern(PatternEntry.Text ?? string.Empty))
-            PatternEntry.Text = string.Empty;
-        PatternEntry.Focus();
+        var row = Vm.AddIgnorePattern();
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            PatternList.ContainerFromItem(row)?.FindDescendantOfType<Controls.ComposingTextBox>()?.Focus(),
+            Avalonia.Threading.DispatcherPriority.Loaded);
     }
 }

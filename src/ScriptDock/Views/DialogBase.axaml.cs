@@ -90,6 +90,15 @@ public partial class DialogBase : Window
 
     protected void SetContent(Control content) => DialogContent.Content = content;
 
+    /// <summary>Sets the band between the title bar and the body, such as a tab strip, which stays put
+    /// while the body scrolls.</summary>
+    protected void SetBand(Control band)
+    {
+        BandContent.Content = band;
+        BandContent.IsVisible = true;
+        BandSeparator.IsVisible = true;
+    }
+
     /// <summary>
     /// Builds the footer. Buttons render left to right in the order given, right aligned, so
     /// callers pass secondary/cancel actions before primary/destructive ones. Primary and
@@ -248,6 +257,7 @@ public partial class DialogBase : Window
     {
         _committing = busy;
         DialogContent.IsEnabled = !busy;
+        BandContent.IsEnabled = !busy;
         ButtonPanel.IsEnabled = !busy;
     }
 

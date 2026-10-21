@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using ScriptDock.Controls;
 using ScriptDock.Models;
 using ScriptDock.ViewModels;
@@ -19,7 +20,7 @@ public sealed class SettingsAccessibilityTests : WindowTest
     [AvaloniaFact]
     public void ResetButtons_FillTheDraftWithTheBuiltIns()
     {
-        var config = new AppConfig { Extensions = [".custom"], IgnorePatterns = ["/custom/"] };
+        var config = new AppConfig { Extensions = [".custom"], IgnorePatterns = [new("custom/")] };
         var vm = new SettingsDialogViewModel(config);
         var view = new SettingsView { DataContext = vm };
         Show(new Window { Content = view, Width = 600, Height = 800 });
@@ -28,7 +29,7 @@ public sealed class SettingsAccessibilityTests : WindowTest
         view.FindControl<Button>("ResetIgnorePatterns")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
         Assert.Equal([ConfigDefaults.DefaultExtension], vm.Extensions.Select(row => row.Text));
-        Assert.Equal(ConfigDefaults.BuiltInIgnorePatterns, vm.IgnorePatterns.Select(row => row.Text));
+        Assert.Equal(ConfigDefaults.BuiltInIgnorePatterns, vm.IgnorePatterns.Select(row => row.ToPattern()));
         Assert.True(vm.IsDirty);
     }
 
@@ -59,16 +60,16 @@ public sealed class SettingsAccessibilityTests : WindowTest
         Show(new Window { Content = view, Width = 600, Height = 800 });
 
         vm.AddExtension("bad extension");
-        vm.PatternErrorMessage = ScriptDock.I18n.Message.Of("settings.patternMultiline");
+        vm.Extensions[0].ErrorMessage = ScriptDock.I18n.Message.Of("settings.extensionSpaces");
         Assert.True(vm.AddExtension(".sh"));
         Dispatcher.UIThread.RunJobs();
 
         var extension = view.FindControl<ComposingTextBox>("ExtEntry")!;
-        var pattern = view.FindControl<ComposingTextBox>("PatternEntry")!;
+        var row = view.FindControl<ItemsControl>("ExtList")!.GetVisualDescendants().OfType<ComposingTextBox>().First();
         Assert.DoesNotContain("invalid", extension.Classes);
-        Assert.Contains("invalid", pattern.Classes);
+        Assert.Contains("invalid", row.Classes);
         Assert.Equal(string.Empty, AutomationProperties.GetHelpText(extension));
-        Assert.Equal("Invalid", AutomationProperties.GetItemStatus(pattern));
+        Assert.Equal(vm.Extensions[0].Error, AutomationProperties.GetHelpText(row));
     }
 
     [AvaloniaFact]

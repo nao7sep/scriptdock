@@ -27,7 +27,7 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
 
     public ObservableCollection<string> RootDirs { get; }
     public ObservableCollection<EditableItem> Extensions { get; }
-    public ObservableCollection<EditableItem> IgnorePatterns { get; }
+    public ObservableCollection<IgnorePatternRow> IgnorePatterns { get; }
 
     // The stored sets the app could not apply, kept unchanged until the user saves a value for them, and
     // the sets this draft has chosen a value for, a reset to the built-in included.
@@ -43,12 +43,6 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     private Message? _extensionErrorMessage;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(PatternError))]
-    [NotifyPropertyChangedFor(nameof(HasPatternError))]
-    [NotifyPropertyChangedFor(nameof(PatternItemStatus))]
-    private Message? _patternErrorMessage;
-
-    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SaveError))]
     [NotifyPropertyChangedFor(nameof(HasSaveError))]
     private Message? _saveErrorMessage;
@@ -57,6 +51,23 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(RootPickerResult))]
     [NotifyPropertyChangedFor(nameof(HasRootPickerResult))]
     private Message? _rootPickerResultMessage;
+
+    // The tab shown, General first. Switching it is cheap, so it follows the tab list's focus.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TabIndex))]
+    [NotifyPropertyChangedFor(nameof(IsGeneralTab))]
+    [NotifyPropertyChangedFor(nameof(IsIgnorePatternsTab))]
+    private SettingsTab _tab;
+
+    /// <summary>The tab as the tab list holds it.</summary>
+    public int TabIndex
+    {
+        get => (int)Tab;
+        set { if (Enum.IsDefined((SettingsTab)value)) Tab = (SettingsTab)value; }
+    }
+
+    public bool IsGeneralTab => Tab == SettingsTab.General;
+    public bool IsIgnorePatternsTab => Tab == SettingsTab.IgnorePatterns;
 
     // The interface language, chosen from the list and applied on Save with its neighbours.
     [ObservableProperty]
@@ -105,27 +116,27 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
 
         RootDirs = new ObservableCollection<string>(config.RootDirs);
         Extensions = new ObservableCollection<EditableItem>(config.Extensions.Select(text => new EditableItem(text)));
-        IgnorePatterns = new ObservableCollection<EditableItem>(config.IgnorePatterns.Select(text => new EditableItem(text)));
+        IgnorePatterns = new ObservableCollection<IgnorePatternRow>(config.IgnorePatterns.Select(pattern => new IgnorePatternRow(pattern)));
         _opened = ToConfig();
 
         RootDirs.CollectionChanged += (_, _) => Chose("rootDirs");
-        TrackRows(Extensions, "extensions");
-        TrackRows(IgnorePatterns, "ignorePatterns");
+        TrackRows(Extensions, "extensions", nameof(EditableItem.Text));
+        TrackRows(IgnorePatterns, "ignorePatterns", nameof(IgnorePatternRow.Text), nameof(IgnorePatternRow.Kind));
     }
 
     // A row added, removed or edited is a value chosen for its set.
-    private void TrackRows(ObservableCollection<EditableItem> rows, string set)
+    private void TrackRows<T>(ObservableCollection<T> rows, string set, params string[] edits) where T : ObservableObject
     {
-        void Watch(EditableItem row) => row.PropertyChanged += (_, e) =>
+        void Watch(T row) => row.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(EditableItem.Text))
+            if (edits.Contains(e.PropertyName))
                 Chose(set);
         };
         foreach (var row in rows)
             Watch(row);
         rows.CollectionChanged += (_, e) =>
         {
-            foreach (var row in e.NewItems?.OfType<EditableItem>() ?? [])
+            foreach (var row in e.NewItems?.OfType<T>() ?? [])
                 Watch(row);
             Chose(set);
         };
@@ -157,7 +168,9 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     {
         RootDirs = RootDirs.ToList(),
         Extensions = Rows(Extensions, ConfigSets.Extension),
-        IgnorePatterns = Rows(IgnorePatterns, text => text),
+        // One entry per pattern as the scanner matches them, ignoring case.
+        IgnorePatterns = IgnorePatterns.Select(row => row.ToPattern()).OfType<IgnorePattern>()
+            .DistinctBy(ConfigSets.PatternKey, StringComparer.OrdinalIgnoreCase).ToList(),
         UiFontFamily = TextCleanup.SingleLine(UiFontFamily),
         Theme = Theme,
         Language = Language.Value,
@@ -171,29 +184,38 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
 
     /// <summary>
     /// The check Save runs: each non-blank row passes its set's check, or carries a message naming it on
-    /// its own row, and the extensions keep at least one. False holds Save.
+    /// its own row, and the extensions keep at least one. False holds Save and shows the first tab with a
+    /// message, so a failing row is never left out of sight.
     /// </summary>
     public bool Validate()
     {
-        var valid = true;
+        var general = true;
         foreach (var row in Extensions)
-            valid &= Check(row, ConfigSets.ExtensionError);
-        foreach (var row in IgnorePatterns)
-            valid &= Check(row, ConfigSets.PatternError);
-        if (valid && ToConfig().Extensions.Count == 0)
+            general &= Checked(row.Text, ConfigSets.ExtensionError, message => row.ErrorMessage = message);
+        if (general && ToConfig().Extensions.Count == 0)
         {
             ExtensionErrorMessage = Message.Of("settings.extensionsRequired");
-            valid = false;
+            general = false;
         }
-        return valid;
 
-        static bool Check(EditableItem row, Func<string, Message?> error)
+        var patterns = true;
+        foreach (var row in IgnorePatterns)
+            patterns &= Checked(row.Text, trimmed => ConfigSets.PatternError(trimmed, row.Kind), message => row.ErrorMessage = message);
+
+        if (!general)
+            Tab = SettingsTab.General;
+        else if (!patterns)
+            Tab = SettingsTab.IgnorePatterns;
+        return general && patterns;
+
+        static bool Checked(string text, Func<string, Message?> error, Action<Message?> mark)
         {
-            var trimmed = row.Text.Trim();
-            row.ErrorMessage = trimmed.Length > 0 && error(trimmed) is { } reason
+            var trimmed = text.Trim();
+            var message = trimmed.Length > 0 && error(trimmed) is { } reason
                 ? Message.Of("settings.rowError", ("item", trimmed), ("reason", reason))
                 : null;
-            return row.ErrorMessage is null;
+            mark(message);
+            return message is null;
         }
     }
 
@@ -227,18 +249,15 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         ("theme", Localizer.T(SystemThemeIsDark ? "settings.themeDark" : "settings.themeLight")));
 
     public string ExtensionError => Localizer.Current.Of(ExtensionErrorMessage) ?? string.Empty;
-    public string PatternError => Localizer.Current.Of(PatternErrorMessage) ?? string.Empty;
     public string SaveError => Localizer.Current.Of(SaveErrorMessage) ?? string.Empty;
     public string RootPickerResult => Localizer.Current.Of(RootPickerResultMessage) ?? string.Empty;
 
     public bool HasExtensionError => ExtensionErrorMessage is not null;
-    public bool HasPatternError => PatternErrorMessage is not null;
     public bool HasSaveError => SaveErrorMessage is not null;
     public bool HasRootPickerResult => RootPickerResultMessage is not null;
 
     // A code a screen reader reads as the field's status, not a sentence: it stays as it is.
     public string ExtensionItemStatus => HasExtensionError ? "Invalid" : string.Empty;
-    public string PatternItemStatus => HasPatternError ? "Invalid" : string.Empty;
 
     public void ReportRootPickerFailure(Exception error) =>
         RootPickerResultMessage = FailurePresentation.RootPicker(error);
@@ -335,27 +354,12 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         return true;
     }
 
-    public bool AddIgnorePattern(string value)
+    /// <summary>Adds a blank wildcard row for the user to type into; left blank, Save drops it.</summary>
+    public IgnorePatternRow AddIgnorePattern()
     {
-        var trimmed = value.Trim();
-        if (ConfigSets.PatternError(trimmed) is { } error)
-        {
-            PatternErrorMessage = error;
-            return false;
-        }
-
-        // Dedup case-insensitively to match how the scanner matches patterns (IgnoreRules compiles
-        // them IgnoreCase), so "/Node_modules/" and "/node_modules/" are one entry, not two that
-        // prune the same directories.
-        if (IgnorePatterns.Any(p => string.Equals(p.Text.Trim(), trimmed, StringComparison.OrdinalIgnoreCase)))
-        {
-            PatternErrorMessage = Message.Of("settings.patternDuplicate");
-            return false;
-        }
-
-        IgnorePatterns.Add(new EditableItem(trimmed));
-        PatternErrorMessage = null;
-        return true;
+        var row = new IgnorePatternRow(new IgnorePattern(string.Empty));
+        IgnorePatterns.Add(row);
+        return row;
     }
 
     // A reset chooses the built-in, which replaces a stored set the app could not apply.
@@ -371,12 +375,14 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     {
         IgnorePatterns.Clear();
         foreach (var pattern in ConfigDefaults.BuiltInIgnorePatterns)
-            IgnorePatterns.Add(new EditableItem(pattern));
-        PatternErrorMessage = null;
+            IgnorePatterns.Add(new IgnorePatternRow(pattern));
         Chose("ignorePatterns");
     }
 
     public void RemoveRootDir(string value) => RootDirs.Remove(value);
     public void RemoveExtension(EditableItem row) => Extensions.Remove(row);
-    public void RemoveIgnorePattern(EditableItem row) => IgnorePatterns.Remove(row);
+    public void RemoveIgnorePattern(IgnorePatternRow row) => IgnorePatterns.Remove(row);
 }
+
+/// <summary>The Settings tabs, in their order: everything else, then the ignore patterns, which fill theirs.</summary>
+public enum SettingsTab { General, IgnorePatterns }

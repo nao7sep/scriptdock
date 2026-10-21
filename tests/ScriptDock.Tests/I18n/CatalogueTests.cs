@@ -33,8 +33,8 @@ public class CatalogueTests
             "about.version", "records.details", "records.levelDebug", "records.levelInfo",
             "settings.languageSystem", "settings.themeSystem", "settings.timeZoneSystem", "shortcuts.groupNavigation"],
         // "script" is the ordinary developer's word in each of these languages, and Apple leaves the
-        // Window menu's Zoom untranslated in all of them.
-        ["es"] = ["scripts.title", "shortcuts.groupScripts", "status.scriptCount", "error.count", "nativeMenu.zoom", "records.levelError"],
+        // Window menu's Zoom untranslated in all of them. A General tab is "General" in Spanish too.
+        ["es"] = ["scripts.title", "shortcuts.groupScripts", "status.scriptCount", "error.count", "nativeMenu.zoom", "records.levelError", "settings.tabGeneral"],
         // French keeps Services, Zoom, Version, Info, Navigation, Extension(s), Message and Scripts as they are.
         ["fr"] = [
             "about.version", "nativeMenu.services", "nativeMenu.zoom", "records.levelInfo", "records.message",

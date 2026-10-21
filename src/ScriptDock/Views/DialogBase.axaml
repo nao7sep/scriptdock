@@ -25,6 +25,19 @@
                 Height="1"
                 Background="{DynamicResource BorderBrush}"/>
 
+        <!-- A band between the title bar and the body, such as a tab strip, is chrome, not content: it stays
+             put above the scrolling body, with its own line below it and equal padding on both sides of its
+             controls (modal-dialog conventions). Hidden unless a dialog sets one. -->
+        <ContentPresenter DockPanel.Dock="Top"
+                          x:Name="BandContent"
+                          IsVisible="False"
+                          Margin="24,8,24,8"/>
+        <Border DockPanel.Dock="Top"
+                x:Name="BandSeparator"
+                IsVisible="False"
+                Height="1"
+                Background="{DynamicResource BorderBrush}"/>
+
         <!-- The sole scroll region. The footer is docked outside it, so it stays reachable at any
              height the dialog is bounded or dragged to. -->
         <ScrollViewer x:Name="DialogScroll"

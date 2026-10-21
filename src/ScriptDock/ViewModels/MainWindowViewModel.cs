@@ -565,7 +565,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         var fontChanged = !string.Equals(_config.UiFontFamily, candidate.UiFontFamily, StringComparison.Ordinal);
         var scanChanged = !_config.RootDirs.SequenceEqual(candidate.RootDirs, StringComparer.Ordinal)
             || !_config.Extensions.SequenceEqual(candidate.Extensions, StringComparer.Ordinal)
-            || !_config.IgnorePatterns.SequenceEqual(candidate.IgnorePatterns, StringComparer.Ordinal);
+            || !_config.IgnorePatterns.SequenceEqual(candidate.IgnorePatterns);
         _config.RootDirs = candidate.RootDirs;
         _config.Extensions = candidate.Extensions;
         _config.IgnorePatterns = candidate.IgnorePatterns;

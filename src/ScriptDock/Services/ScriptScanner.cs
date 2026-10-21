@@ -8,9 +8,9 @@ using ScriptDock.Models;
 namespace ScriptDock.Services;
 
 /// <summary>
-/// Walks the configured root directories and classifies every entry: a directory whose
-/// path matches an ignore pattern is pruned (never descended); a file whose extension is
-/// configured is either found or, if its path matches an ignore pattern, skipped. Symbolic
+/// Walks the configured root directories and classifies every entry: a directory an ignore
+/// pattern matches is pruned (never descended); a file whose extension is configured is either
+/// found or, if an ignore pattern matches it, skipped. Symbolic
 /// links are not followed (so a link cycle cannot loop the walk), and a directory that
 /// cannot be read is recorded as inaccessible rather than aborting the scan.
 /// </summary>
@@ -19,7 +19,7 @@ public sealed class ScriptScanner
     public ScanReport Scan(
         IReadOnlyList<string> rootDirs,
         IReadOnlyList<string> extensions,
-        IReadOnlyList<string> ignorePatterns,
+        IReadOnlyList<IgnorePattern> ignorePatterns,
         CancellationToken cancellationToken = default)
     {
         var rules = IgnoreRules.Compile(ignorePatterns);
@@ -47,12 +47,13 @@ public sealed class ScriptScanner
             .Select(group => group.First())
             .ToList();
 
-        var stack = new Stack<string>();
+        // Each folder still to read, with the root it was found under, which an anchored pattern reads from.
+        var stack = new Stack<(string Root, string Dir)>();
         foreach (var root in roots)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (Directory.Exists(root))
-                stack.Push(root);
+                stack.Push((root, root));
             else
                 inaccessible.Add(UnreadableRoot(root));
         }
@@ -60,7 +61,7 @@ public sealed class ScriptScanner
         while (stack.Count > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var dir = stack.Pop();
+            var (root, dir) = stack.Pop();
 
             List<string> subDirs;
             List<string> files;
@@ -81,13 +82,11 @@ public sealed class ScriptScanner
                 if (IsSymbolicLink(subDir))
                     continue;
 
-                // Append a separator so a slash-wrapped pattern matches the directory
-                // itself, not only files beneath it.
-                var match = rules.FirstMatchCancellable(subDir + Path.DirectorySeparatorChar, cancellationToken);
+                var match = rules.FirstMatchCancellable(root, subDir, isDirectory: true, cancellationToken);
                 if (match is not null)
-                    prunedDirectories.Add(new IgnoredEntry(subDir, match));
+                    prunedDirectories.Add(new IgnoredEntry(subDir, match.Pattern));
                 else
-                    stack.Push(subDir);
+                    stack.Push((root, subDir));
             }
 
             foreach (var file in files)
@@ -96,9 +95,9 @@ public sealed class ScriptScanner
                 if (!extensionSet.Contains(Path.GetExtension(file)))
                     continue;
 
-                var match = rules.FirstMatchCancellable(file, cancellationToken);
+                var match = rules.FirstMatchCancellable(root, file, isDirectory: false, cancellationToken);
                 if (match is not null)
-                    skippedFiles.Add(new IgnoredEntry(file, match));
+                    skippedFiles.Add(new IgnoredEntry(file, match.Pattern));
                 else
                     found.Add(file);
             }

@@ -51,9 +51,9 @@ public sealed class AppConfig
     /// <summary>File extensions a script must have to be listed (e.g. <c>.command</c>).</summary>
     public List<string> Extensions { get; set; } = [ConfigDefaults.DefaultExtension];
 
-    /// <summary>Regex patterns matched against full paths: a directory match prunes the
-    /// subtree, a file match skips that file.</summary>
-    public List<string> IgnorePatterns { get; set; } = [.. ConfigDefaults.BuiltInIgnorePatterns];
+    /// <summary>Ignore patterns (<see cref="Services.IgnoreRules"/>): a folder one matches is pruned with
+    /// its subtree, a file one matches is skipped.</summary>
+    public List<IgnorePattern> IgnorePatterns { get; set; } = [.. ConfigDefaults.BuiltInIgnorePatterns];
 
     /// <summary>Absolute paths the user has hidden from the default list.</summary>
     public List<string> Hidden { get; set; } = [];

@@ -275,6 +275,11 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [InlineData("""["/build/",""]""")]        // empty: would match every path
     [InlineData("""["/build/","  "]""")]      // blank
     [InlineData("""["/build/\n/dist/"]""")]  // multiline, which cleanup would flatten into one rule
+    [InlineData("""[{"pattern":"[","kind":"regex"}]""")]       // a regular expression that does not compile
+    [InlineData("""[{"pattern":"//"}]""")]                     // a wildcard that names nothing
+    [InlineData("""[{"pattern":"build/","kind":"glob"}]""")]   // a kind this version does not know
+    [InlineData("""[{"kind":"wildcard"}]""")]                  // no pattern
+    [InlineData("""[3]""")]                                    // not a pattern at all
     public void InvalidIgnorePatterns_ReadAsTheirBuiltIn_AndKeepTheOtherSets(string patterns)
     {
         File.WriteAllText(ConfigPath, $$"""{"formatVersion":1,"ignorePatterns":{{patterns}},"extensions":[".sh"],"hidden":["/ok"]}""");
@@ -293,8 +298,33 @@ public sealed class ConfigStoreTests : IAsyncLifetime
         File.WriteAllText(ConfigPath, $$"""{"formatVersion":1,"extensions":{{extensions}},"ignorePatterns":["/build/"],"hidden":["/ok"]}""");
         var loaded = new ConfigStore().Load();
         Assert.Equal([ConfigDefaults.DefaultExtension], loaded.Extensions);
-        Assert.Equal(["/build/"], loaded.IgnorePatterns);
+        Assert.Equal([new IgnorePattern("/build/", IgnorePatternKind.Regex)], loaded.IgnorePatterns);
         Assert.Equal(["/ok"], loaded.Hidden);
+    }
+
+    // A pattern is stored with its kind, and a built-in with its id; a string is a pattern stored before
+    // patterns had a kind, when every one was a regular expression, so nothing it matched is lost.
+    [Fact]
+    public async Task IgnorePatterns_RoundTripWithTheirKindAndId_AndAStoredStringReadsAsARegularExpression()
+    {
+        var store = new ConfigStore();
+        var patterns = new List<IgnorePattern>
+        {
+            new(".git/", Id: "dev.git"),
+            new("*.bak.command"),
+            new("/old/", IgnorePatternKind.Regex),
+        };
+        await store.SaveAsync(new AppConfig { IgnorePatterns = patterns });
+
+        Assert.Equal(
+            """[{"pattern":".git/","kind":"wildcard","id":"dev.git"},{"pattern":"*.bak.command","kind":"wildcard"},{"pattern":"/old/","kind":"regex"}]""",
+            ReadRaw("ignorePatterns"));
+        Assert.Equal(patterns, new ConfigStore().Load().IgnorePatterns);
+
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"ignorePatterns":["/node_modules/","\\.bak$"]}""");
+        Assert.Equal(
+            [new IgnorePattern("/node_modules/", IgnorePatternKind.Regex), new IgnorePattern("\\.bak$", IgnorePatternKind.Regex)],
+            new ConfigStore().Load().IgnorePatterns);
     }
 
     [Fact]
@@ -311,7 +341,7 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     public void BuiltInTexts_AreKeptCleaned()
     {
         Assert.Equal(TextCleanup.SingleLine(ConfigDefaults.DefaultExtension), ConfigDefaults.DefaultExtension);
-        Assert.All(ConfigDefaults.BuiltInIgnorePatterns, pattern => Assert.Equal(TextCleanup.SingleLine(pattern), pattern));
+        Assert.All(ConfigDefaults.BuiltInIgnorePatterns, pattern => Assert.Equal(TextCleanup.SingleLine(pattern.Pattern), pattern.Pattern));
     }
 
     [Fact]

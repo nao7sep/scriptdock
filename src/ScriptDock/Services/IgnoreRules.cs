@@ -1,26 +1,40 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using ScriptDock.Models;
 
 namespace ScriptDock.Services;
 
 /// <summary>
-/// Compiled ignore patterns for a scan. Each pattern is a regular expression matched
-/// against the full path with forward-slash separators — so a slash-wrapped pattern like
-/// <c>/node_modules/</c> behaves the same on every platform. Matching is case-insensitive
-/// (mirroring the case-insensitive filesystems this runs on) and bounded by a timeout, so
-/// a pathological user pattern cannot hang a scan. Patterns that do not compile are
-/// collected in <see cref="InvalidPatterns"/> and skipped, never aborting the scan.
+/// Compiled ignore patterns for a scan, checked in order; the first that matches a path names why it was
+/// left out. Every pattern ignores case, as the file systems this runs on do, and one ending in <c>/</c>
+/// matches folders only.
+/// <list type="bullet">
+/// <item>A wildcard pattern reads names: <c>*</c> is any run of characters within a name, <c>?</c> one
+/// character and <c>**</c> any number of folders; every other character is itself. With no <c>/</c> other
+/// than a trailing one it matches a file or folder name at any depth; with one inside it, or a leading one, it
+/// matches the path from the root directory being scanned, as in a .gitignore file.</item>
+/// <item>A regular expression is matched anywhere in the full path, with <c>/</c> between folders and a
+/// folder's path ending in <c>/</c>, so <c>/node_modules/</c> behaves the same on every platform. Its match
+/// is bounded by a timeout, so a pathological pattern cannot hang a scan.</item>
+/// </list>
+/// Settings and the stored set accept only patterns that compile; one that still does not, or that times
+/// out, is collected in <see cref="InvalidPatterns"/> and skipped rather than aborting the scan.
 /// </summary>
 public sealed class IgnoreRules
 {
     private static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(1);
 
-    private sealed class Rule(string pattern, Regex regex)
+    private const RegexOptions Options = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+
+    private sealed class Rule(IgnorePattern pattern, Regex regex, bool byName)
     {
-        public string Pattern { get; } = pattern;
+        public IgnorePattern Pattern { get; } = pattern;
         public Regex Regex { get; } = regex;
+        // A wildcard with no slash inside reads the entry's name; any other pattern reads a path.
+        public bool ByName { get; } = byName;
         public bool Disabled { get; set; }
     }
 
@@ -35,10 +49,10 @@ public sealed class IgnoreRules
         _invalidPatterns = invalidPatterns;
     }
 
-    public static IgnoreRules Compile(IEnumerable<string> patterns)
+    public static IgnoreRules Compile(IEnumerable<IgnorePattern> patterns)
         => Compile(patterns, MatchTimeout);
 
-    internal static IgnoreRules Compile(IEnumerable<string> patterns, TimeSpan matchTimeout)
+    internal static IgnoreRules Compile(IEnumerable<IgnorePattern> patterns, TimeSpan matchTimeout)
     {
         var rules = new List<Rule>();
         var invalid = new List<string>();
@@ -47,44 +61,123 @@ public sealed class IgnoreRules
         {
             try
             {
-                rules.Add(new Rule(pattern, new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeout)));
+                rules.Add(pattern.Kind == IgnorePatternKind.Regex
+                    ? new Rule(pattern, new Regex(pattern.Pattern, Options, matchTimeout), byName: false)
+                    : Wildcard(pattern, matchTimeout));
             }
             catch (ArgumentException)
             {
-                invalid.Add(pattern);
+                invalid.Add(pattern.Pattern);
             }
         }
 
         return new IgnoreRules(rules, invalid);
     }
 
-    /// <summary>
-    /// Returns the first pattern that matches <paramref name="path"/>, or <c>null</c> if
-    /// none do. Backslashes are normalised to forward slashes before matching.
-    /// </summary>
-    public string? FirstMatch(string path) => FirstMatchCancellable(path, CancellationToken.None);
-
-    internal string? FirstMatchCancellable(string path, CancellationToken cancellationToken)
+    /// <summary>Whether <paramref name="pattern"/> compiles: a regular expression that parses, or a wildcard
+    /// that names something besides slashes.</summary>
+    public static bool Compiles(IgnorePattern pattern)
     {
-        var normalised = path.Replace('\\', '/');
+        try
+        {
+            _ = pattern.Kind == IgnorePatternKind.Regex ? new Regex(pattern.Pattern, Options) : Wildcard(pattern, MatchTimeout).Regex;
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private static Rule Wildcard(IgnorePattern pattern, TimeSpan matchTimeout)
+    {
+        var body = pattern.Pattern.TrimEnd('/');
+        var anchored = body.Contains('/');
+        body = body.TrimStart('/');
+        if (body.Length == 0)
+            throw new ArgumentException("A wildcard pattern names nothing.", nameof(pattern));
+        return new Rule(pattern, new Regex("^" + WildcardRegex(body) + "$", Options, matchTimeout), byName: !anchored);
+    }
+
+    // * is any run within a name, ? one character within it, ** any number of whole folders.
+    private static string WildcardRegex(string body)
+    {
+        var regex = new StringBuilder();
+        for (var index = 0; index < body.Length; index++)
+        {
+            var c = body[index];
+            if (c == '*' && index + 1 < body.Length && body[index + 1] == '*')
+            {
+                index++;
+                // "**/" spans zero or more folders; a trailing or embedded "**" spans anything.
+                if (index + 1 < body.Length && body[index + 1] == '/')
+                {
+                    index++;
+                    regex.Append("(?:.*/)?");
+                }
+                else
+                {
+                    regex.Append(".*");
+                }
+            }
+            else if (c == '*')
+            {
+                regex.Append("[^/]*");
+            }
+            else if (c == '?')
+            {
+                regex.Append("[^/]");
+            }
+            else
+            {
+                regex.Append(Regex.Escape(c.ToString()));
+            }
+        }
+        return regex.ToString();
+    }
+
+    /// <summary>
+    /// The first pattern that matches <paramref name="path"/>, a file or folder under
+    /// <paramref name="root"/>, or <c>null</c> when none does.
+    /// </summary>
+    public IgnorePattern? FirstMatch(string root, string path, bool isDirectory) =>
+        FirstMatchCancellable(root, path, isDirectory, CancellationToken.None);
+
+    internal IgnorePattern? FirstMatchCancellable(string root, string path, bool isDirectory, CancellationToken cancellationToken)
+    {
+        // Both separators read as /, on every platform, so a pattern means the same everywhere.
+        var normalised = path.Replace('\\', '/').TrimEnd('/');
+        var full = normalised + (isDirectory ? "/" : "");
+        var name = normalised[(normalised.LastIndexOf('/') + 1)..];
+        string? relative = null;
 
         foreach (var rule in _rules)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (rule.Disabled)
+            if (rule.Disabled || (rule.Pattern.FoldersOnly && !isDirectory))
                 continue;
+            var subject = rule.Pattern.Kind == IgnorePatternKind.Regex ? full
+                : rule.ByName ? name
+                : relative ??= Relative(root, normalised);
             try
             {
-                if (rule.Regex.IsMatch(normalised))
+                if (rule.Regex.IsMatch(subject))
                     return rule.Pattern;
             }
             catch (RegexMatchTimeoutException)
             {
                 rule.Disabled = true;
-                _invalidPatterns.Add(rule.Pattern);
+                _invalidPatterns.Add(rule.Pattern.Pattern);
             }
         }
 
         return null;
+    }
+
+    // The path below the root, as an anchored wildcard reads it; matched ignoring case, as the scan does.
+    private static string Relative(string root, string normalised)
+    {
+        var prefix = root.Replace('\\', '/').TrimEnd('/') + "/";
+        return normalised.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? normalised[prefix.Length..] : normalised.TrimStart('/');
     }
 }

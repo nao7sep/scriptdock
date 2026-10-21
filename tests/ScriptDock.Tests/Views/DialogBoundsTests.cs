@@ -128,6 +128,26 @@ public sealed class DialogBoundsTests : WindowTest
             $"the footer ends at {footerBottom:F0} in a {dialog.Bounds.Height:F0} dialog");
     }
 
+    // A band between the title bar and the body is chrome: it stays put above the scroll region, with its own
+    // line below it, and only a dialog that sets one shows it (modal-dialog conventions).
+    [AvaloniaFact]
+    public void A_band_stays_above_the_scrolling_body_with_its_own_line()
+    {
+        var owner = Show(ShortOwner());
+        var dialog = OpenScrolling(owner);
+        var scroll = dialog.FindControl<ScrollViewer>("DialogScroll")!;
+        var band = dialog.FindControl<ContentPresenter>("BandContent")!;
+        var line = dialog.FindControl<Border>("BandSeparator")!;
+
+        Assert.True(band.IsVisible && line.IsVisible);
+        Assert.DoesNotContain(band, scroll.GetVisualDescendants());
+        Assert.True(scroll.Extent.Height > scroll.Viewport.Height, "the body should scroll");
+        var bandBottom = band.TranslatePoint(new Point(0, band.Bounds.Height), dialog)!.Value.Y;
+        Assert.True(bandBottom <= line.TranslatePoint(new Point(0, 0), dialog)!.Value.Y + 0.5);
+
+        Assert.False(new DialogBase().FindControl<ContentPresenter>("BandContent")!.IsVisible);
+    }
+
     // A margin on the region rather than on its content leaves the bar short of the band's corners:
     // a gap above it where it should start, and another below.
     [AvaloniaFact]
@@ -142,9 +162,12 @@ public sealed class DialogBoundsTests : WindowTest
         var separatorTop = dialog.FindControl<Border>("FooterSeparator")!
             .TranslatePoint(new Point(0, 0), dialog)!.Value.Y;
 
-        // The top has no line because the OS title bar is the boundary there; the body starts under it.
+        // The top has no line of its own because the OS title bar is the boundary there; the body starts
+        // under it, or under the line that closes a band such as Settings' tab strip.
+        var band = dialog.FindControl<Border>("BandSeparator")!;
+        var top = band.IsVisible ? band.TranslatePoint(new Point(0, band.Bounds.Height), dialog)!.Value.Y : 0;
         Assert.Equal(0, topLeft.X, 0);
-        Assert.Equal(0, topLeft.Y, 0);
+        Assert.Equal(top, topLeft.Y, 0);
         Assert.Equal(dialog.Bounds.Width, bottomRight.X, 0);
         Assert.Equal(separatorTop, bottomRight.Y, 0);
     }

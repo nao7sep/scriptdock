@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using ScriptDock;
+using ScriptDock.Models;
 using ScriptDock.Services;
 using ScriptDock.Tests.Fakes;
 using Xunit;
@@ -50,7 +51,7 @@ public sealed class ScriptScannerTests : IDisposable
         var report = new ScriptScanner().Scan(
             rootDirs: [_root],
             extensions: [".command"],
-            ignorePatterns: ["/node_modules/", "ignore-me"],
+            ignorePatterns: [new("node_modules/"), new("ignore-me*")],
             cancellationToken: TestContext.Current.CancellationToken);
 
         var foundNames = report.Found.Select(Path.GetFileName).ToList();
@@ -60,8 +61,8 @@ public sealed class ScriptScannerTests : IDisposable
         Assert.DoesNotContain("ignore-me.command", foundNames); // skipped by pattern
         Assert.DoesNotContain("notes.txt", foundNames);         // wrong extension
 
-        Assert.Contains(report.PrunedDirectories, e => Path.GetFileName(e.Path) == "node_modules" && e.Pattern == "/node_modules/");
-        Assert.Contains(report.SkippedFiles, e => Path.GetFileName(e.Path) == "ignore-me.command" && e.Pattern == "ignore-me");
+        Assert.Contains(report.PrunedDirectories, e => Path.GetFileName(e.Path) == "node_modules" && e.Pattern == "node_modules/");
+        Assert.Contains(report.SkippedFiles, e => Path.GetFileName(e.Path) == "ignore-me.command" && e.Pattern == "ignore-me*");
         Assert.Empty(report.InvalidPatterns);
     }
 
@@ -70,7 +71,7 @@ public sealed class ScriptScannerTests : IDisposable
     {
         Touch("a.command");
 
-        var report = new ScriptScanner().Scan([_root], [".command"], ["["], TestContext.Current.CancellationToken);
+        var report = new ScriptScanner().Scan([_root], [".command"], [new("[", IgnorePatternKind.Regex)], TestContext.Current.CancellationToken);
 
         Assert.Contains("[", report.InvalidPatterns);
         Assert.Contains(report.Found, p => Path.GetFileName(p) == "a.command");

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using ScriptDock.I18n;
 using ScriptDock.Storage;
 
@@ -12,9 +11,10 @@ namespace ScriptDock.Models;
 /// text is held after the text-cleanup-conventions, paths exactly.</summary>
 public static class ConfigSets
 {
-    // An unordered set is compared as a set, ignoring case as the scanner matches it, so reordering it or
-    // re-adding a built-in member leaves no copy on disk (config-sets-conventions, In the interface).
-    private sealed record Set(Func<AppConfig, object> Read, Action<AppConfig, JsonElement> Apply, bool Unordered = false);
+    // An unordered set is compared as a set of its members' keys, ignoring case as the scanner matches them,
+    // so reordering it or re-adding a built-in member leaves no copy on disk (config-sets-conventions, In
+    // the interface).
+    private sealed record Set(Func<AppConfig, object> Read, Action<AppConfig, JsonElement> Apply, Func<AppConfig, IEnumerable<string>>? Members = null);
 
     private static readonly IReadOnlyDictionary<string, Set> Sets = new Dictionary<string, Set>
     {
@@ -34,8 +34,10 @@ public static class ConfigSets
         ["rootDirs"] = new(c => c.RootDirs, (c, v) => c.RootDirs = Strings(v)),
         // A scan needs at least one extension; an empty list would find nothing.
         ["extensions"] = new(c => c.Extensions, (c, v) =>
-            c.Extensions = Texts(v, ExtensionError) is { Count: > 0 } extensions ? extensions : throw new JsonException("No extension"), Unordered: true),
-        ["ignorePatterns"] = new(c => c.IgnorePatterns, (c, v) => c.IgnorePatterns = Texts(v, PatternError), Unordered: true),
+            c.Extensions = Texts(v, ExtensionError) is { Count: > 0 } extensions ? extensions : throw new JsonException("No extension"),
+            c => c.Extensions),
+        ["ignorePatterns"] = new(c => c.IgnorePatterns, (c, v) => c.IgnorePatterns = Patterns(v),
+            c => c.IgnorePatterns.Select(PatternKey)),
         ["hidden"] = new(c => c.Hidden, (c, v) => c.Hidden = Strings(v)),
     };
 
@@ -49,17 +51,20 @@ public static class ConfigSets
         : trimmed.Any(char.IsWhiteSpace) ? Message.Of("settings.extensionSpaces")
         : null;
 
-    /// <summary>Why an ignore pattern, trimmed, is not valid, or null when it is: the check the settings
-    /// dialog applies when one is added, and the one each stored pattern passes when read.</summary>
-    public static Message? PatternError(string trimmed) =>
-        trimmed.Length == 0 ? Message.Of("settings.patternEmpty")
-        // A pattern is a single-line regex. An interior line break means a multi-line paste leaked in;
-        // it is rejected rather than flattened, since collapsing a newline to a space would silently
-        // change what the regex matches. Interior spaces are left alone (a regex can match a literal
-        // space in a path).
-        : trimmed.Contains('\n') || trimmed.Contains('\r') ? Message.Of("settings.patternMultiline")
-        : !IsValidRegex(trimmed) ? Message.Of("settings.patternInvalid")
+    /// <summary>Why an ignore pattern, its text trimmed and not blank, is not valid, or null when it is: the
+    /// check Settings applies to each row on Save, and the one each stored pattern passes when read.</summary>
+    public static Message? PatternError(string trimmed, IgnorePatternKind kind) =>
+        // A pattern is a single line. An interior line break means a multi-line paste leaked in; it is
+        // rejected rather than flattened, since collapsing a newline to a space would silently change what
+        // the pattern matches. Interior spaces are left alone (a path can hold a literal space).
+        trimmed.Contains('\n') || trimmed.Contains('\r') ? Message.Of("settings.patternMultiline")
+        : !Services.IgnoreRules.Compiles(new IgnorePattern(trimmed, kind)) ? Message.Of(
+            kind == IgnorePatternKind.Regex ? "settings.patternInvalidRegex" : "settings.patternInvalid")
         : null;
+
+    /// <summary>The key two patterns are the same by: their kind, their text ignoring case, and their id.</summary>
+    public static string PatternKey(IgnorePattern pattern) =>
+        $"{pattern.Kind}\n{pattern.Pattern.ToUpperInvariant()}\n{pattern.Id}";
 
     /// <summary>An extension as stored: trimmed, with its leading dot.</summary>
     public static string Extension(string trimmed) => trimmed.StartsWith('.') ? trimmed : "." + trimmed;
@@ -78,8 +83,8 @@ public static class ConfigSets
 
     public static bool Same(AppConfig a, AppConfig b) => Sets.Keys.All(key => Compared(a, key) == Compared(b, key));
 
-    private static string Compared(AppConfig config, string key) => Sets[key].Unordered
-        ? string.Join('\n', ((IEnumerable<string>)Sets[key].Read(config))
+    private static string Compared(AppConfig config, string key) => Sets[key].Members is { } members
+        ? string.Join('\0', members(config)
             .Select(member => member.ToUpperInvariant()).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
         : Raw(config, key);
 
@@ -103,16 +108,27 @@ public static class ConfigSets
             .Select(text => error(text.Trim()) is null ? TextCleanup.SingleLine(text) : throw new JsonException("Invalid member"))
             .ToList();
 
-    private static bool IsValidRegex(string pattern)
+    // Each pattern is an object; a string is one stored before patterns had a kind, when every pattern was
+    // a regular expression over the full path, so it reads as one and nothing it matched is lost.
+    private static List<IgnorePattern> Patterns(JsonElement value) =>
+        value.EnumerateArray().Select(member =>
+        {
+            var pattern = member.ValueKind == JsonValueKind.String
+                ? new IgnorePattern(String(member), IgnorePatternKind.Regex)
+                : new IgnorePattern(
+                    member.TryGetProperty("pattern", out var text) ? String(text) : throw new JsonException("No pattern"),
+                    member.TryGetProperty("kind", out var kind) ? Kind(kind) : IgnorePatternKind.Wildcard,
+                    member.TryGetProperty("id", out var id) ? String(id) : null);
+            var trimmed = pattern.Pattern.Trim();
+            if (trimmed.Length == 0 || PatternError(trimmed, pattern.Kind) is not null)
+                throw new JsonException("Invalid pattern");
+            return pattern with { Pattern = TextCleanup.SingleLine(pattern.Pattern) };
+        }).ToList();
+
+    private static IgnorePatternKind Kind(JsonElement value) => String(value) switch
     {
-        try
-        {
-            _ = new Regex(pattern);
-            return true;
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
-    }
+        "wildcard" => IgnorePatternKind.Wildcard,
+        "regex" => IgnorePatternKind.Regex,
+        _ => throw new JsonException("Unknown pattern kind"),
+    };
 }
