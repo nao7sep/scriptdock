@@ -39,6 +39,7 @@ public sealed class SettingsDialog : DialogBase
         Tablist.Attach(tabs);
         Tabs = tabs;
         SetBand(tabs);
+        KeepOpeningHeight();
 
         var content = new SettingsView { DataContext = draft };
         SetContent(content);

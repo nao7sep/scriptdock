@@ -79,8 +79,12 @@ public sealed class DialogBoundsTests : WindowTest
 
             Assert.False(dialog.CanResize, $"{dialog.GetType().Name} is resizable");
             // Shortcuts sizes to its width as well, so the flag is what matters, not the exact value.
-            Assert.True(dialog.SizeToContent.HasFlag(SizeToContent.Height),
-                $"{dialog.GetType().Name} stopped sizing to its content");
+            // Settings sized to its first tab to open, then keeps that height across its tabs.
+            if (dialog is SettingsDialog)
+                Assert.Equal(SizeToContent.Manual, dialog.SizeToContent);
+            else
+                Assert.True(dialog.SizeToContent.HasFlag(SizeToContent.Height),
+                    $"{dialog.GetType().Name} stopped sizing to its content");
             Assert.True(double.IsFinite(dialog.MaxHeight), $"{dialog.GetType().Name} lost its bound");
         }
     }
@@ -312,9 +316,10 @@ public sealed class DialogBoundsTests : WindowTest
         Assert.True(body.Extent.Height > body.Viewport.Height, "the body must start out scrolling");
         var scrolling = presenter.Bounds.Width;
 
-        // The dialog is fixed, so the bound is the only thing holding it short: lift that and
-        // SizeToContent grows it to its content, which is what stops the body scrolling.
+        // The dialog is fixed, so its kept height and the bound are what hold it short: lift both and it
+        // is tall enough to stop the body scrolling.
         dialog.MaxHeight = double.PositiveInfinity;
+        dialog.Height = 5000;
         dialog.InvalidateMeasure();
         dialog.UpdateLayout();
         Dispatcher.UIThread.RunJobs();

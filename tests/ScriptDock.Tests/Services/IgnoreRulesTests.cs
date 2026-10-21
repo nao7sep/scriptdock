@@ -56,6 +56,34 @@ public sealed class IgnoreRulesTests
     public void Star_and_question_mark_stand_within_a_name_and_every_other_character_for_itself(string pattern, string path, bool matches) =>
         Assert.Equal(matches, File(IgnoreRules.Compile([Wildcard(pattern)]), path) is not null);
 
+    // Brackets are a class, as in Git's ignore files, shells and ZipKit, so a pattern means the same in each.
+    [Theory]
+    [InlineData("run-[abc].command", "/run-b.command", true)]
+    [InlineData("run-[abc].command", "/run-d.command", false)]
+    [InlineData("run-[abc].command", "/run-[abc].command", false)]
+    [InlineData("run-[a-c].command", "/run-B.command", true)]
+    [InlineData("run-[!a-c].command", "/run-d.command", true)]
+    [InlineData("run-[^a-c].command", "/run-a.command", false)]
+    [InlineData("run-[]x].command", "/run-].command", true)]
+    [InlineData("run-[x-].command", "/run--.command", true)]
+    [InlineData("v[0-9][0-9]", "/v42", true)]
+    [InlineData("v[0-9][0-9]", "/v4", false)]
+    [InlineData("old[", "/old[", true)]
+    [InlineData("a[/]b", "/a/b", false)]
+    [InlineData("a[+-0]b", "/a/b", false)]
+    public void Square_brackets_match_one_character_of_a_class(string pattern, string path, bool matches) =>
+        Assert.Equal(matches, File(IgnoreRules.Compile([Wildcard(pattern)]), path) is not null);
+
+    // A name that holds brackets is matched with a regular expression instead.
+    [Fact]
+    public void A_bracketed_name_is_matched_with_a_regular_expression()
+    {
+        var rules = IgnoreRules.Compile([Regex(@"/\[old\]/")]);
+
+        Assert.Equal(@"/\[old\]/", Folder(rules, "/proj/[old]"));
+        Assert.Null(Folder(rules, "/proj/o"));
+    }
+
     [Theory]
     [InlineData("tools/old/", "/tools/old", true)]
     [InlineData("tools/old/", "/proj/tools/old", false)]
@@ -96,6 +124,8 @@ public sealed class IgnoreRulesTests
     [InlineData("/", IgnorePatternKind.Wildcard, false)]
     [InlineData("//", IgnorePatternKind.Wildcard, false)]
     [InlineData("[", IgnorePatternKind.Wildcard, true)]
+    [InlineData("[z-a]", IgnorePatternKind.Wildcard, false)]
+    [InlineData("[]", IgnorePatternKind.Wildcard, true)]
     [InlineData("(a", IgnorePatternKind.Wildcard, true)]
     [InlineData("/obj/", IgnorePatternKind.Regex, true)]
     public void Only_a_pattern_that_compiles_is_valid(string pattern, IgnorePatternKind kind, bool valid) =>

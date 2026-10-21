@@ -230,7 +230,7 @@
   "settings.tabs": "Sezioni delle impostazioni",
   "settings.tabGeneral": "Generali",
   "settings.tabIgnorePatterns": "Pattern da ignorare",
-  "settings.ignorePatternsHint": "La scansione salta qualsiasi cartella o script corrispondente a un pattern, senza distinguere tra maiuscole e minuscole. Un pattern che termina con / corrisponde solo alle cartelle. In un pattern con caratteri jolly, * indica qualsiasi sequenza di caratteri in un nome, ? un solo carattere e ** un numero qualsiasi di cartelle; un nome da solo corrisponde a qualsiasi livello, mentre un pattern con una / prima della fine corrisponde a partire dalla directory radice. Un’espressione regolare viene cercata in qualsiasi punto del percorso completo.",
+  "settings.ignorePatternsHint": "La scansione salta qualsiasi cartella o script corrispondente a un pattern, senza distinguere tra maiuscole e minuscole. Un pattern che termina con / corrisponde solo alle cartelle. In un pattern con caratteri jolly, * indica qualsiasi sequenza di caratteri in un nome, ? un solo carattere, [abc] uno dei caratteri tra parentesi quadre e ** un numero qualsiasi di cartelle; un nome da solo corrisponde a qualsiasi livello, mentre un pattern con una / prima della fine corrisponde a partire dalla directory radice. Un’espressione regolare viene cercata in qualsiasi punto del percorso completo.",
   "settings.ignorePatternsEmpty": "Nessun pattern da ignorare, quindi vengono scansionate tutte le cartelle.",
   "settings.patternKind": "Tipo di pattern",
   "settings.patternWildcard": "Caratteri jolly",

@@ -13,7 +13,10 @@ namespace ScriptDock.Services;
 /// matches folders only.
 /// <list type="bullet">
 /// <item>A wildcard pattern reads names: <c>*</c> is any run of characters within a name, <c>?</c> one
-/// character and <c>**</c> any number of folders; every other character is itself. With no <c>/</c> other
+/// character, <c>[abc]</c> one of the characters listed (<c>[a-z]</c> a range, <c>[!abc]</c> or <c>[^abc]</c>
+/// any other) and <c>**</c> any number of folders, as in Git's ignore files, shells and ZipKit; every other
+/// character is itself, and a <c>[</c> with no closing <c>]</c> too. A name holding brackets is matched
+/// with a regular expression. With no <c>/</c> other
 /// than a trailing one it matches a file or folder name at any depth; with one inside it, or a leading one, it
 /// matches the path from the root directory being scanned, as in a .gitignore file.</item>
 /// <item>A regular expression is matched anywhere in the full path, with <c>/</c> between folders and a
@@ -99,7 +102,8 @@ public sealed class IgnoreRules
         return new Rule(pattern, new Regex("^" + WildcardRegex(body) + "$", Options, matchTimeout), byName: !anchored);
     }
 
-    // * is any run within a name, ? one character within it, ** any number of whole folders.
+    // * is any run within a name, ? one character within it, [...] one character from a class, ** any
+    // number of whole folders.
     private static string WildcardRegex(string body)
     {
         var regex = new StringBuilder();
@@ -128,12 +132,45 @@ public sealed class IgnoreRules
             {
                 regex.Append("[^/]");
             }
+            else if (c == '[' && CharacterClass(body, index) is { } @class)
+            {
+                regex.Append(@class.Regex);
+                index = @class.End;
+            }
             else
             {
                 regex.Append(Regex.Escape(c.ToString()));
             }
         }
         return regex.ToString();
+    }
+
+    // A class from the [ at start to its closing ], or null when it has none and so is a literal [. A ] first
+    // in the class, after any negation, is a member; a - between two members is a range; a class never
+    // matches the / between folders.
+    private static (string Regex, int End)? CharacterClass(string body, int start)
+    {
+        var index = start + 1;
+        var negated = index < body.Length && body[index] is '!' or '^';
+        if (negated)
+            index++;
+        var first = index;
+        while (index < body.Length && (body[index] != ']' || index == first))
+            index++;
+        if (index >= body.Length)
+            return null;
+
+        var members = new StringBuilder();
+        for (var at = first; at < index; at++)
+        {
+            var c = body[at];
+            if (c == '/')
+                continue;
+            members.Append(c == '-' && at > first && at < index - 1 ? "-" : Regex.Escape(c.ToString()).Replace("]", "\\]").Replace("-", "\\-"));
+        }
+        // The lookahead keeps a range that spans / (such as +-0) from matching it.
+        var regex = members.Length == 0 ? (negated ? "[^/]" : "(?!)") : $"(?!/)[{(negated ? "^" : "")}{members}]";
+        return (regex, index);
     }
 
     /// <summary>

@@ -58,6 +58,7 @@ public partial class DialogBase : Window
     private Control? _initialFocusControl;
     private bool _bypassCloseGuard;
     private bool _committing;
+    private bool _keepsOpeningHeight;
 
     /// <summary>Tag of the button the user activated, or <c>null</c> if the dialog was dismissed.</summary>
     public string? ResultTag { get; private set; }
@@ -146,6 +147,14 @@ public partial class DialogBase : Window
     protected void SetInitialFocus(Control control) => _initialFocusControl = control;
 
     /// <summary>
+    /// Keeps the height the dialog opens at, for a dialog with tabs (modal-dialog conventions, "A tabbed
+    /// dialog in its own window keeps one height across its tabs"): it opens at its first tab's height,
+    /// bounded as every dialog is, and a later tab scrolls in the body or leaves space below rather than
+    /// growing the window past the screen from where it was placed.
+    /// </summary>
+    protected void KeepOpeningHeight() => _keepsOpeningHeight = true;
+
+    /// <summary>
     /// Shows the dialog modally over <paramref name="owner"/>, bounded to a share of the owner's
     /// content height before the window is placed (modal-dialog conventions). Every owned dialog
     /// opens through here.
@@ -207,6 +216,14 @@ public partial class DialogBase : Window
 
     private void OnOpened(object? sender, EventArgs e)
     {
+        // Sizing to content would follow every tab; once placed, the height is fixed where it opened.
+        if (_keepsOpeningHeight)
+        {
+            var height = Bounds.Height;
+            SizeToContent = SizeToContent.Manual;
+            Height = height;
+        }
+
         var target = _initialFocusControl;
         if (target is null)
             return;

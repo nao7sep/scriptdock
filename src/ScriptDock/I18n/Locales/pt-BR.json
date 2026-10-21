@@ -230,7 +230,7 @@
   "settings.tabs": "Seções das configurações",
   "settings.tabGeneral": "Geral",
   "settings.tabIgnorePatterns": "Padrões a ignorar",
-  "settings.ignorePatternsHint": "O exame ignora qualquer pasta ou script que corresponda a um padrão, sem diferenciar maiúsculas de minúsculas. Um padrão terminado em / corresponde apenas a pastas. Em um padrão com curingas, * representa qualquer sequência de caracteres em um nome, ? um único caractere e ** qualquer número de pastas; um nome sozinho corresponde em qualquer nível, e um padrão com uma / antes do final corresponde a partir do diretório raiz. Uma expressão regular é procurada em qualquer parte do caminho completo.",
+  "settings.ignorePatternsHint": "O exame ignora qualquer pasta ou script que corresponda a um padrão, sem diferenciar maiúsculas de minúsculas. Um padrão terminado em / corresponde apenas a pastas. Em um padrão com curingas, * representa qualquer sequência de caracteres em um nome, ? um único caractere, [abc] um dos caracteres entre colchetes e ** qualquer número de pastas; um nome sozinho corresponde em qualquer nível, e um padrão com uma / antes do final corresponde a partir do diretório raiz. Uma expressão regular é procurada em qualquer parte do caminho completo.",
   "settings.ignorePatternsEmpty": "Nenhum padrão a ignorar, então todas as pastas são examinadas.",
   "settings.patternKind": "Tipo de padrão",
   "settings.patternWildcard": "Curingas",

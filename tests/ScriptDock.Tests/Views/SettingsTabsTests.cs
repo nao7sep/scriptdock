@@ -125,6 +125,35 @@ public sealed class SettingsTabsTests : WindowTest
         Assert.True(field.IsFocused);
     }
 
+    // The window is placed once, when shown, so a tab that grew it would push its footer off the screen: it
+    // opens at General's height and keeps it on every tab (modal-dialog conventions).
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Switching_tabs_changes_neither_the_height_nor_the_position(bool fewPatterns)
+    {
+        var config = fewPatterns ? new AppConfig { IgnorePatterns = [new("old/")] } : new AppConfig();
+        var draft = new SettingsDialogViewModel(config);
+        var dialog = Track(new SettingsDialog(draft, _ => Task.FromResult(true)));
+        dialog.MaxHeight = WindowMetrics.DialogMaxHeight(1400, 1);
+        dialog.Show();
+        Dispatcher.UIThread.RunJobs();
+        var (height, position) = (dialog.Bounds.Height, dialog.Position);
+        Assert.True(height < dialog.MaxHeight, "General fits this screen, so the dialog sized to it");
+
+        foreach (var tab in new[] { SettingsTab.IgnorePatterns, SettingsTab.General, SettingsTab.IgnorePatterns })
+        {
+            draft.Tab = tab;
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(height, dialog.Bounds.Height, 1);
+            Assert.Equal(position, dialog.Position);
+        }
+
+        // The list scrolls within that height when it is longer, and leaves space below when it is short.
+        var scroll = dialog.FindControl<ScrollViewer>("DialogScroll")!;
+        Assert.Equal(!fewPatterns, scroll.Extent.Height > scroll.Viewport.Height);
+    }
+
     // Each tab at a small screen's bound, in both themes, in the language with the longest words: the band
     // and footer stay in reach, the body scrolls, and nothing runs past the dialog's edges. The frames are
     // kept for a person to look at.

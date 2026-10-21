@@ -35,7 +35,8 @@
     </UserControl.Styles>
 
     <!-- Two tabs, chosen in the dialog's band above this body: General, and the ignore patterns, whose list
-         fills its tab. Only the shown tab's panel takes room, so the dialog fits the tab it shows. -->
+         fills its tab. The dialog opens at General's height and keeps it, so the list scrolls in the body
+         or leaves space below (modal-dialog conventions). -->
     <StackPanel Spacing="20">
     <StackPanel x:Name="GeneralPanel" Spacing="20" IsVisible="{Binding IsGeneralTab}">
 

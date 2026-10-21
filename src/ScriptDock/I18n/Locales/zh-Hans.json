@@ -216,7 +216,7 @@
   "settings.tabs": "设置分区",
   "settings.tabGeneral": "常规",
   "settings.tabIgnorePatterns": "忽略模式",
-  "settings.ignorePatternsHint": "扫描时会跳过与模式匹配的任何文件夹或脚本，不区分大小写。以 / 结尾的模式只匹配文件夹。在通配符模式中，* 表示名称中的任意字符，? 表示单个字符，** 表示任意数量的文件夹；只有名称的模式可在任意层级匹配，在结尾之前含有 / 的模式则从根目录开始匹配。正则表达式会在完整路径中的任意位置查找匹配。",
+  "settings.ignorePatternsHint": "扫描时会跳过与模式匹配的任何文件夹或脚本，不区分大小写。以 / 结尾的模式只匹配文件夹。在通配符模式中，* 表示名称中的任意字符，? 表示单个字符，[abc] 表示方括号中的任意一个字符，** 表示任意数量的文件夹；只有名称的模式可在任意层级匹配，在结尾之前含有 / 的模式则从根目录开始匹配。正则表达式会在完整路径中的任意位置查找匹配。",
   "settings.ignorePatternsEmpty": "没有忽略模式，因此会扫描所有文件夹。",
   "settings.patternKind": "模式类型",
   "settings.patternWildcard": "通配符",
