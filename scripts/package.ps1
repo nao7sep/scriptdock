@@ -17,6 +17,9 @@ New-Item -ItemType Directory -Force -Path dist | Out-Null
 
 # Self-contained win-x64 publish -> a folder of ScriptDock.exe + its runtime.
 dotnet publish $Project -c Release -r win-x64 --self-contained true -o publish-win
+if ($LASTEXITCODE -ne 0) {
+    throw "dotnet publish failed with exit code $LASTEXITCODE."
+}
 
 # Debug symbols are useful to developers but add about 105 MB of uncompressed
 # payload. Keep them in build outputs, not in the user-facing package.
@@ -45,5 +48,8 @@ if (-not $iscc) {
     throw "Inno Setup compiler not found. Install Inno Setup 6 for the current user or machine, or add ISCC.exe to PATH."
 }
 & $iscc "/DMyAppVersion=$Version" "/DMyAppName=$AppName" "/DMyAppPublisher=$Publisher" scripts/scriptdock.iss
+if ($LASTEXITCODE -ne 0) {
+    throw "Inno Setup compiler failed with exit code $LASTEXITCODE."
+}
 
 Get-ChildItem dist

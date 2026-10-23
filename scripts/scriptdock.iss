@@ -30,6 +30,7 @@ OutputDir=dist
 OutputBaseFilename={#MyAppName}-{#MyAppVersion}-setup
 Compression=lzma2
 SolidCompression=yes
+ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 SetupIconFile=src\ScriptDock\icon.ico
