@@ -111,6 +111,38 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
     }
 
     [WindowsOnlyFact]
+    public async Task Start_WindowsReportsAScriptRemovedBeforeInvocationAsFailure()
+    {
+        var script = Path.Combine(_dir, "removed.ps1");
+        File.WriteAllText(script, "Write-Output 'must-not-run'\n");
+        var runner = _fixture.Runner(configure: _ => File.Delete(script));
+        var handle = await StartAsync(runner, script);
+        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+        Assert.Equal(RunState.Exited, handle.State);
+        Assert.NotNull(handle.ExitCode);
+        Assert.NotEqual(0, handle.ExitCode);
+    }
+
+    [WindowsOnlyFact]
+    public async Task Start_WindowsSuccessfulScriptDoesNotInheritAPriorNativeExitCode()
+    {
+        var script = Path.Combine(_dir, "success.ps1");
+        File.WriteAllText(script, "Write-Output 'script-succeeded'\n");
+        var runner = _fixture.Runner(configure: start =>
+        {
+            // Reproduce the shell state left by a profile's native command without loading a
+            // developer profile. The production invocation and its exit expression stay intact.
+            var command = start.ArgumentList.IndexOf("-Command") + 1;
+            start.ArgumentList[command] = "& $env:ComSpec /d /c 'exit 23'; " + start.ArgumentList[command];
+        });
+        var handle = await StartAsync(runner, script);
+        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+        Assert.Equal(RunState.Exited, handle.State);
+        Assert.Equal(0, handle.ExitCode);
+        Assert.Contains("script-succeeded", handle.ReadConsoleOutput());
+    }
+
+    [WindowsOnlyFact]
     public async Task Start_WindowsBatchPathTakesPercentTokensLiterally()
     {
         // PATH is defined on Windows, so cmd expansion would point somewhere other than this fixture.
