@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -76,22 +77,35 @@ public sealed class CloseWindowShortcutTests : WindowTest
     }
 
     [AvaloniaFact]
-    public void On_the_main_window_it_runs_the_quit_flow_which_asks_while_scripts_run()
+    public async Task On_the_main_window_it_runs_the_quit_flow_which_asks_while_scripts_run()
     {
         var runner = new FakeProcessRunner();
         runner.AddRunning("/x/a.command");
         var vm = NewMainVm(runner);
         var main = Show(new MainWindow { DataContext = vm });
-        Assert.True(SettleUntil(vm.ShouldConfirmQuit));
+        try
+        {
+            Assert.True(SettleUntil(vm.ShouldConfirmQuit));
 
-        PressClose(main);
+            PressClose(main);
 
-        Assert.True(main.IsVisible);
-        var question = Track(Assert.Single(main.OwnedWindows));
-        Assert.Equal(0, runner.StopAllCalls);
-        question.Close(); // declining keeps the app open
-        Dispatcher.UIThread.RunJobs();
-        Assert.True(main.IsVisible);
+            Assert.True(main.IsVisible);
+            var question = Track(Assert.Single(main.OwnedWindows));
+            Assert.Equal(0, runner.StopAllCalls);
+            question.Close(); // declining keeps the app open
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(main.IsVisible);
+        }
+        finally
+        {
+            // The fake records StopAll without changing its process states. Settle the view model
+            // and detach it before fixture Close can open another confirmation after the test ends.
+            await vm.ShutdownAsync();
+            main.DataContext = null;
+            main.Close();
+            Assert.True(SettleUntil(() => !main.IsVisible));
+            Assert.Empty(main.OwnedWindows);
+        }
     }
 
     [AvaloniaFact]
