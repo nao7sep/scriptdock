@@ -669,7 +669,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             ScanReportLog.Write(_records, report);
 
             var candidate = new KnownPaths { Paths = catalog.ToList() };
-            await _knownPathsStore.SaveAsync(candidate);
+            await _knownPathsStore.SaveSnapshotAsync(candidate);
             cts.Token.ThrowIfCancellationRequested();
 
             // From the flags as they are now the save has settled, not as they were before it.

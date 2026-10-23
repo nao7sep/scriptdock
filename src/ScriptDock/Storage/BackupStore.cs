@@ -85,7 +85,8 @@ public static class BackupStore
     public static void Record(string absolutePath, byte[] bytes)
     {
         var session = Session;
-        Post(connection => Write(connection, absolutePath, bytes, session));
+        var writtenAtUtc = DateTimeOffset.UtcNow;
+        Post(connection => Write(connection, absolutePath, bytes, session, writtenAtUtc));
     }
 
     /// <summary>Waits until every recording queued before this call is applied. For tests.</summary>
@@ -178,7 +179,7 @@ public static class BackupStore
         }
     }
 
-    private static void Write(Connection owner, string absolutePath, byte[] bytes, string session)
+    private static void Write(Connection owner, string absolutePath, byte[] bytes, string session, DateTimeOffset writtenAtUtc)
     {
         var connection = Open(owner);
         if (connection is null)
@@ -210,7 +211,7 @@ public static class BackupStore
             upsert.Parameters.AddWithValue("$content", bytes);
             upsert.Parameters.AddWithValue("$hash", hash);
             upsert.Parameters.AddWithValue("$size", bytes.LongLength);
-            upsert.Parameters.AddWithValue("$writtenAt", TimestampConventions.IsoMillis(DateTimeOffset.UtcNow));
+            upsert.Parameters.AddWithValue("$writtenAt", TimestampConventions.IsoMillis(writtenAtUtc));
             upsert.ExecuteNonQuery();
         }
         catch (Exception ex)

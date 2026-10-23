@@ -31,8 +31,8 @@ sealed class Program
     {
         // The interface language, before anything can draw and before Avalonia creates the macOS
         // application object, which settles the language of the menu items AppKit contributes itself.
-        // It reads the saved preference straight from config.json and falls back to the computer's own
-        // languages, so it holds on the startup-failure path below, where there is no usable storage.
+        // Start in the computer language for storage failures; the one required config load below
+        // supplies the saved language before Avalonia initializes native UI.
         App.ComputerLanguages = LanguageBootstrap.Start();
 
         // Resolve and create the storage root before anything else reads or writes it.
@@ -85,6 +85,9 @@ sealed class Program
                 storageDir = StorageRoot.Directory,
                 debugLogging = Log.DebugEnabled,
             });
+            App.PreparedStores = System.Threading.Tasks.Task.Run(StartupStores.Load).GetAwaiter().GetResult();
+            Localizer.Use(App.PreparedStores.Config.Language, App.ComputerLanguages);
+            LanguageBootstrap.AlignAppKit(Localizer.Language);
             // On macOS a logout or shutdown ends the process as soon as the lifetime exits, before the
             // finally below runs, so what the quit logged is written here first, within the records' bound.
             return BuildAvaloniaApp().StartWithClassicDesktopLifetime(

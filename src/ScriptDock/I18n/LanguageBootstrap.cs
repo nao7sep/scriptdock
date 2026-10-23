@@ -1,7 +1,4 @@
 using System;
-using System.IO;
-using System.Text.Json;
-using ScriptDock.Storage;
 using static ScriptDock.Views.ObjC;
 
 namespace ScriptDock.I18n;
@@ -13,45 +10,19 @@ namespace ScriptDock.I18n;
 /// reader's language, and on macOS the items AppKit contributes itself — Services, Emoji &amp;
 /// Symbols, Start Dictation — are drawn in the language it settles on when the application object is
 /// created, which Avalonia does as it starts. So the language is resolved and handed to AppKit before
-/// the app is built, from the saved preference read straight out of <c>config.json</c>.
-///
-/// The read is deliberately its own, and forgiving: the real store quarantines a file it cannot
-/// parse, and that decision belongs to the app's startup path, not to a language lookup. A file that
-/// cannot be read here simply means System, and the startup-failure surfaces then speak the
-/// computer's language, which is what the localization conventions ask of them.
+/// the app is built. The required startup load supplies the saved preference; this helper does
+/// no independent file read. Before that load, startup failures use the computer's language.
 /// </summary>
 internal static class LanguageBootstrap
 {
     /// <summary>Resolves the language, tells the app, and points AppKit at it. Returns the computer's
     /// own languages, which the app keeps so a later change resolves System the same way.</summary>
-    internal static System.Collections.Generic.IReadOnlyList<string> Start()
+    internal static System.Collections.Generic.IReadOnlyList<string> Start(string preference = Languages.System)
     {
         var computerLanguages = ComputerLanguages.Read();
-        Localizer.Use(SavedPreference(), computerLanguages);
+        Localizer.Use(preference, computerLanguages);
         AlignAppKit(Localizer.Language);
         return computerLanguages;
-    }
-
-    /// <summary>The language preference in <c>config.json</c>, or System when there is none to read.</summary>
-    internal static string SavedPreference()
-    {
-        try
-        {
-            var path = Path.Combine(StorageRoot.Directory, AppPaths.ConfigFileName);
-            if (!File.Exists(path))
-                return Languages.System;
-
-            using var document = JsonDocument.Parse(File.ReadAllText(path));
-            return document.RootElement.ValueKind == JsonValueKind.Object
-                && document.RootElement.TryGetProperty("language", out var language)
-                && language.ValueKind == JsonValueKind.String
-                ? Languages.NormalizePreference(language.GetString())
-                : Languages.System;
-        }
-        catch (Exception)
-        {
-            return Languages.System;
-        }
     }
 
     /// <summary>

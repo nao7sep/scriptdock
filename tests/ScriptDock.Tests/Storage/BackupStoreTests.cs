@@ -50,6 +50,15 @@ public sealed class BackupStoreTests : IDisposable
 
     private sealed record Row(string Path, byte[] Content, string Sha256, long ByteSize, string WrittenAtUtc, string? Session);
 
+    private static void Post(Action work)
+    {
+        var post = typeof(BackupStore).GetMethod("Post", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var parameter = Expression.Parameter(post.GetParameters()[0].ParameterType.GenericTypeArguments[0]);
+        var queued = Expression.Lambda(post.GetParameters()[0].ParameterType,
+            Expression.Invoke(Expression.Constant(work)), parameter).Compile();
+        post.Invoke(null, [queued]);
+    }
+
     /// <summary>Reads every recorded row for a path, oldest first — a direct DB read so the assertion does
     /// not depend on any public read API the feature deliberately does not expose.</summary>
     private List<Row> RowsFor(string path)
@@ -93,12 +102,8 @@ public sealed class BackupStoreTests : IDisposable
         BackupStore.Flush();
         using var entered = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
-        var post = typeof(BackupStore).GetMethod("Post", BindingFlags.Static | BindingFlags.NonPublic)!;
-        var parameter = Expression.Parameter(post.GetParameters()[0].ParameterType.GenericTypeArguments[0]);
         Action hold = () => { entered.Set(); release.Wait(); };
-        var held = Expression.Lambda(post.GetParameters()[0].ParameterType,
-            Expression.Invoke(Expression.Constant(hold)), parameter).Compile();
-        post.Invoke(null, [held]);
+        Post(hold);
         var owner = (Thread)typeof(BackupStore).GetField("_owner", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
         try
         {
@@ -166,6 +171,37 @@ public sealed class BackupStoreTests : IDisposable
         var row = Assert.Single(RowsFor(path));
         Assert.Equal([1, 2, 3], row.Content);
         Assert.Equal("s1", row.Session);
+    }
+
+    [Fact]
+    public void Record_QueuedSavesKeepTheSaveInstantAndLatestContent()
+    {
+        var path = Path.Combine(_root, "doc.json");
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        Post(() => { entered.Set(); release.Wait(); });
+        DateTimeOffset before;
+        DateTimeOffset after;
+        try
+        {
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+            before = DateTimeOffset.UtcNow;
+            BackupStore.Record(path, [1]);
+            BackupStore.Record(path, [2]);
+            after = DateTimeOffset.UtcNow;
+            // Advance beyond the serialized millisecond before allowing the worker to dequeue.
+            Assert.True(SpinWait.SpinUntil(() => DateTimeOffset.UtcNow > after.AddMilliseconds(2),
+                TimeSpan.FromSeconds(5)));
+        }
+        finally
+        {
+            release.Set();
+        }
+
+        var row = Assert.Single(RowsFor(path));
+        Assert.Equal(new byte[] { 2 }, row.Content);
+        var writtenAt = DateTimeOffset.Parse(row.WrittenAtUtc);
+        Assert.InRange(writtenAt, before.AddMilliseconds(-1), after);
     }
 
     [Fact]
@@ -281,14 +317,16 @@ public sealed class BackupStoreTests : IDisposable
     public async Task JsonStoreSave_DoesNotWaitForTheHistory()
     {
         // Another connection holds the history locked, so recording waits out its busy timeout; the save
-        // still completes at once, and the row lands once the lock is gone.
+        // still completes while the lock is held, and the row lands once the lock is gone.
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
         var docPath = Path.Combine(_root, "doc.json");
         await store.SaveAsync(new SampleDoc { Name = "one" });
         BackupStore.Flush();
 
-        using (var holder = new SqliteConnection($"Data Source={StoreFile};Pooling=False"))
+        Task saving = Task.CompletedTask;
+        try
         {
+            using var holder = new SqliteConnection($"Data Source={StoreFile};Pooling=False");
             holder.Open();
             using (var lockIt = holder.CreateCommand())
             {
@@ -296,9 +334,20 @@ public sealed class BackupStoreTests : IDisposable
                 lockIt.ExecuteNonQuery();
             }
 
-            // Well inside the history's 1 s busy timeout, which a save inside the history's wait would exceed.
-            await store.SaveAsync(new SampleDoc { Name = "two" })
-                .WaitAsync(TimeSpan.FromMilliseconds(500), TestContext.Current.CancellationToken);
+            // The deadline is only a deadlock watchdog: completion is observed while the separate
+            // connection still owns its write lock, rather than asserting save performance.
+            saving = Task.Run(() => store.SaveAsync(new SampleDoc { Name = "two" }), TestContext.Current.CancellationToken);
+            await saving.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            using var query = holder.CreateCommand();
+            query.CommandText = "SELECT content FROM backups WHERE path = $path";
+            query.Parameters.AddWithValue("$path", docPath);
+            Assert.NotEqual(File.ReadAllBytes(docPath), (byte[])query.ExecuteScalar()!);
+        }
+        finally
+        {
+            // Release the lock before settling a save whose watchdog failed, while the disposable
+            // storage root is still installed.
+            await saving;
         }
 
         Assert.Equal(File.ReadAllBytes(docPath), Assert.Single(RowsFor(docPath)).Content);

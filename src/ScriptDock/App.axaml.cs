@@ -24,6 +24,7 @@ public partial class App : Application
 
     /// <summary>This session's records, opened by <c>Program</c> before the app was built.</summary>
     internal static IRecordStore? Records { get; set; }
+    internal static StartupStores? PreparedStores { get; set; }
 
     // The main window, which the app menu's About and Settings items open through. Null while a
     // startup failure is shown instead, when those items are disabled.
@@ -197,15 +198,16 @@ public partial class App : Application
     /// </summary>
     private static (MainWindowViewModel Main, Func<RecordsWindowViewModel> Records, IReadOnlyList<string> KeptSettings) CreateViewModels()
     {
-        var configStore = new ConfigStore();
-        var stateStore = AppStores.State();
-        var knownPathsStore = AppStores.KnownPaths();
-
-        var config = configStore.Load();
+        var stores = PreparedStores ?? throw new InvalidOperationException("Startup stores have not been loaded.");
+        stores.ThrowIfFailed();
+        var configStore = stores.ConfigStore;
+        var stateStore = stores.StateStore;
+        var knownPathsStore = stores.KnownPathsStore;
+        var config = stores.Config;
+        var state = stores.State;
+        var knownPaths = stores.KnownPaths;
         DisplayTime.Use(config.TimeZone);
         ExitCodes.Use(config.NonZeroExitIsError);
-        var state = stateStore.Load();
-        var knownPaths = knownPathsStore.Load();
 
         Log.Info("config", new
         {

@@ -43,7 +43,8 @@ namespace ScriptDock.Storage;
 /// regardless of how long either takes on a slow disk. The document itself is serialized to bytes
 /// synchronously, on the calling thread, before it is queued: callers hold one shared mutable
 /// document and mutate it in place, so the snapshot for a given call must be taken at the moment of
-/// the call, not whenever its turn in the queue happens to arrive.
+/// the call, not whenever its turn in the queue happens to arrive. Isolated owned snapshots can use
+/// <see cref="SaveSnapshotAsync"/> to serialize on a worker while retaining admission order.
 /// </remarks>
 public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
 {
@@ -59,6 +60,8 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
     // the order they were queued. Guarded by _queueGate since callers may queue from any thread.
     private readonly object _queueGate = new();
     private Task _queueTail = Task.CompletedTask;
+    private bool _publicationUnconfirmed;
+    internal Action<string, string> Publish { get; set; } = DurableFile.Publish;
 
     /// <summary>
     /// Creates a store rooted at <see cref="StorageRoot.Directory"/>.
@@ -90,29 +93,31 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
 
     public Task SaveAsync(T value)
     {
-        // Cheap, in-memory, CPU-only work: takes the exact snapshot the caller intends, right now,
-        // before the caller can mutate the shared document any further. Only the disk write below is
-        // queued off the calling thread.
+        return Queue(Task.FromResult(Serialize(value)));
+    }
+
+    // The caller transfers an isolated value; admission still happens synchronously, so worker
+    // scheduling cannot reorder saves. Shared mutable values must use SaveAsync instead.
+    public Task SaveSnapshotAsync(T snapshot) => Queue(Task.Run(() => Serialize(snapshot)));
+
+    private byte[] Serialize(T value)
+    {
         var document = JsonSerializer.SerializeToNode(value, JsonOptions.Default) as JsonObject
             ?? throw new InvalidOperationException($"The {_label} store's document is not a JSON object.");
         document.Insert(0, FormatVersionKey, _formatVersion);
-        var json = document.ToJsonString(JsonOptions.Default);
-        // Encode once to raw bytes and write those exact bytes, so the copy the backup records is
-        // byte-identical to what lands on disk (no re-encode, no BOM surprise). UTF-8 without a BOM,
-        // matching File.WriteAllText's default so the on-disk shape is unchanged from before.
-        var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(json);
+        return new UTF8Encoding(false).GetBytes(document.ToJsonString(JsonOptions.Default));
+    }
 
+    private Task Queue(Task<byte[]> bytes)
+    {
         lock (_queueGate)
-        {
-            _queueTail = ContinueQueue(_queueTail, bytes);
-            return _queueTail;
-        }
+            return _queueTail = ContinueQueue(_queueTail, bytes);
     }
 
     // Awaits the previous write (swallowing its failure — the call that queued it already observes
     // that failure on its own returned task) before running this write on a background thread, so
     // the queue never runs two writes to the same file at once and never runs them out of order.
-    private async Task ContinueQueue(Task previous, byte[] bytes)
+    private async Task ContinueQueue(Task previous, Task<byte[]> serialized)
     {
         try
         {
@@ -123,22 +128,18 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
             // Already surfaced to whoever queued that earlier write; this write proceeds regardless.
         }
 
+        var bytes = await serialized.ConfigureAwait(false);
         await Task.Run(() =>
         {
-            try
-            {
-                // A write that changes nothing is skipped (content-lifecycle-conventions).
-                if (MatchesFile(bytes))
-                    return;
-                StorageRoot.EnsureExists();
-                WriteAtomically(bytes);
-                Log.Info("store: saved", new { label = _label, path = _filePath });
-            }
-            catch (Exception ex)
-            {
-                Log.Error("store: save failed", ex, new { label = _label, path = _filePath });
-                throw;
-            }
+            if (!_publicationUnconfirmed && MatchesFile(bytes))
+                return;
+            StorageRoot.EnsureExists();
+            // A failed publication may already have renamed the file. An identical retry must
+            // confirm durability again rather than treating matching bytes as a completed save.
+            _publicationUnconfirmed = true;
+            WriteAtomically(bytes);
+            _publicationUnconfirmed = false;
+            Log.Info("store: saved", new { label = _label, path = _filePath });
         }).ConfigureAwait(false);
     }
 
@@ -171,7 +172,7 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
 
         try
         {
-            var document = JsonNode.Parse(json) as JsonObject
+            var document = JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { AllowDuplicateProperties = false }) as JsonObject
                 ?? throw new JsonException("The document is not a JSON object.");
             var found = FormatVersionOf(document);
             if (found > _formatVersion)
@@ -265,7 +266,11 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         {
             File.WriteAllBytes(tempPath, bytes);
 
-            if (File.Exists(_filePath))
+            if (_recordBackups)
+            {
+                Publish(tempPath, _filePath);
+            }
+            else if (File.Exists(_filePath))
             {
                 if (OperatingSystem.IsMacOS())
                     File.SetUnixFileMode(tempPath, File.GetUnixFileMode(_filePath));

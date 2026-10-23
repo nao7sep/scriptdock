@@ -62,6 +62,26 @@ public sealed class JsonStoreTests : IDisposable
         catch { /* best-effort cleanup */ }
     }
 
+    [Fact]
+    public async Task An_identical_retry_republishes_after_unconfirmed_durability()
+    {
+        var store = new JsonStore<SampleDoc>("retry.json", "test", 1);
+        var publications = 0;
+        store.Publish = (staging, destination) =>
+        {
+            publications++;
+            File.Move(staging, destination, overwrite: true);
+            if (publications == 1) throw new IOException("directory flush failed after rename");
+        };
+        var value = new SampleDoc { Name = "new bytes" };
+        await Assert.ThrowsAsync<IOException>(() => store.SaveAsync(value));
+        Assert.Equal("new bytes", store.Load().Name);
+        await store.SaveAsync(value);
+        Assert.Equal(2, publications);
+        await store.SaveAsync(value);
+        Assert.Equal(2, publications);
+    }
+
     private string PathOf(string fileName) => Path.Combine(_root, fileName);
 
     // The write-through backup store (backups.sqlite3, plus its WAL -wal/-shm sidecars) is a normal
@@ -70,6 +90,28 @@ public sealed class JsonStoreTests : IDisposable
         fileName == BackupStore.FileName ||
         fileName == BackupStore.FileName + "-wal" ||
         fileName == BackupStore.FileName + "-shm";
+
+    [Theory]
+    [InlineData("{\"name\":\"a\",\"name\":\"b\"}")]
+    [InlineData("{\"unknown\":{\"nested\":1,\"nested\":2}}")]
+    public void Load_DuplicateProperties_QuarantinesOriginal(string json)
+    {
+        File.WriteAllText(PathOf("doc.json"), json);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", 1);
+        Assert.Equal("", store.Load().Name);
+        Assert.False(File.Exists(PathOf("doc.json")));
+        Assert.Equal(json, File.ReadAllText(Assert.Single(Directory.GetFiles(_root, "*.invalid"))));
+    }
+
+    [Fact]
+    public async Task SnapshotSaves_PreserveAdmissionOrderWithSharedValueSaves()
+    {
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", 1, recordBackups: false);
+        var first = store.SaveSnapshotAsync(new SampleDoc { Name = "first", Items = new string[10000].ToList() });
+        var last = store.SaveAsync(new SampleDoc { Name = "last" });
+        await Task.WhenAll(first, last);
+        Assert.Equal("last", store.Load().Name);
+    }
 
     [Fact]
     public async Task SaveThenLoad_RoundTripsValue()
