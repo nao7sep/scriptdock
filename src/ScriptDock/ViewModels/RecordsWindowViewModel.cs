@@ -58,6 +58,9 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     // The busy claim for the next page, taken before the read starts.
     private bool _fetchingMore;
     private RecordCursor? _loadedThrough;
+    private bool _hasNewer;
+    public event Action<bool>? RowsChanging;
+    public event Action? RowsChanged;
     private Task? _refreshing;
     // New records arrived while the list was scrolled away from its top.
     private bool _newestPending;
@@ -187,6 +190,8 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
 
             if (value is not null && Rows.Count > 0 && ReferenceEquals(Rows[^1], value))
                 LoadMore();
+            else if (value is not null && Rows.Count > 0 && ReferenceEquals(Rows[0], value) && _hasNewer)
+                LoadPrevious();
         }
     }
 
@@ -212,6 +217,11 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     public void ListScrolled(bool atTop, bool nearEnd)
     {
         _atTop = atTop;
+        if (_hasNewer && atTop)
+        {
+            LoadPrevious();
+            return;
+        }
         if (_newestPending && atTop)
         {
             _newestPending = false;
@@ -330,6 +340,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         var query = _filters;
         _fetchingMore = false;
         _loadedThrough = null;
+        _hasNewer = false;
         _refreshing = null;
         _newestPending = false;
         _more = false;
@@ -376,12 +387,12 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         return _refreshing = RefreshLoadedAsync();
     }
 
-    // The loaded interval is authoritative: runs can leave a level filter after ending or enter a
+    // The resident interval is authoritative: runs can leave a level filter after ending or enter a
     // search after output is imported. Keep the floor even if every visible row stops matching.
     private async Task RefreshLoadedAsync()
     {
         var generation = _generation;
-        var query = _filters with { Through = _loadedThrough };
+        var query = _filters with { Through = _loadedThrough, From = _hasNewer && Rows.Count > 0 ? CursorOf(Rows[0].Summary) : null };
         RecordsPage page;
         try
         {
@@ -404,7 +415,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         }
         _liveSuspended = false;
         SyncRows(page.Records);
-        _loadedThrough ??= RecordsPaging.CursorAfter(page.Records);
+        _loadedThrough = RecordsPaging.CursorAfter(page.Records) ?? _loadedThrough;
         _more = page.More;
         ListStatus = RecordsListStatus.Ready;
         // Defer a coalesced successor until this refresh's task has settled.
@@ -447,12 +458,58 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         _fetchingMore = false;
         _liveSuspended = false;
         var keys = Rows.Select(row => row.Key).ToHashSet(StringComparer.Ordinal);
-        SyncRows([.. Summaries(), .. page.Records.Where(record => !keys.Contains(record.Key))]);
+        var expanded = Summaries().Concat(page.Records.Where(record => !keys.Contains(record.Key))).ToList();
+        if (expanded.Count > RecordsQuery.ResidentLimit)
+        {
+            expanded.RemoveRange(0, expanded.Count - RecordsQuery.ResidentLimit);
+            _hasNewer = true;
+        }
+        SyncRows(expanded, preserveAnchor: true);
         _loadedThrough = RecordsPaging.CursorAfter(page.Records) ?? _loadedThrough;
         _more = page.More;
         LoadingMore = false;
         if (_newestPending && _atTop)
             _ = ReadNewestAsync();
+    }
+
+    private static RecordCursor CursorOf(RecordSummary row) => new(row.Time, row.Kind, row.Id);
+
+    public void LoadPrevious() => _ = LoadPreviousAsync();
+
+    private async Task LoadPreviousAsync()
+    {
+        if (_disposed || !_hasNewer || _fetchingMore || Rows.Count == 0 || ListStatus != RecordsListStatus.Ready) return;
+        _fetchingMore = true;
+        LoadingMore = true;
+        MoreFailed = false;
+        var generation = _generation;
+        try
+        {
+            if (_refreshing is { IsCompleted: false } refresh) await refresh;
+            if (_disposed || generation != _generation) return;
+            var page = await Bounded("page", token => _reader.ReadRecordsPageAsync(_filters with { Before = CursorOf(Rows[0].Summary) }, token));
+            if (_disposed || generation != _generation) return;
+            var keys = page.Records.Select(row => row.Key).ToHashSet(StringComparer.Ordinal);
+            var expanded = page.Records.Concat(Summaries().Where(row => !keys.Contains(row.Key))).ToList();
+            if (expanded.Count > RecordsQuery.ResidentLimit)
+            {
+                expanded.RemoveRange(RecordsQuery.ResidentLimit, expanded.Count - RecordsQuery.ResidentLimit);
+                _more = true;
+            }
+            _hasNewer = page.More;
+            SyncRows(expanded, preserveAnchor: true);
+            _loadedThrough = RecordsPaging.CursorAfter(expanded);
+            _liveSuspended = false;
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            if (generation == _generation) { ReadFailed(ex, "previous page"); MoreFailed = true; }
+        }
+        finally
+        {
+            if (generation == _generation) { _fetchingMore = false; LoadingMore = false; }
+        }
     }
 
     private async Task ReadSourcesAsync()
@@ -752,8 +809,9 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
 
     // The rows become exactly the given summaries, newest first. A row whose summary is unchanged keeps its
     // object, so the list keeps its selection and scroll position; the selection is then restored by key.
-    private void SyncRows(IReadOnlyList<RecordSummary> desired)
+    private void SyncRows(IReadOnlyList<RecordSummary> desired, bool preserveAnchor = false)
     {
+        RowsChanging?.Invoke(preserveAnchor);
         _syncingRows = true;
         try
         {
@@ -785,6 +843,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         _selectedRecord = _selectedKey is null ? null : Rows.FirstOrDefault(row => row.Key == _selectedKey);
         OnPropertyChanged(nameof(SelectedRecord));
         OnPropertyChanged(nameof(ShowEmptyNote));
+        RowsChanged?.Invoke();
     }
 
     // A run's level is read under the setting, so the list is read again, a level filter's members

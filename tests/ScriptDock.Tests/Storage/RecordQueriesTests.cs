@@ -86,6 +86,28 @@ public sealed class RecordQueriesTests : IDisposable
     private static Task<RecordsPage> Page(RecordStore records, RecordsQuery query) => records.ReadRecordsPageAsync(query, cancellation: TestContext.Current.CancellationToken);
 
     [Fact]
+    public async Task ResidentRefreshIsBoundedAndReversePagesReachTheNearestNewerRecords()
+    {
+        using var records = new RecordStore(_dir, SessionStart);
+        for (var index = 1; index <= 700; index++) await records.AddRunAsync(Run(index, $"/{index}.command"));
+        var refreshed = await Page(records, RecordsQuery.All with { Through = new RecordCursor(At(1), RecordKind.Run, 1) });
+        Assert.Equal(RecordsQuery.ResidentLimit, refreshed.Records.Count);
+        Assert.True(refreshed.More);
+        var previous = await Page(records, RecordsQuery.All with { Before = new RecordCursor(At(300), RecordKind.Run, 300) });
+        Assert.Equal(400, previous.Records[0].Id);
+        Assert.Equal(301, previous.Records[^1].Id);
+        Assert.True(previous.More);
+        var bounded = await Page(records, RecordsQuery.All with
+        {
+            From = new RecordCursor(At(400), RecordKind.Run, 400),
+            Through = new RecordCursor(At(201), RecordKind.Run, 201),
+        });
+        Assert.Equal(200, bounded.Records.Count);
+        Assert.Equal(400, bounded.Records[0].Id);
+        Assert.Equal(201, bounded.Records[^1].Id);
+    }
+
+    [Fact]
     public async Task LargeScanReportHasABoundedPreviewAndACompleteIndependentExport()
     {
         using var records = new RecordStore(_dir, SessionStart);

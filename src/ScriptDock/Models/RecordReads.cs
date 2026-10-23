@@ -70,6 +70,11 @@ public sealed record RecordsQuery(
     /// <summary>Whether a run that exited with a code other than 0 reads as an error (<see cref="Services.ExitCodes"/>).</summary>
     public bool NonZeroExitIsError { get; init; }
 
+    // Three ordinary pages cover the visible neighborhood without retaining the whole browsing session.
+    public const int ResidentLimit = 300;
+    public RecordCursor? Before { get; init; }
+    public RecordCursor? From { get; init; }
+
     public static readonly RecordsQuery All = new(null, null, null, string.Empty, null);
 }
 

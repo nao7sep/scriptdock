@@ -99,27 +99,43 @@ internal static class RecordQueries
             command.Parameters.AddWithValue("$afterId", cursor.Id);
         }
 
+        if (query.Before is { } before)
+        {
+            after = "WHERE (time, kind, id) > ($beforeTime, $beforeKind, $beforeId)";
+            command.Parameters.AddWithValue("$beforeTime", before.Time);
+            command.Parameters.AddWithValue("$beforeKind", RecordKinds.Name(before.Kind));
+            command.Parameters.AddWithValue("$beforeId", before.Id);
+        }
+        var upper = "";
+        if (query.From is { } from)
+        {
+            upper = " AND (time, kind, id) <= ($fromTime, $fromKind, $fromId)";
+            command.Parameters.AddWithValue("$fromTime", from.Time);
+            command.Parameters.AddWithValue("$fromKind", RecordKinds.Name(from.Kind));
+            command.Parameters.AddWithValue("$fromId", from.Id);
+        }
+
         var filtered = string.Join(" UNION ALL ", parts);
         if (query.Through is { } through)
         {
             command.Parameters.AddWithValue("$throughTime", through.Time);
             command.Parameters.AddWithValue("$throughKind", RecordKinds.Name(through.Kind));
             command.Parameters.AddWithValue("$throughId", through.Id);
-            // Refresh the entire already-loaded interval and one existence sentinel below it. This
-            // makes membership and More one snapshot without sorting/materializing all older history.
+            // Refresh the resident interval and one existence sentinel below it. The hard page bound
+            // keeps a burst of new records from materializing the entire accumulated history.
             command.CommandText = $"WITH filtered AS NOT MATERIALIZED ({filtered}) " +
                 "SELECT kind, id, session, time, level, title, text, found, 0 AS older FROM filtered " +
-                "WHERE (time, kind, id) >= ($throughTime, $throughKind, $throughId) UNION ALL " +
+                "WHERE (time, kind, id) >= ($throughTime, $throughKind, $throughId)" + upper + " UNION ALL " +
                 "SELECT kind, id, session, time, level, title, text, found, 1 AS older FROM " +
                 "(SELECT * FROM filtered WHERE (time, kind, id) < ($throughTime, $throughKind, $throughId) LIMIT 1) " +
-                "ORDER BY time DESC, kind DESC, id DESC";
+                $"ORDER BY time DESC, kind DESC, id DESC LIMIT {RecordsQuery.ResidentLimit + 1}";
         }
         else
         {
             command.Parameters.AddWithValue("$limit", PageSize + 1);
             command.CommandText =
                 $"SELECT kind, id, session, time, level, title, text, found, 0 AS older FROM ({filtered}) {after} " +
-                "ORDER BY time DESC, kind DESC, id DESC LIMIT $limit";
+                (query.Before is null ? "ORDER BY time DESC, kind DESC, id DESC LIMIT $limit" : "ORDER BY time ASC, kind ASC, id ASC LIMIT $limit");
         }
 
         var records = new List<RecordSummary>();
@@ -139,11 +155,13 @@ internal static class RecordQueries
                 reader.IsDBNull(7) ? null : reader.GetInt32(7)));
         }
 
-        if (query.Through is null && records.Count > PageSize)
+        var limit = query.Through is null ? PageSize : RecordsQuery.ResidentLimit;
+        if (records.Count > limit)
         {
             more = true;
             records.RemoveAt(records.Count - 1);
         }
+        if (query.Before is not null) records.Reverse();
         return new RecordsPage(records, more);
     }
 
