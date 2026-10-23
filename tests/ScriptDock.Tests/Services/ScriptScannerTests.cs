@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using System.Threading;
 using ScriptDock;
 using ScriptDock.Models;
 using ScriptDock.Services;
@@ -37,6 +38,39 @@ public sealed class ScriptScannerTests : IDisposable
         var full = Path.Combine(_root, relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
         File.WriteAllText(full, "#");
+    }
+
+    [Fact]
+    public void Scan_identity_map_is_reused_by_preparation_and_refreshed_by_the_next_scan()
+    {
+        Touch("a.command");
+        var calls = new System.Collections.Generic.Dictionary<string, int>();
+        var generation = "first";
+        string Key(string path)
+        {
+            calls[path] = (calls.TryGetValue(path, out var count) ? count : 0) + 1;
+            return generation + path;
+        }
+        var scanner = new ScriptScanner(File.GetAttributes, Key);
+        var first = scanner.Scan([_root, _root], [".command"], [], TestContext.Current.CancellationToken);
+        var cache = new PathKeyCache(_ => throw new InvalidOperationException("identity was already prepared"));
+        var prepared = cache.Prepare(first.Found, TestContext.Current.CancellationToken, first.PathKeys);
+        Assert.All(calls.Values, count => Assert.Equal(1, count));
+        Assert.Equal("first" + first.Found[0], prepared[first.Found[0]]);
+        generation = "second";
+        var second = scanner.Scan([_root], [".command"], [], TestContext.Current.CancellationToken);
+        Assert.Equal("second" + first.Found[0], second.PathKeys[first.Found[0]]);
+        Assert.All(calls.Values, count => Assert.Equal(2, count));
+    }
+
+    [Fact]
+    public void Preparation_stops_resolving_paths_when_cancelled()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var calls = 0;
+        var cache = new PathKeyCache(path => { calls++; cancellation.Cancel(); return path; });
+        Assert.Throws<OperationCanceledException>(() => cache.Prepare(["one", "two", "three"], cancellation.Token));
+        Assert.Equal(1, calls);
     }
 
     [Fact]
@@ -123,6 +157,53 @@ public sealed class ScriptScannerTests : IDisposable
         // Found once, via the real directory only — the symlink is not followed (no loop, no dup).
         Assert.Single(report.Found, p => Path.GetFileName(p) == "x.command");
         Assert.DoesNotContain(report.Found, p => p.Contains($"{Path.DirectorySeparatorChar}link{Path.DirectorySeparatorChar}"));
+        Assert.Empty(report.Inaccessible);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Scan_FailedAttributeProbe_PreservesOnlyTheUnobservedSubtree(bool denied)
+    {
+        Touch("locked/remembered.command");
+        Touch("ok/new.command");
+        var locked = Path.Combine(_root, "locked");
+        var remembered = Path.Combine(locked, "remembered.command");
+        var deleted = Path.Combine(_root, "ok", "deleted.command");
+        var scanner = new ScriptScanner(path => path == locked
+            ? throw (denied ? (Exception)new UnauthorizedAccessException("denied") : new IOException("unavailable"))
+            : File.GetAttributes(path));
+
+        var report = scanner.Scan([_root], [".command"], [], TestContext.Current.CancellationToken);
+        var catalog = ScanCatalog.Paths(report, [remembered, deleted], PathIdentity.Key);
+
+        Assert.Equal(locked, Assert.Single(report.Inaccessible));
+        Assert.Equal(Path.Combine(_root, "ok", "new.command"), Assert.Single(report.Found));
+        Assert.Contains(remembered, catalog);
+        Assert.DoesNotContain(deleted, catalog);
+        Assert.Contains(Path.Combine(_root, "ok", "new.command"), catalog);
+    }
+
+    [Fact]
+    public void Scan_CancellationDuringFinalPathIdentityResolution_StopsTheScan()
+    {
+        Touch("a.command");
+        Touch("b.command");
+        using var cancellation = new CancellationTokenSource();
+        var resolved = 0;
+        var scanner = new ScriptScanner(File.GetAttributes, path =>
+        {
+            // Root de-duplication resolves first. Cancel only when final found-file preparation starts.
+            if (Path.GetExtension(path) == ".command")
+            {
+                resolved++;
+                cancellation.Cancel();
+            }
+            return PathIdentity.Key(path);
+        });
+
+        Assert.Throws<OperationCanceledException>(() => scanner.Scan([_root], [".command"], [], cancellation.Token));
+        Assert.Equal(1, resolved);
     }
 
     [WindowsOnlyFact]
@@ -159,6 +240,35 @@ public sealed class ScriptScannerTests : IDisposable
             Assert.Contains(Path.Combine(_root, "ok", "x.ps1"), report.Found);
             Assert.Contains(locked.FullName, report.Inaccessible);
             Assert.DoesNotContain(Path.Combine(locked.FullName, "y.ps1"), report.Found);
+        }
+        finally { locked.SetAccessControl(original); }
+    }
+
+    [WindowsOnlyFact]
+    public void Scan_DeniedDirectoryAttributes_PreserveItsRememberedScripts()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Touch("locked/remembered.ps1");
+        Touch("ok/new.ps1");
+        var locked = new DirectoryInfo(Path.Combine(_root, "locked"));
+        var remembered = Path.Combine(locked.FullName, "remembered.ps1");
+        var deleted = Path.Combine(_root, "ok", "deleted.ps1");
+        var original = locked.GetAccessControl();
+        var denied = locked.GetAccessControl();
+        using var identity = WindowsIdentity.GetCurrent();
+        denied.AddAccessRule(new FileSystemAccessRule(identity.User!, FileSystemRights.ReadAttributes, AccessControlType.Deny));
+        try
+        {
+            locked.SetAccessControl(denied);
+            Assert.Throws<UnauthorizedAccessException>(() => File.GetAttributes(locked.FullName));
+
+            var report = new ScriptScanner().Scan([_root], [".ps1"], [], TestContext.Current.CancellationToken);
+            var catalog = ScanCatalog.Paths(report, [remembered, deleted], PathIdentity.Key);
+
+            Assert.Contains(locked.FullName, report.Inaccessible);
+            Assert.Contains(remembered, catalog);
+            Assert.DoesNotContain(deleted, catalog);
+            Assert.Contains(Path.Combine(_root, "ok", "new.ps1"), catalog);
         }
         finally { locked.SetAccessControl(original); }
     }

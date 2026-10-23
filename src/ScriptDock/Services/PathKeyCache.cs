@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace ScriptDock.Services;
 
@@ -25,11 +26,15 @@ public sealed class PathKeyCache
 
     // Preparing a superseded operation must not alter the live projection. Its caller adopts this
     // snapshot only after checking currentness; decisions for that operation use the same prepared keys.
-    public IReadOnlyDictionary<string, string> Prepare(IEnumerable<string> paths)
+    public IReadOnlyDictionary<string, string> Prepare(IEnumerable<string> paths, CancellationToken cancellationToken = default, IReadOnlyDictionary<string, string>? resolved = null)
     {
-        var prepared = new Dictionary<string, string>(StringComparer.Ordinal);
+        var prepared = resolved is null ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : new Dictionary<string, string>(resolved, StringComparer.Ordinal);
         foreach (var path in paths)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!prepared.ContainsKey(path)) prepared[path] = _resolve(path);
+        }
         return prepared;
     }
 

@@ -65,7 +65,7 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         using var releaseRecent = new ManualResetEventSlim();
         using var releaseScan = new ManualResetEventSlim();
         var probes = 0;
-        var keys = new PathKeyCache(value =>
+        string Resolve(string value)
         {
             if (value != path) return value;
             var probe = Interlocked.Increment(ref probes);
@@ -75,8 +75,10 @@ public sealed class ScanSettlementTests : IAsyncLifetime
             }
             if (probe == 3) { followingScanEntered.TrySetResult(); releaseScan.Wait(); }
             return path + "-current-target";
-        });
+        }
+        var keys = new PathKeyCache(Resolve);
         typeof(MainWindowViewModel).GetField("_keys", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(vm, keys);
+        typeof(MainWindowViewModel).GetField("_scanner", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(vm, new ScriptScanner(File.GetAttributes, Resolve));
         var startup = Track(vm.InitializeAsync());
         Task? manual = null;
         try
@@ -107,7 +109,7 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var release = new ManualResetEventSlim();
         var probes = 0;
-        var keys = new PathKeyCache(value =>
+        string Resolve(string value)
         {
             if (value != path) return value;
             if (Interlocked.Increment(ref probes) == 1)
@@ -117,8 +119,10 @@ public sealed class ScanSettlementTests : IAsyncLifetime
                 return path + "-superseded-target";
             }
             return path + "-current-target";
-        });
+        }
+        var keys = new PathKeyCache(Resolve);
         typeof(MainWindowViewModel).GetField("_keys", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(vm, keys);
+        typeof(MainWindowViewModel).GetField("_scanner", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(vm, new ScriptScanner(File.GetAttributes, Resolve));
         var earlier = Track(vm.RescanCommand.ExecuteAsync(null));
         Task? current = null;
         try
@@ -132,6 +136,7 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         finally
         {
             release.Set();
+            _store.ReleaseAll();
             await earlier;
             if (current is not null) await current;
         }
@@ -204,12 +209,14 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         var path = Path.Combine(_root, "gone.command");
         _known.Paths = [path];
         var vm = Build();
-        var keys = new PathKeyCache(value =>
+        string Resolve(string value)
         {
             Assert.False(Dispatcher.UIThread.CheckAccess());
             return PathIdentity.Key(value);
-        });
+        }
+        var keys = new PathKeyCache(Resolve);
         typeof(MainWindowViewModel).GetField("_keys", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(vm, keys);
+        typeof(MainWindowViewModel).GetField("_scanner", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(vm, new ScriptScanner(File.GetAttributes, Resolve));
         var scan = Track(vm.RescanCommand.ExecuteAsync(null));
         var held = await _store.NextAsync();
         Assert.Empty(vm.Scripts);

@@ -2,7 +2,6 @@ using ScriptDock.Models;
 using ScriptDock.Services;
 using Xunit;
 using System;
-using System.Diagnostics;
 using System.Threading;
 
 namespace ScriptDock.Tests.Services;
@@ -149,9 +148,9 @@ public sealed class IgnoreRulesTests
         Assert.Null(rules.FirstMatch("/", hostile, isDirectory: false));
         Assert.Contains("(a+)+$", rules.InvalidPatterns);
 
-        var stopwatch = Stopwatch.StartNew();
+        // This input would match the timed-out rule if it were still enabled.
+        Assert.Null(rules.FirstMatch("/", "/aaaa", isDirectory: false));
         Assert.Equal("safe$", rules.FirstMatch("/", "/safe", isDirectory: false)?.Pattern);
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromMilliseconds(100));
     }
 
     [Fact]

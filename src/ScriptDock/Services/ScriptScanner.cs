@@ -16,6 +16,17 @@ namespace ScriptDock.Services;
 /// </summary>
 public sealed class ScriptScanner
 {
+    private readonly Func<string, FileAttributes> _getAttributes;
+    private readonly Func<string, string> _pathKey;
+
+    public ScriptScanner() : this(File.GetAttributes, PathIdentity.Key) { }
+
+    internal ScriptScanner(Func<string, FileAttributes> getAttributes, Func<string, string>? pathKey = null)
+    {
+        _getAttributes = getAttributes;
+        _pathKey = pathKey ?? PathIdentity.Key;
+    }
+
     public ScanReport Scan(
         IReadOnlyList<string> rootDirs,
         IReadOnlyList<string> extensions,
@@ -23,6 +34,13 @@ public sealed class ScriptScanner
         CancellationToken cancellationToken = default)
     {
         var rules = IgnoreRules.Compile(ignorePatterns);
+        var identities = new Dictionary<string, string>(StringComparer.Ordinal);
+        string Key(string path)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!identities.TryGetValue(path, out var key)) identities[path] = key = _pathKey(path);
+            return key;
+        }
 
         // Normalize each configured extension to the leading-dot form Path.GetExtension returns, and
         // drop blanks. The Settings dialog normalizes on entry, but config.json is an editable surface
@@ -43,7 +61,7 @@ public sealed class ScriptScanner
         var roots = rootDirs
             .Where(r => !string.IsNullOrWhiteSpace(r))
             .Select(Path.GetFullPath)
-            .GroupBy(PathIdentity.Key, PathIdentity.Comparer)
+            .GroupBy(Key, PathIdentity.Comparer)
             .Select(group => group.First())
             .ToList();
 
@@ -79,8 +97,18 @@ public sealed class ScriptScanner
             foreach (var subDir in subDirs)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (IsSymbolicLink(subDir))
+                try
+                {
+                    if ((_getAttributes(subDir) & FileAttributes.ReparsePoint) != 0)
+                        continue;
+                }
+                catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+                {
+                    // An unavailable attribute probe cannot establish that this is an excluded link.
+                    // Mark the subtree unobserved so remembered scripts survive the incomplete scan.
+                    inaccessible.Add(subDir);
                     continue;
+                }
 
                 var match = rules.FirstMatchCancellable(root, subDir, isDirectory: true, cancellationToken);
                 if (match is not null)
@@ -107,25 +135,13 @@ public sealed class ScriptScanner
         {
             CompletedAt = DateTimeOffset.UtcNow,
             Roots = roots,
-            Found = SortedPaths(found),
+            Found = SortedPaths(found, cancellationToken, Key),
             PrunedDirectories = SortedEntries(prunedDirectories),
             SkippedFiles = SortedEntries(skippedFiles),
-            Inaccessible = SortedPaths(inaccessible),
+            Inaccessible = SortedPaths(inaccessible, cancellationToken, Key),
+            PathKeys = identities,
             InvalidPatterns = rules.InvalidPatterns,
         };
-    }
-
-    private static bool IsSymbolicLink(string path)
-    {
-        try
-        {
-            return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
-        }
-        catch
-        {
-            // If attributes cannot be read, err toward not descending.
-            return true;
-        }
     }
 
     private static string UnreadableRoot(string root)
@@ -149,12 +165,17 @@ public sealed class ScriptScanner
         return root;
     }
 
-    private static IReadOnlyList<string> SortedPaths(List<string> values)
+    private static IReadOnlyList<string> SortedPaths(List<string> values, CancellationToken cancellationToken, Func<string, string> key)
     {
         // Distinct: overlapping or nested roots (e.g. /code and /code/proj) enumerate the same file
         // under more than one walk, so dedup by physical identity — otherwise a script shows as a duplicate
         // tile and the status-bar total/hidden counts (derived from Found.Count) are inflated.
-        var distinct = values.DistinctBy(PathIdentity.Key, PathIdentity.Comparer).ToList();
+        var distinct = values.DistinctBy(path =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return key(path);
+        }, PathIdentity.Comparer).ToList();
+        cancellationToken.ThrowIfCancellationRequested();
         distinct.Sort(StringComparer.Ordinal);
         return distinct;
     }

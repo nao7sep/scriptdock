@@ -326,7 +326,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             {
                 version = _recentVersion;
                 recent = await _records.ReadRecentAsync();
-                prepared = await Task.Run(() => _keys.Prepare(recent.Select(run => run.Path)));
+                prepared = await Task.Run(() => _keys.Prepare(recent.Select(run => run.Path), resolved: recent.Where(run => run.PathKey is not null).ToDictionary(run => run.Path, run => run.PathKey!, StringComparer.Ordinal)));
             }
             while (version != _recentVersion);
 
@@ -659,7 +659,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             var (report, catalog, diff, prepared) = await Task.Run(() =>
             {
                 var found = _scanner.Scan(roots, extensions, patterns, cts.Token);
-                var identities = _keys.Prepare(found.Found.Concat(otherPaths).Concat(known ?? []).Concat(previouslyShown).Concat(found.Inaccessible));
+                var identities = _keys.Prepare(found.Found.Concat(otherPaths).Concat(known ?? []).Concat(previouslyShown).Concat(found.Inaccessible), cts.Token, found.PathKeys);
                 string Key(string path) => identities[path];
                 var paths = ScanCatalog.Paths(found, (known ?? []).Concat(previouslyShown), Key)
                     .DistinctBy(Key, PathIdentity.Comparer).ToList();

@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -220,8 +221,18 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
             Runs: LatestRuns(connection),
             Dismissals: LatestByScript(connection, "SELECT script, MAX(time) FROM dismissals GROUP BY script")))
             .ConfigureAwait(false);
-        return await Task.Run(() => RecentRuns.From(snapshot.Runs, snapshot.Dismissals, pathKey: pathKey))
-            .ConfigureAwait(false);
+        return await Task.Run(() =>
+        {
+            var identities = new Dictionary<string, string>(StringComparer.Ordinal);
+            string Key(string path)
+            {
+                if (!identities.TryGetValue(path, out var key)) identities[path] = key = pathKey(path);
+                return key;
+            }
+            var recent = RecentRuns.From(snapshot.Runs, snapshot.Dismissals, pathKey: Key);
+            foreach (var run in recent) run.PathKey = Key(run.Path);
+            return recent;
+        }).ConfigureAwait(false);
     }
 
     public void AddScanReport(ScanReport report)
