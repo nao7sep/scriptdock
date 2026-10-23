@@ -19,8 +19,8 @@ namespace ScriptDock.Storage;
 /// <c>records.sqlite3</c> under the storage root: log lines, runs, run ends, run output, dismissals from the
 /// Recent list and scan reports, each carrying
 /// the session it came from, per the data-lifecycle-conventions' Records section and the logging-conventions.
-/// One thread owns the connection and runs every write and read in the order it was queued, so no caller
-/// waits on the disk. A write that fails is appended to this session's plain text file under <c>logs/</c>,
+/// One thread serializes writes and Recent reads. Browsing has its own cancellable reader; streamed
+/// exports use a separately owned connection, so neither blocks the other or the writer. A write that fails is appended to this session's plain text file under <c>logs/</c>,
 /// then to the console. The Records window's reads are <see cref="RecordQueries"/>.
 /// </summary>
 public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
@@ -46,6 +46,8 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
           line    TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_logs_session ON logs (session);
+        CREATE INDEX IF NOT EXISTS idx_logs_time ON logs (time DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_logs_session_time ON logs (session, time DESC, id DESC);
         CREATE TABLE IF NOT EXISTS runs (
           id            INTEGER PRIMARY KEY,
           session       TEXT NOT NULL,
@@ -58,6 +60,8 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
           UNIQUE (session, run)
         );
         CREATE INDEX IF NOT EXISTS idx_runs_output_path ON runs (output_path);
+        CREATE INDEX IF NOT EXISTS idx_runs_time ON runs (time DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_runs_session_time ON runs (session, time DESC, id DESC);
         CREATE TABLE IF NOT EXISTS run_ends (
           id          INTEGER PRIMARY KEY,
           session     TEXT NOT NULL,
@@ -76,6 +80,14 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
           output  BLOB NOT NULL,
           UNIQUE (session, run)
         );
+        CREATE TABLE IF NOT EXISTS output_files (
+          session TEXT NOT NULL,
+          run INTEGER NOT NULL,
+          length INTEGER NOT NULL,
+          modified INTEGER NOT NULL,
+          created INTEGER NOT NULL,
+          PRIMARY KEY (session, run)
+        );
         CREATE TABLE IF NOT EXISTS dismissals (
           id      INTEGER PRIMARY KEY,
           session TEXT NOT NULL,
@@ -88,10 +100,12 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
           time    TEXT NOT NULL,
           report  TEXT NOT NULL
         );
+        CREATE INDEX IF NOT EXISTS idx_scans_time ON scan_reports (time DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_scans_session_time ON scan_reports (session, time DESC, id DESC);
         """;
 
     // The tables Schema creates, which an unversioned database from an earlier build may hold a subset of.
-    private static readonly HashSet<string> Tables = ["logs", "runs", "run_ends", "run_outputs", "dismissals", "scan_reports"];
+    private static readonly HashSet<string> Tables = ["logs", "runs", "run_ends", "run_outputs", "dismissals", "scan_reports", "output_files"];
 
     private static readonly JsonSerializerOptions LineOptions = new(JsonOptions.Default)
     {
@@ -106,7 +120,11 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
 
     // The Records window's reader, started on its first read.
     private readonly object _windowGate = new();
-    private BlockingCollection<Action>? _windowQueue;
+    private sealed record WindowOperation(Action Run, Action Cancel, CancellationToken Token);
+    private readonly Dictionary<object, WindowOperation> _windowPending = [];
+    private readonly AutoResetEvent _windowReady = new(false);
+    private readonly CancellationTokenSource _closing = new();
+    private readonly SemaphoreSlim _exportGate = new(1, 1);
     private Thread? _windowReader;
     private SqliteConnection? _windowConnection;
     private int _disposed;
@@ -264,17 +282,55 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
     // The Records window's reads run on their own thread over a read-only connection, so a long search
     // never holds up the writes, the Recent list or the quit's flush queued behind it; WAL lets a reader
     // and the writer work side by side.
-    public Task<RecordsPage> ReadRecordsPageAsync(RecordsQuery query) =>
-        WindowRead(connection => RecordQueries.ReadPage(connection, query));
+    public Task<RecordsPage> ReadRecordsPageAsync(RecordsQuery query) => ReadRecordsPageAsync(query, CancellationToken.None);
+    public Task<RecordsPage> ReadRecordsPageAsync(RecordsQuery query, CancellationToken cancellation) =>
+        WindowRead(connection => RecordQueries.ReadPage(connection, query), cancellation);
 
     public Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id, bool nonZeroExitIsError = false) =>
-        WindowRead(connection => RecordQueries.ReadDetail(connection, kind, id, nonZeroExitIsError));
+        ReadRecordDetailAsync(kind, id, nonZeroExitIsError, CancellationToken.None);
+    public Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id, bool nonZeroExitIsError, CancellationToken cancellation) =>
+        WindowRead(connection => RecordQueries.ReadDetail(connection, kind, id, nonZeroExitIsError), cancellation);
 
-    public Task<bool> ReadRunOutputAsync(long id, Action<Stream> read) =>
-        WindowRead(connection => RecordQueries.ReadRunOutput(connection, id, read));
+    public async Task<bool> ReadRunOutputAsync(long id, Action<Stream> read)
+    {
+        await _exportGate.WaitAsync(_closing.Token).ConfigureAwait(false);
+        try
+        {
+            await Read(_ => true).ConfigureAwait(false);
+            return await Task.Run(() =>
+            {
+                _closing.Token.ThrowIfCancellationRequested();
+                using var connection = OpenWindowConnection();
+                return RecordQueries.ReadRunOutput(connection, id, read);
+            }).ConfigureAwait(false);
+        }
+        finally { _exportGate.Release(); }
+    }
 
-    public Task<RecordSources> ReadRecordSourcesAsync() =>
-        WindowRead(connection => new RecordSources(Session, RecordQueries.ReadSessions(connection)));
+    public Task<RecordSources> ReadRecordSourcesAsync() => ReadRecordSourcesAsync(CancellationToken.None);
+    public Task<RecordSources> ReadRecordSourcesAsync(CancellationToken cancellation) =>
+        WindowRead(connection => new RecordSources(Session,
+            RecordQueries.ReadSessions(connection).Append(Session).Distinct().OrderDescending(StringComparer.Ordinal).ToList()), cancellation);
+
+    public Task<OutputFileRevision?> ReadOutputFileRevisionAsync(RunRecord run) => Read<OutputFileRevision?>(connection =>
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT length, modified, created FROM output_files WHERE session = $session AND run = $run";
+        command.Parameters.AddWithValue("$session", run.Session);
+        command.Parameters.AddWithValue("$run", run.Run);
+        using var reader = command.ExecuteReader();
+        return reader.Read() ? new OutputFileRevision(reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2)) : null;
+    });
+
+    public Task RecordOutputFileRevisionAsync(RunRecord run, OutputFileRevision revision) =>
+        Enqueue(connection =>
+        {
+            Execute(connection, "INSERT INTO output_files (session, run, length, modified, created) VALUES ($session, $run, $length, $modified, $created) " +
+                "ON CONFLICT (session, run) DO UPDATE SET length = excluded.length, modified = excluded.modified, created = excluded.created",
+                ("$session", run.Session), ("$run", run.Run), ("$length", revision.Length),
+                ("$modified", revision.LastWriteUtcTicks), ("$created", revision.CreationUtcTicks));
+            return true;
+        }, fallbackLine: null, stores: false);
 
     /// <summary>The largest output one record can hold, as the database engine allows it.</summary>
     public long MaxOutputBytes { get; private set; } = long.MaxValue;
@@ -299,6 +355,17 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
                 insert.Parameters.AddWithValue("$time", TimestampConventions.IsoMillis(DateTimeOffset.UtcNow));
                 insert.Parameters.AddWithValue("$length", length);
                 insert.ExecuteNonQuery();
+            }
+
+            // A replacement blob cannot retain the previous snapshot's identity if recording the
+            // new identity later fails. Invalidation belongs to the same transaction as the copy.
+            using (var invalidate = connection.CreateCommand())
+            {
+                invalidate.Transaction = transaction;
+                invalidate.CommandText = "DELETE FROM output_files WHERE session = $session AND run = $run";
+                invalidate.Parameters.AddWithValue("$session", run.Session);
+                invalidate.Parameters.AddWithValue("$run", run.Run);
+                invalidate.ExecuteNonQuery();
             }
 
             long id;
@@ -353,57 +420,92 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
         if (_owner.Join(CloseWait))
             _connection?.Dispose();
 
+        _closing.Cancel();
         lock (_windowGate)
         {
-            _windowQueue?.CompleteAdding();
-            if (_windowReader?.Join(WindowReadCloseWait) == true)
-                _windowConnection?.Dispose();
+            foreach (var operation in _windowPending.Values) operation.Cancel();
+            _windowPending.Clear();
+            _windowReady.Set();
         }
+        _windowReader?.Join(WindowReadCloseWait);
     }
 
-    private Task<T> WindowRead<T>(Func<SqliteConnection, T> read)
+    private Task<T> WindowRead<T>(Func<SqliteConnection, T> read, CancellationToken cancellation)
     {
         var done = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        // A read still sees every write queued before it; the writer never waits for a read.
-        var writesBefore = new ManualResetEventSlim();
-        if (!TryQueue(writesBefore.Set))
-            writesBefore.Set();
-
+        var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellation, _closing.Token);
+        var token = lifetime.Token;
+        // No blocking event is allocated per request. The write barrier is cheap and cannot retain a
+        // disposed callback if a read is replaced while waiting for the writer.
+        var barrier = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!TryQueue(() => barrier.TrySetResult(true))) barrier.TrySetResult(true);
+        var writesBefore = barrier.Task;
+        void Cancel()
+        {
+            done.TrySetCanceled();
+            lifetime.Dispose();
+        }
         void Run()
         {
             try
             {
-                writesBefore.Wait();
-                writesBefore.Dispose();
+                token.ThrowIfCancellationRequested();
+                writesBefore.WaitAsync(token).GetAwaiter().GetResult();
                 _windowConnection ??= OpenWindowConnection();
-                done.SetResult(read(_windowConnection));
+                using var interrupted = token.Register(() => SQLitePCL.raw.sqlite3_interrupt(_windowConnection.Handle));
+                token.ThrowIfCancellationRequested();
+                var result = read(_windowConnection);
+                token.ThrowIfCancellationRequested();
+                done.TrySetResult(result);
             }
-            catch (Exception ex)
-            {
-                done.SetException(ex);
-            }
+            catch (Exception) when (token.IsCancellationRequested) { done.TrySetCanceled(token); }
+            catch (Exception ex) { done.TrySetException(ex); }
+            finally { lifetime.Dispose(); }
         }
-
         lock (_windowGate)
         {
             if (Volatile.Read(ref _disposed) == 1)
             {
+                lifetime.Dispose();
                 done.SetException(new ObjectDisposedException(nameof(RecordStore)));
                 return done.Task;
             }
-            if (_windowQueue is null)
+            // Remove obsolete work physically, not only its waiter. Independent live requests
+            // retain their semantics; the window cancels each superseded request before admitting one.
+            foreach (var key in _windowPending.Where(pair => pair.Value.Token.IsCancellationRequested).Select(pair => pair.Key).ToArray())
             {
-                var queue = new BlockingCollection<Action>();
-                _windowQueue = queue;
+                _windowPending[key].Cancel();
+                _windowPending.Remove(key);
+            }
+            _windowPending.Add(new object(), new WindowOperation(Run, Cancel, token));
+            if (_windowReader is null)
+            {
                 _windowReader = new Thread(() =>
                 {
-                    foreach (var operation in queue.GetConsumingEnumerable())
-                        operation();
+                    try
+                    {
+                        while (true)
+                        {
+                            WindowOperation? operation = null;
+                            lock (_windowGate)
+                            {
+                                if (_disposed == 1) break;
+                                if (_windowPending.Count > 0)
+                                {
+                                    var first = _windowPending.First();
+                                    operation = first.Value;
+                                    _windowPending.Remove(first.Key);
+                                }
+                            }
+                            if (operation is null) _windowReady.WaitOne();
+                            else operation.Run();
+                        }
+                    }
+                    finally { _windowConnection?.Dispose(); }
                 }) { IsBackground = true, Name = "records window" };
                 _windowReader.Start();
             }
-            _windowQueue.Add(Run);
+            _windowReady.Set();
         }
         return done.Task;
     }

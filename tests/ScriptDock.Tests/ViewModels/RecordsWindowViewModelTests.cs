@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -148,6 +149,58 @@ public sealed class RecordsWindowViewModelTests
         new(4, Session, "2026-10-04T08:00:10.000Z", LogLevel.Info, 3, "/repo/dev.command", 4242, "2026-10-04T08:00:10.123Z",
             "/runs/3.log", endState is null ? null : "2026-10-04T08:01:00.000Z", endState, endState is null ? null : 0,
             importedAt, output is null ? null : Encoding.UTF8.GetBytes(output));
+
+    [AvaloniaFact]
+    public void Turning_on_exit_code_errors_replaces_a_detail_read_that_is_still_pending() =>
+        PendingDetailFollowsCurrentExitCodePolicy(initialPolicy: false);
+
+    [AvaloniaFact]
+    public void Turning_off_exit_code_errors_replaces_a_detail_read_that_is_still_pending() =>
+        PendingDetailFollowsCurrentExitCodePolicy(initialPolicy: true);
+
+    private void PendingDetailFollowsCurrentExitCodePolicy(bool initialPolicy)
+    {
+        var originalPolicy = ExitCodes.NonZeroIsError;
+        var stale = new TaskCompletionSource<RecordDetail?>();
+        var current = new TaskCompletionSource<RecordDetail?>();
+        var policies = new List<bool>();
+        _reader.DetailWithPolicy = (_, _, policy) =>
+        {
+            policies.Add(policy);
+            return policies.Count == 1 ? stale.Task : current.Task;
+        };
+        RecordsWindowViewModel? vm = null;
+        try
+        {
+            ExitCodes.Use(initialPolicy);
+            vm = Started();
+            vm.SelectedRecord = vm.Rows[0];
+            Pump();
+            Assert.False(vm.HasDetail);
+
+            ExitCodes.Use(!initialPolicy);
+            Pump();
+            Assert.Equal(new[] { initialPolicy, !initialPolicy }, policies);
+            Assert.False(vm.HasDetail);
+
+            stale.SetResult(RunDetail() with { Level = initialPolicy ? LogLevel.Error : LogLevel.Info, ExitCode = 7 });
+            Pump();
+            Assert.False(vm.HasDetail); // The old result must not settle the replacement selection.
+
+            current.SetResult(RunDetail() with { Level = initialPolicy ? LogLevel.Info : LogLevel.Error, ExitCode = 7 });
+            Pump();
+            Assert.True(vm.HasDetail);
+            Assert.Equal(!initialPolicy, vm.DetailIsError);
+        }
+        finally
+        {
+            vm?.Dispose();
+            stale.TrySetResult(null);
+            current.TrySetResult(null);
+            ExitCodes.Use(originalPolicy);
+            Pump();
+        }
+    }
 
     [AvaloniaFact]
     public void Shows_everything_a_selected_run_holds()
@@ -514,7 +567,7 @@ public sealed class RecordsWindowViewModelTests
 
         Assert.Equal(2, _reader.PageQueries.Count);
         Assert.Equal(RecordsQuery.All with { Through = CursorOf(Warning) }, _reader.LastQuery);
-        Assert.Equal(2, _reader.SourceReads);
+        Assert.Equal(1, _reader.SourceReads); // Sessions are offered once per window, not on every live page refresh.
         Assert.Equal(2, vm.Rows.Count);
         Assert.False(vm.ShowLoadingNote);
 

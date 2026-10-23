@@ -589,7 +589,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         new("2026-01-01T00:00:00.000Z", run, DateTimeOffset.UtcNow, "/x/a.command", pid, osStartedAt, outputPath);
 
     [Fact]
-    public async Task ImportFinishedOutput_MovesAFinishedRunsOutputIntoTheRecords_AndDeletesTheFile()
+    public async Task ImportFinishedOutput_IndexesAFinishedRunsOutputAndKeepsTheSource()
     {
         var path = QuietOutput("finished.log", "done\n");
         var records = new FakeRecordStore();
@@ -598,7 +598,8 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         await _fixture.Runner().ImportFinishedOutputAsync(records, CancellationToken.None);
 
         Assert.Equal("done\n"u8.ToArray(), records.Outputs[("2026-01-01T00:00:00.000Z", 4)]);
-        Assert.False(File.Exists(path));
+        Assert.True(File.Exists(path));
+        Assert.Single(records.OutputFileRevisions);
     }
 
     [Fact]
@@ -659,6 +660,36 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         runner.Dismiss(handle);
         await runner.ImportFinishedOutputAsync(records, CancellationToken.None);
         Assert.Contains("brief", System.Text.Encoding.UTF8.GetString(records.Outputs[(records.Session, handle.Id)]));
-        Assert.False(File.Exists(handle.LogFilePath!));
+        Assert.True(File.Exists(handle.LogFilePath!));
+    }
+
+    [MacOnlyFact]
+    public async Task ImportFinishedOutput_AWriterCanAppendAfterTheParentExitsAndTheFirstCopyLands()
+    {
+        var script = WriteExecutableScript("late.command", "echo initial\nexit 0\n");
+        var runner = _fixture.Runner();
+        var records = new FakeRecordStore();
+        var handle = await StartAsync(runner, script);
+        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+        records.Runs.Add(RunRecord.For(records.Session, handle));
+        var path = handle.LogFilePath!;
+        // A remaining writer's descriptor survives the parent and both import passes. Deleting the
+        // path after the first pass would lose these later bytes even though the writer succeeds.
+        using var writer = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+        runner.Dismiss(handle);
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow - ProcessRunner.OutputQuietPeriod - TimeSpan.FromMinutes(1));
+
+        await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
+        Assert.Equal("initial\n"u8.ToArray(), records.Outputs[(records.Session, handle.Id)]);
+
+        writer.Write("late\n"u8);
+        writer.Flush();
+        Assert.True(File.Exists(path));
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow - ProcessRunner.OutputQuietPeriod - TimeSpan.FromMinutes(1));
+        await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
+
+        Assert.Equal("initial\nlate\n"u8.ToArray(), records.Outputs[(records.Session, handle.Id)]);
+        Assert.Equal(2, records.OutputImportCount);
+        Assert.True(File.Exists(path));
     }
 }

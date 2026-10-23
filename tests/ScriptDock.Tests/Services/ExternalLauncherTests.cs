@@ -8,9 +8,14 @@ namespace ScriptDock.Tests.Services;
 public sealed class ExternalLauncherTests
 {
     [Fact]
-    public void Open_reports_when_the_shell_did_not_accept_the_request()
+    public void Open_reports_success_when_the_shell_handoff_returns_no_process()
     {
-        Assert.False(ExternalLauncher.Open("https://example.test", _ => null));
+        Assert.True(ExternalLauncher.Open("https://example.test", info =>
+        {
+            Assert.Equal("https://example.test", info.FileName);
+            Assert.True(info.UseShellExecute);
+            return null;
+        }));
     }
 
     [Fact]

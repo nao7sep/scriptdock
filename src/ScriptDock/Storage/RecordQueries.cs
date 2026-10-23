@@ -9,7 +9,7 @@ namespace ScriptDock.Storage;
 /// <summary>
 /// The Records window's reads over <c>records.sqlite3</c>: a filtered page of summaries, newest first,
 /// keyset-paged by the last summary shown, one record whole, and the launches that have records. Each runs
-/// on the records' own thread (<see cref="RecordStore"/>), so a read sees every entry queued before it.
+/// on a reader owned by <see cref="RecordStore"/>, after its prior-write barrier.
 /// </summary>
 internal static class RecordQueries
 {
@@ -192,18 +192,16 @@ internal static class RecordQueries
                     reader.IsDBNull(13) ? null : (byte[])reader.GetValue(13),
                     reader.IsDBNull(14) ? null : reader.GetInt64(14));
                 reader.Close();
-                // An output too large for one record stays as the run's file; the detail previews it from there.
-                if (detail.Output is null && KeptOutput(connection, detail.OutputPath) is { } kept)
-                {
-                    try
+                // The original file remains authoritative even after a searchable snapshot is indexed.
+                // Only genuinely absent files fall back to older blob-only history; access errors propagate.
+                using var file = OpenRetainedOutput(detail.OutputPath);
+                if (file is not null)
+                    return detail with
                     {
-                        return detail with { Output = FilePrefix(kept), OutputLength = new FileInfo(kept).Length, OutputKeptAsFile = true };
-                    }
-                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                    {
-                        return detail;
-                    }
-                }
+                        Output = FilePrefix(file), OutputLength = file.Length,
+                        OutputKeptAsFile = file.Length > MaxStoredBytes(connection),
+                        OutputFromFile = true, OutputRevision = File.GetLastWriteTimeUtc(detail.OutputPath!).Ticks,
+                    };
                 return detail;
             }
 
@@ -227,7 +225,7 @@ internal static class RecordQueries
         SQLitePCL.raw.sqlite3_limit(connection.Handle, SQLitePCL.raw.SQLITE_LIMIT_LENGTH, -1);
 
     /// <summary>Hands <paramref name="read"/> the run's whole output as a stream read in pieces: its record, or
-    /// its own file when the output was too large to store. False when it has neither.</summary>
+    /// its own authoritative file, falling back to the stored record when absent. False when it has neither.</summary>
     public static bool ReadRunOutput(SqliteConnection connection, long id, Action<Stream> read)
     {
         long? outputId;
@@ -243,39 +241,31 @@ internal static class RecordQueries
             path = reader.IsDBNull(1) ? null : reader.GetString(1);
         }
 
+        using var file = OpenRetainedOutput(path);
+        if (file is not null)
+        {
+            read(file);
+            return true;
+        }
         if (outputId is { } stored)
         {
             using var blob = new SqliteBlob(connection, "run_outputs", "output", stored, readOnly: true);
             read(blob);
             return true;
         }
-        if (KeptOutput(connection, path) is not { } kept)
-            return false;
-        using var file = new FileStream(kept, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        read(file);
-        return true;
+        return false;
     }
 
-    // A run's output file that is too large for one record, which the import leaves where it is.
-    private static string? KeptOutput(SqliteConnection connection, string? path)
+    private static FileStream? OpenRetainedOutput(string? path)
     {
-        if (path is null)
-            return null;
-        try
-        {
-            var file = new FileInfo(path);
-            return file.Exists && file.Length > MaxStoredBytes(connection) ? path : null;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            return null;
-        }
+        if (path is null) return null;
+        try { return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete); }
+        catch (FileNotFoundException) { return null; }
+        catch (DirectoryNotFoundException) { return null; }
     }
 
-    // The first bytes of a kept output file, as much as the detail shows plus one, for its preview.
-    private static byte[] FilePrefix(string path)
+    private static byte[] FilePrefix(Stream file)
     {
-        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         var buffer = new byte[RunRecordDetail.PreviewBytes + 1];
         var count = 0;
         int read;

@@ -17,11 +17,8 @@ public static class ExternalLauncher
         try
         {
             using var process = start(new ProcessStartInfo(url) { UseShellExecute = true });
-            if (process is not null)
-                return true;
-
-            Log.Error("open external: no process returned", new { url });
-            return false;
+            // A shell handler can accept the request without creating a process we can observe.
+            return true;
         }
         catch (Exception ex)
         {

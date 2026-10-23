@@ -24,6 +24,16 @@ public sealed class FakeRecordStore : IRecordStore
     private readonly List<(string Path, DateTimeOffset At)> _dismissedAt = [];
     public List<ScanReport> ScanReports { get; } = [];
     public Dictionary<(string Session, int Run), byte[]> Outputs { get; } = [];
+    public Dictionary<(string Session, int Run), OutputFileRevision> OutputFileRevisions { get; } = [];
+    public int OutputImportCount { get; private set; }
+    public Action<RunRecord>? BeforeOutputCopy { get; set; }
+
+    public Task<OutputFileRevision?> ReadOutputFileRevisionAsync(RunRecord run) =>
+        Task.FromResult(OutputFileRevisions.TryGetValue((run.Session, run.Run), out var revision)
+            ? (OutputFileRevision?)revision : null);
+
+    public Task RecordOutputFileRevisionAsync(RunRecord run, OutputFileRevision revision) =>
+        Write(() => OutputFileRevisions[(run.Session, run.Run)] = revision);
 
     public Task AddRunAsync(RunRecord run) => Write(() => Runs.Add(run));
 
@@ -57,12 +67,17 @@ public sealed class FakeRecordStore : IRecordStore
 
     public long MaxOutputBytes { get; set; } = long.MaxValue;
 
-    public Task AddRunOutputAsync(RunRecord run, System.IO.Stream output, long length) => Write(() =>
+    public Task AddRunOutputAsync(RunRecord run, System.IO.Stream output, long length)
     {
-        var bytes = new byte[length];
-        output.ReadExactly(bytes);
-        Outputs[(run.Session, run.Run)] = bytes;
-    });
+        OutputImportCount++;
+        return Write(() =>
+        {
+            BeforeOutputCopy?.Invoke(run);
+            var bytes = new byte[length];
+            output.ReadExactly(bytes);
+            Outputs[(run.Session, run.Run)] = bytes;
+        });
+    }
 
     private Task Write(Action write)
     {

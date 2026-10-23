@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using System.Threading;
 using ScriptDock.Models;
 
 namespace ScriptDock.Storage;
@@ -22,12 +23,19 @@ public interface IRecordReader
     Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id, bool nonZeroExitIsError = false);
 
     /// <summary>Hands <paramref name="read"/> a stream over a run's whole output, beyond what its detail shows:
-    /// the stored record, or the run's own file when the output was too large to store. Read in pieces; the
+    /// the run's authoritative file, falling back to the stored record when that file is absent. Read in pieces; the
     /// stream is valid only during the call. False when the run has neither.</summary>
     Task<bool> ReadRunOutputAsync(long id, Action<System.IO.Stream> read);
 
     /// <summary>Every launch that has a record the window lists.</summary>
     Task<RecordSources> ReadRecordSourcesAsync();
+
+    Task<RecordsPage> ReadRecordsPageAsync(RecordsQuery query, CancellationToken cancellation) =>
+        ReadRecordsPageAsync(query).WaitAsync(cancellation);
+    Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id, bool nonZeroExitIsError, CancellationToken cancellation) =>
+        ReadRecordDetailAsync(kind, id, nonZeroExitIsError).WaitAsync(cancellation);
+    Task<RecordSources> ReadRecordSourcesAsync(CancellationToken cancellation) =>
+        ReadRecordSourcesAsync().WaitAsync(cancellation);
 
     /// <summary>Raised, on the records' own thread, after each entry the database stored. An entry that went
     /// to the fallback file is not in the database, so it raises nothing.</summary>

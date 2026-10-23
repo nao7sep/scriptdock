@@ -25,8 +25,8 @@ public sealed class ProcessRunner : IProcessRunner
     // expires: starting a replacement while the old tree is alive would create a duplicate.
     private static readonly TimeSpan DefaultTerminationGrace = TimeSpan.FromSeconds(10);
 
-    // How long a finished run's output file stays unchanged before it moves into the records, so output a
-    // process the run left behind is still writing is not cut off.
+    // How long a finished run's output file stays unchanged before it is indexed in the records.
+    // The source remains available because a descendant can resume writing after any quiet interval.
     internal static readonly TimeSpan OutputQuietPeriod = TimeSpan.FromMinutes(1);
 
     private readonly List<ScriptProcess> _processes = new();
@@ -111,9 +111,8 @@ public sealed class ProcessRunner : IProcessRunner
                 {
                     _startProcess(handle);
                 }
-                catch (Exception ex)
+                catch
                 {
-                    Log.Error("run: start failed", ex, new { script = scriptPath });
                     handle.Dispose();
                     throw;
                 }
@@ -332,21 +331,27 @@ public sealed class ProcessRunner : IProcessRunner
     }
 
     /// <summary>
-    /// Moves the output file of each finished run into the records and deletes the file, per the
-    /// data-lifecycle-conventions' Records section. A file stays while a run this session holds reads it,
+    /// Indexes the output file of each finished run without deleting its source. A file waits while a run this session holds reads it,
     /// while its run's process (by process id and start time) is alive, while it has changed within
     /// <see cref="OutputQuietPeriod"/>, and when no run record names it. An import replaces any earlier
-    /// import of the same run, so a file whose deletion failed is imported again in full on a later pass.
+    /// import of the same run. An unchanged file's recorded revision skips later copies; a file that changes
+    /// during the copy remains unconfirmed and is retried after becoming quiet again.
     /// Each file is copied in pieces, so memory stays at one buffer whatever its size, and each is its own
     /// attempt: one that fails stays for a later pass without holding up the rest. A file larger than one
     /// record can hold is known from its size alone and stays where it is as the run's output, unread and not
     /// retried; the Records window reads it from there (volume-handling-conventions).
     /// </summary>
-    public async Task ImportFinishedOutputAsync(IRecordStore records, CancellationToken cancellationToken)
+    public Task ImportFinishedOutputAsync(IRecordStore records, CancellationToken cancellationToken)
     {
+        // The run list belongs to the caller's dispatcher; transfer a stable snapshot to the worker.
         var held = new HashSet<string>(Active.Select(p => p.LogFilePath).OfType<string>(), PathIdentity.Comparer);
+        return Task.Run(() => ImportFinishedOutputCoreAsync(records, held, cancellationToken), cancellationToken);
+    }
+
+    private async Task ImportFinishedOutputCoreAsync(IRecordStore records, HashSet<string> held, CancellationToken cancellationToken)
+    {
         var quietSince = DateTime.UtcNow - OutputQuietPeriod;
-        var candidates = await Task.Run(() => FindQuietOutput(held, quietSince), cancellationToken).ConfigureAwait(false);
+        var candidates = FindQuietOutput(held, quietSince);
         if (candidates.Count == 0)
             return;
 
@@ -360,8 +365,15 @@ public sealed class ProcessRunner : IProcessRunner
 
             try
             {
-                if (!await ImportOneAsync(records, run, path).ConfigureAwait(false))
+                var revision = OutputRevision(path);
+                if (revision == await records.ReadOutputFileRevisionAsync(run).ConfigureAwait(false))
                     continue;
+                if (!await ImportOneAsync(records, run, path, revision.Length).ConfigureAwait(false))
+                    continue;
+                // The blob commits first. A failed revision write only causes a later recopy; it
+                // never makes a changed or partially copied source look safely indexed.
+                if (OutputRevision(path) == revision)
+                    await records.RecordOutputFileRevisionAsync(run, revision).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -369,14 +381,6 @@ public sealed class ProcessRunner : IProcessRunner
                 continue;
             }
             imported++;
-            try
-            {
-                File.Delete(path);
-            }
-            catch (Exception ex)
-            {
-                Log.Warn("run output: imported but not deleted; the next pass imports it again", ex, new { path });
-            }
         }
 
         if (imported > 0)
@@ -387,20 +391,40 @@ public sealed class ProcessRunner : IProcessRunner
     private void WatchEnd(ScriptProcess handle) =>
         handle.StateChanged += (_, _) => RunEnded?.Invoke(this, handle);
 
-    private List<string> FindQuietOutput(HashSet<string> held, DateTime quietSince) =>
-        Directory.Exists(_runsDirectory)
-            ? Directory.EnumerateFiles(_runsDirectory, "*.log")
-                .Where(path => !held.Contains(path) && File.GetLastWriteTimeUtc(path) < quietSince)
-                .ToList()
-            : [];
+    private List<string> FindQuietOutput(HashSet<string> held, DateTime quietSince)
+    {
+        var paths = new List<string>();
+        if (!Directory.Exists(_runsDirectory))
+            return paths;
+        foreach (var path in Directory.EnumerateFiles(_runsDirectory, "*.log"))
+        {
+            if (held.Contains(path))
+                continue;
+            try
+            {
+                if (File.GetLastWriteTimeUtc(path) < quietSince)
+                    paths.Add(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Log.Warn("run output: could not inspect the file; it stays for a later pass", ex, new { path });
+            }
+        }
+        return paths;
+    }
+
+    private static OutputFileRevision OutputRevision(string path)
+    {
+        var info = new FileInfo(path);
+        return new OutputFileRevision(info.Length, info.LastWriteTimeUtc.Ticks, info.CreationTimeUtc.Ticks);
+    }
 
     // False when the file is too large for one record and stays as the run's output.
-    private static async Task<bool> ImportOneAsync(IRecordStore records, RunRecord run, string path)
+    private static async Task<bool> ImportOneAsync(IRecordStore records, RunRecord run, string path, long length)
     {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        var length = stream.Length;
         if (length > records.MaxOutputBytes)
             return false;
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         await records.AddRunOutputAsync(run, stream, length).ConfigureAwait(false);
         return true;
     }

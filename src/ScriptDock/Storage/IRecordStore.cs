@@ -42,6 +42,9 @@ public interface IRecordStore
     /// <summary>Stores a run's whole output, replacing an earlier import of the same run.</summary>
     Task AddRunOutputAsync(RunRecord run, Stream output, long length);
 
+    Task<OutputFileRevision?> ReadOutputFileRevisionAsync(RunRecord run) => Task.FromResult<OutputFileRevision?>(null);
+    Task RecordOutputFileRevisionAsync(RunRecord run, OutputFileRevision revision) => Task.CompletedTask;
+
     /// <summary>The largest output one record can hold; a larger one stays as its file.</summary>
     long MaxOutputBytes { get; }
 }

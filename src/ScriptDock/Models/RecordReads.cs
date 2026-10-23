@@ -121,17 +121,19 @@ public sealed record RunRecordDetail(
     string? ImportedAt,
     byte[]? Output,
     long? OutputLength = null,
-    bool OutputKeptAsFile = false)
+    bool OutputKeptAsFile = false,
+    bool OutputFromFile = false,
+    long? OutputRevision = null)
     : RecordDetail(RecordKind.Run, Id, Session, Time, Level)
 {
     public const int PreviewBytes = 1024 * 1024;
 
-    /// <summary>Has both its end and its output, so nothing more will be recorded for it.</summary>
-    public bool Settled => EndState is not null && Output is not null;
+    /// <summary>Blob-only history is complete; a retained file can still receive descendant output.</summary>
+    public bool Settled => EndState is not null && Output is not null && !OutputFromFile;
 
     /// <summary>The same recorded end and import as <paramref name="other"/>, the only parts a run gains later.</summary>
     public bool SameProgress(RunRecordDetail other) =>
-        (EndedAt, EndState, ExitCode, ImportedAt, Level) == (other.EndedAt, other.EndState, other.ExitCode, other.ImportedAt, other.Level);
+        (EndedAt, EndState, ExitCode, ImportedAt, Level, OutputLength, OutputRevision) == (other.EndedAt, other.EndState, other.ExitCode, other.ImportedAt, other.Level, other.OutputLength, other.OutputRevision);
 }
 
 /// <summary>A scan report: when the scan completed and the whole report as stored.</summary>

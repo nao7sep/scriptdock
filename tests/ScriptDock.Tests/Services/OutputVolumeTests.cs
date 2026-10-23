@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.Versioning;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -209,14 +210,17 @@ public sealed class OutputVolumeTests : IDisposable
         await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
         await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken); // a later pass changes nothing
 
-        Assert.False(File.Exists(small));
+        Assert.True(File.Exists(small));
         Assert.Equal(10, records.Outputs[("2026-01-01T00:00:00.000Z", 1)].Length);
         Assert.True(File.Exists(large));
         Assert.DoesNotContain(("2026-01-01T00:00:00.000Z", 2), records.Outputs.Keys);
+        Assert.Equal(1, records.OutputImportCount);
+        Assert.Single(records.OutputFileRevisions);
     }
 
-    [Fact]
-    public async Task One_log_that_fails_to_import_stays_for_a_later_pass_without_holding_up_the_rest()
+    [MacOnlyFact]
+    [SupportedOSPlatform("macos")]
+    public async Task A_permission_denied_log_does_not_hold_up_another_log_and_is_retried()
     {
         var unreadable = QuietLog("a-unreadable.log", 10);
         var fine = QuietLog("b-fine.log", 10);
@@ -224,23 +228,141 @@ public sealed class OutputVolumeTests : IDisposable
         records.Runs.Add(Run(1, unreadable));
         records.Runs.Add(Run(2, fine));
         var runner = new ProcessRunner(Path.Combine(_dir, "runs"));
-        var mode = OperatingSystem.IsWindows() ? default : File.GetUnixFileMode(unreadable);
-        if (!OperatingSystem.IsWindows())
-            File.SetUnixFileMode(unreadable, UnixFileMode.None);
+        var mode = File.GetUnixFileMode(unreadable);
+        File.SetUnixFileMode(unreadable, UnixFileMode.None);
         try
         {
+            Assert.Throws<UnauthorizedAccessException>(() => File.OpenRead(unreadable));
             await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
+            AssertIndependentImportFailure(records, unreadable, fine);
         }
         finally
         {
-            if (!OperatingSystem.IsWindows())
-                File.SetUnixFileMode(unreadable, mode);
+            File.SetUnixFileMode(unreadable, mode);
         }
 
-        Assert.False(File.Exists(fine));
+        await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
+        Assert.Equal(2, records.Outputs.Count);
+        Assert.Equal(2, records.OutputFileRevisions.Count);
+        Assert.Equal(2, records.OutputImportCount); // the successful sibling was not copied again
+    }
+
+    [WindowsOnlyFact]
+    public async Task A_sharing_denied_log_does_not_hold_up_another_log_and_is_retried()
+    {
+        var unreadable = QuietLog("a-unreadable.log", 10);
+        var fine = QuietLog("b-fine.log", 10);
+        var records = new FakeRecordStore();
+        records.Runs.Add(Run(1, unreadable));
+        records.Runs.Add(Run(2, fine));
+        var runner = new ProcessRunner(Path.Combine(_dir, "runs"));
+        using (var held = new FileStream(unreadable, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            Assert.Throws<IOException>(() => File.OpenRead(unreadable));
+            await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
+            AssertIndependentImportFailure(records, unreadable, fine);
+        }
+
+        await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
+        Assert.Equal(2, records.Outputs.Count);
+        Assert.Equal(2, records.OutputFileRevisions.Count);
+        Assert.Equal(2, records.OutputImportCount);
+    }
+
+    private static void AssertIndependentImportFailure(FakeRecordStore records, string unreadable, string fine)
+    {
+        Assert.True(File.Exists(unreadable));
+        Assert.True(File.Exists(fine));
+        Assert.DoesNotContain(("2026-01-01T00:00:00.000Z", 1), records.Outputs.Keys);
         Assert.Contains(("2026-01-01T00:00:00.000Z", 2), records.Outputs.Keys);
-        if (!OperatingSystem.IsWindows())
-            Assert.True(File.Exists(unreadable));
+        Assert.DoesNotContain(("2026-01-01T00:00:00.000Z", 1), records.OutputFileRevisions.Keys);
+        Assert.Single(records.OutputFileRevisions);
+    }
+
+    [Fact]
+    public async Task An_unchanged_source_is_not_copied_again()
+    {
+        var path = QuietLog("unchanged.log", 10);
+        var records = new FakeRecordStore();
+        records.Runs.Add(Run(1, path));
+        var runner = new ProcessRunner(Path.Combine(_dir, "runs"));
+
+        await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
+        await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, records.OutputImportCount);
+        Assert.Single(records.OutputFileRevisions);
+        Assert.Equal(File.ReadAllBytes(path), Assert.Single(records.Outputs).Value);
+    }
+
+    [Fact]
+    public async Task A_source_that_changes_during_the_copy_is_retried_with_its_new_extent()
+    {
+        var path = QuietLog("changing.log", 10);
+        var records = new FakeRecordStore();
+        records.Runs.Add(Run(1, path));
+        records.BeforeOutputCopy = _ =>
+        {
+            records.BeforeOutputCopy = null;
+            Append(path, "late"u8.ToArray());
+        };
+        var runner = new ProcessRunner(Path.Combine(_dir, "runs"));
+
+        await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
+
+        Assert.Equal(10, Assert.Single(records.Outputs).Value.Length); // only the captured extent
+        Assert.Equal(14, new FileInfo(path).Length);
+        Assert.Empty(records.OutputFileRevisions);
+
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow - ProcessRunner.OutputQuietPeriod - TimeSpan.FromMinutes(1));
+        await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
+
+        Assert.Equal(File.ReadAllBytes(path), Assert.Single(records.Outputs).Value);
+        Assert.Single(records.OutputFileRevisions);
+        Assert.Equal(2, records.OutputImportCount);
+    }
+
+    [Fact]
+    public async Task A_failed_blob_write_retains_the_original_and_no_success_revision()
+    {
+        var path = QuietLog("failed.log", 10);
+        var original = File.ReadAllBytes(path);
+        var records = new FakeRecordStore { ThrowOnWrite = true };
+        records.Runs.Add(Run(1, path));
+        var runner = new ProcessRunner(Path.Combine(_dir, "runs"));
+
+        await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
+
+        Assert.Equal(original, File.ReadAllBytes(path));
+        Assert.Empty(records.Outputs);
+        Assert.Empty(records.OutputFileRevisions);
+
+        records.ThrowOnWrite = false;
+        await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
+        Assert.Equal(original, Assert.Single(records.Outputs).Value);
+        Assert.Single(records.OutputFileRevisions);
+    }
+
+    [Fact]
+    public async Task A_failed_revision_write_only_causes_a_later_recopy()
+    {
+        var path = QuietLog("revision-failed.log", 10);
+        var records = new FakeRecordStore();
+        records.Runs.Add(Run(1, path));
+        records.BeforeOutputCopy = _ => records.ThrowOnWrite = true;
+        var runner = new ProcessRunner(Path.Combine(_dir, "runs"));
+
+        await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
+
+        Assert.Equal(File.ReadAllBytes(path), Assert.Single(records.Outputs).Value);
+        Assert.Empty(records.OutputFileRevisions);
+
+        records.ThrowOnWrite = false;
+        records.BeforeOutputCopy = null;
+        await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
+        Assert.Single(records.OutputFileRevisions);
+        Assert.Equal(2, records.OutputImportCount);
+        Assert.True(File.Exists(path));
     }
 
     [Fact]
@@ -252,7 +374,7 @@ public sealed class OutputVolumeTests : IDisposable
         await records.AddRunAsync(run);
         var big = Enumerable.Range(0, RecordStore.CopyBufferBytes * 3 + 7).Select(i => (byte)('a' + i % 26)).ToArray();
         await records.AddRunOutputAsync(run, big);
-        var id = (await records.ReadRecordsPageAsync(new RecordsQuery(null, RecordKind.Run, null, "", null))).Records.Single(summary => summary.Kind == RecordKind.Run).Id;
+        var id = (await records.ReadRecordsPageAsync(new RecordsQuery(null, RecordKind.Run, null, "", null), cancellation: TestContext.Current.CancellationToken)).Records.Single(summary => summary.Kind == RecordKind.Run).Id;
         Assert.Equal(big, await records.ReadRunOutputAsync(id));
 
         await Assert.ThrowsAnyAsync<Exception>(() => records.AddRunOutputAsync(run, new MemoryStream(new byte[10]), 20));
@@ -273,7 +395,7 @@ public sealed class OutputVolumeTests : IDisposable
         {
             session = records.Session;
             await records.AddRunAsync(new RunRecord(session, 1, DateTimeOffset.UtcNow, "/x/a.command", null, null, file));
-            id = (await records.ReadRecordsPageAsync(new RecordsQuery(null, RecordKind.Run, null, "", null))).Records.Single().Id;
+            id = (await records.ReadRecordsPageAsync(new RecordsQuery(null, RecordKind.Run, null, "", null), cancellation: TestContext.Current.CancellationToken)).Records.Single().Id;
         }
 
         using var connection = new SqliteConnection($"Data Source={Path.Combine(root, "records.sqlite3")}");

@@ -47,7 +47,8 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     private readonly IJsonStore<AppState> _stateStore;
     private readonly AppState _state;
     private readonly TimeProvider _time;
-    private readonly Func<RunRecordDetail, Stream, bool> _openOutput;
+    private readonly Func<RunRecordDetail, Stream, bool>? _openOutput;
+    private readonly Dictionary<string, CancellationTokenSource> _reads = [];
 
     // The filters the list is read for; a page's own cursor is added per read.
     private RecordsQuery _filters = RecordsQuery.All with { NonZeroExitIsError = ExitCodes.NonZeroIsError };
@@ -88,7 +89,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         _stateStore = stateStore;
         _state = state;
         _time = time ?? TimeProvider.System;
-        _openOutput = openOutput ?? OpenInEditor;
+        _openOutput = openOutput;
 
         LaunchOptions.Add(new RecordFilterOption(null, () => Localizer.T("records.allLaunches")));
         KindOptions =
@@ -253,6 +254,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         _disposed = true;
         _generation++;
         _detailVersion++;
+        foreach (var read in _reads.Values.ToArray()) read.Cancel();
         _reader.Stored -= OnStored;
         Localizer.Changed -= OnLanguageChanged;
         DisplayTime.Changed -= OnLanguageChanged;
@@ -307,7 +309,18 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
             _ = ReloadAsync();
     }
 
-    private Task<T> Bounded<T>(Task<T> read) => read.WaitAsync(ReadTimeout, _time);
+    private async Task<T> Bounded<T>(string lane, Func<CancellationToken, Task<T>> read)
+    {
+        if (_reads.TryGetValue(lane, out var previous)) previous.Cancel();
+        using var current = new CancellationTokenSource();
+        _reads[lane] = current;
+        try { return await read(current.Token).WaitAsync(ReadTimeout, _time, current.Token); }
+        finally
+        {
+            current.Cancel(); // A timeout ends the underlying query too, not merely its waiter.
+            if (_reads.TryGetValue(lane, out var latest) && ReferenceEquals(latest, current)) _reads.Remove(lane);
+        }
+    }
 
     private async Task ReloadAsync()
     {
@@ -326,8 +339,9 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         RecordsPage page;
         try
         {
-            page = await Bounded(_reader.ReadRecordsPageAsync(query));
+            page = await Bounded("page", token => _reader.ReadRecordsPageAsync(query, token));
         }
+        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             if (generation != _generation)
@@ -369,8 +383,9 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         RecordsPage page;
         try
         {
-            page = await Bounded(_reader.ReadRecordsPageAsync(query));
+            page = await Bounded("page", token => _reader.ReadRecordsPageAsync(query, token));
         }
+        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             if (generation == _generation)
@@ -411,8 +426,9 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
                 await refresh;
             if (generation != _generation || _disposed) return;
             var query = _filters with { After = _loadedThrough };
-            page = await Bounded(_reader.ReadRecordsPageAsync(query));
+            page = await Bounded("page", token => _reader.ReadRecordsPageAsync(query, token));
         }
+        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             if (generation != _generation)
@@ -442,8 +458,9 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         RecordSources sources;
         try
         {
-            sources = await Bounded(_reader.ReadRecordSourcesAsync());
+            sources = await Bounded("sources", token => _reader.ReadRecordSourcesAsync(token));
         }
+        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             if (!_disposed)
@@ -468,6 +485,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     private async Task ReadDetailAsync(RecordSummary? summary)
     {
         var version = ++_detailVersion;
+        if (_reads.TryGetValue("detail", out var pending)) pending.Cancel();
         if (summary is null)
         {
             ShowDetail(null, RecordsDetailStatus.None);
@@ -478,8 +496,9 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         RecordDetail? detail;
         try
         {
-            detail = await Bounded(_reader.ReadRecordDetailAsync(summary.Kind, summary.Id, _filters.NonZeroExitIsError));
+            detail = await Bounded("detail", token => _reader.ReadRecordDetailAsync(summary.Kind, summary.Id, _filters.NonZeroExitIsError, token));
         }
+        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             if (version != _detailVersion)
@@ -599,13 +618,25 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         bool opened;
         try
         {
-            // Streamed from the record into the file on the Records reader's thread, in pieces.
+            // The export reader owns only streaming. The shell handoff happens after it releases
+            // its database connection, so an external application cannot prolong a read transaction.
             var written = false;
-            var found = await _reader.ReadRunOutputAsync(run.Id, output => written = _openOutput(run, output));
-            opened = found && written;
+            string? path = null;
+            var found = await _reader.ReadRunOutputAsync(run.Id, output =>
+            {
+                if (_openOutput is not null) written = _openOutput(run, output);
+                else
+                {
+                    path = RunOutputFile.Write(StorageRoot.Directory, run.Script,
+                        run.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), output);
+                    written = true;
+                }
+            });
+            opened = found && written && (_openOutput is not null || await Task.Run(() => ExternalLauncher.Open(path!)));
             if (!found)
                 Log.Error("records: run has no stored output to open", new { run = run.Id });
         }
+        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             Log.Error("records: read full output failed", ex, new { run = run.Id });
@@ -619,21 +650,6 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void DismissOpenOutputError() => OpenOutputFailed = false;
 
-    private static bool OpenInEditor(RunRecordDetail run, Stream output)
-    {
-        string path;
-        try
-        {
-            path = RunOutputFile.Write(StorageRoot.Directory, run.Script, run.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), output);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            Log.Error("records: write full output failed", ex, new { run = run.Id });
-            return false;
-        }
-        return ExternalLauncher.Open(path);
-    }
-
     // Rounded up to a tenth, so a few bytes left out never read as none.
     private static double Megabytes(long bytes) => Math.Ceiling(bytes / (1024.0 * 1024.0) * 10) / 10;
 
@@ -645,8 +661,9 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         RecordDetail? detail;
         try
         {
-            detail = await Bounded(_reader.ReadRecordDetailAsync(shown.Kind, shown.Id, _filters.NonZeroExitIsError));
+            detail = await Bounded("detail", token => _reader.ReadRecordDetailAsync(shown.Kind, shown.Id, _filters.NonZeroExitIsError, token));
         }
+        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             if (version == _detailVersion)
@@ -677,7 +694,6 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         if (_disposed)
             return;
 
-        _ = ReadSourcesAsync();
         if (_detail is RunRecordDetail { Settled: false } run)
             _ = RefreshRunDetailAsync(run);
         if (_atTop)
@@ -737,9 +753,11 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     // included, and a shown run's level with it.
     private void OnExitCodesChanged()
     {
+        // Capture selection before Reload clears the backing rows. A pending detail has no _detail yet.
+        var selected = SelectedRecord?.Summary;
         SetFilters(_filters with { NonZeroExitIsError = ExitCodes.NonZeroIsError });
-        if (_detail is RunRecordDetail run)
-            _ = RefreshRunDetailAsync(run);
+        if (selected is not null) _ = ReadDetailAsync(selected);
+        else if (_detail is RunRecordDetail run) _ = RefreshRunDetailAsync(run);
     }
 
     private void OnLanguageChanged()
