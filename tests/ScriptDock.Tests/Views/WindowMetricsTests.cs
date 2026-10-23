@@ -92,18 +92,6 @@ public sealed class WindowMetricsTests
             scale));
     }
 
-    [Fact]
-    public void Native_minimum_uses_scaled_work_area_without_changing_the_content_floor()
-    {
-        var floor = new Avalonia.Size(1200, 800);
-        var capped = WindowMetrics.CapMinimumToWorkArea(
-            floor, new Avalonia.PixelRect(-1920, 40, 1600, 1000), 2, new Avalonia.Size(8, 30));
-        Assert.Equal(new Avalonia.Size(792, 470), capped);
-        Assert.Equal(new Avalonia.Size(1200, 800), floor);
-        Assert.Equal(floor, WindowMetrics.CapMinimumToWorkArea(
-            floor, new Avalonia.PixelRect(0, 0, 3840, 2160), 2, new Avalonia.Size(8, 30)));
-    }
-
     // Sample pane minimums for the derivation arithmetic, which takes whatever the live tracks give it.
     private static readonly double[] ColumnMinWidths = [360, 260]; // left column (Scripts/Output), Recent
     private static readonly double[] RowMinHeights = [200, 160];   // Scripts row, console row

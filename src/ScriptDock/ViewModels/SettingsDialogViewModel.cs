@@ -13,11 +13,10 @@ namespace ScriptDock.ViewModels;
 
 /// <summary>
 /// Editable draft of the configuration shown by the settings dialog: root directories,
-/// file extensions, ignore patterns, and the process-lifecycle settings. Add validates (non-empty,
-/// no duplicate; an extension rejects whitespace and is normalised to a leading dot; a pattern must
-/// be a single line and must compile) — all at commit time, never mid-keystroke, per the
-/// text-input-ime-conventions; rejection is validation, which the text-cleanup conventions leave to
-/// the app. <see cref="IsDirty"/> is the cleaned draft differing from the config it was seeded from, so
+/// file extensions, ignore patterns, appearance, language, display zone and exit-code policy.
+/// Adding an extension validates and normalises it to a leading dot; adding an ignore pattern appends
+/// a blank row. Save validates the edited rows, dropping blank patterns and marking invalid entries,
+/// never validating mid-keystroke. <see cref="IsDirty"/> is the cleaned draft differing from the config it was seeded from, so
 /// the dialog can gate Save and prompt on discard.
 /// </summary>
 public sealed partial class SettingsDialogViewModel : ObservableObject

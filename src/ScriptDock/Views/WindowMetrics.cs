@@ -75,11 +75,6 @@ public static class WindowMetrics
             && frameSize.Height >= workHeight - MaximizedSizeTolerance;
     }
 
-    public static Avalonia.Size CapMinimumToWorkArea(
-        Avalonia.Size contentFloor, Avalonia.PixelRect workArea, double scale, Avalonia.Size chrome) =>
-        new(System.Math.Min(contentFloor.Width, System.Math.Max(1, workArea.Width / scale - chrome.Width)),
-            System.Math.Min(contentFloor.Height, System.Math.Max(1, workArea.Height / scale - chrome.Height)));
-
     // BodyGrid has Margin="12" on all sides, so the body loses 12px on each edge horizontally
     // and vertically.
     public const double BodyMargin = 12;

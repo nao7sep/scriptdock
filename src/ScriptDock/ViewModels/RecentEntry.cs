@@ -36,8 +36,8 @@ public sealed class RecentEntry
     public bool IsRunning => Kind == PillKind.Running;
 
     /// <summary>
-    /// The last-run time in the computer's own zone (UTC is converted only when facing the user, per the
-    /// timestamp conventions), written the way the reader's language and region write a date and a time
+    /// The last-run time in the configured <see cref="DisplayTime.Zone"/> (UTC is converted only when
+    /// facing the user), written the way the reader's language and region write a date and a time
     /// to the minute rather than in one fixed English form.
     /// </summary>
     public string LastRanDisplay => Localizer.Current.DateAndMinute(LastRanAt, DisplayTime.Zone);
