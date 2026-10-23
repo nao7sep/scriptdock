@@ -594,8 +594,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             _newPaths.Clear();
             RebuildScripts();
         }
-        ShowCatalogResult(Message.Of("scan.configChanged"));
-        _rescanToApplyShown = true;
+        if (scanChanged)
+        {
+            ShowCatalogResult(Message.Of("scan.configChanged"));
+            _rescanToApplyShown = true;
+        }
     }
 
     /// <summary>Sends a line to the selected running script's stdin (from the console input field).</summary>

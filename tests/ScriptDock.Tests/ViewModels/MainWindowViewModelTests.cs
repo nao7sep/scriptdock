@@ -567,15 +567,24 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task TryApplySettings_SurfacesTheRescanConsequenceAtTheCatalogOwner()
+    public async Task TryApplySettings_OnlyScanChangesAskForRescanAndDisplaySavesPreserveIt()
     {
         var (vm, _) = BuildVm();
         var draft = vm.CreateSettingsDraft();
         draft.UiFontFamily = "Helvetica";
-
         Assert.True(await vm.TryApplySettingsAsync(draft));
+        Assert.False(vm.HasCatalogResult);
 
+        draft = vm.CreateSettingsDraft();
+        draft.AddExtension(".new-extension");
+        Assert.True(await vm.TryApplySettingsAsync(draft));
         Assert.Contains("Rescan", vm.CatalogResult, StringComparison.Ordinal);
+        var pending = vm.CatalogResult;
+
+        draft = vm.CreateSettingsDraft();
+        draft.UiFontFamily = "Arial";
+        Assert.True(await vm.TryApplySettingsAsync(draft));
+        Assert.Equal(pending, vm.CatalogResult);
         Assert.False(vm.HasOperationalError);
     }
 
