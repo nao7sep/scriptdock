@@ -231,15 +231,15 @@ public class CatalogueTests
     }
 
     // Each catalogue writes the product's name and copyright line out in full, as its sentences need them
-    // (localization conventions), so this holds them to the one place the build states them.
+    // (localization conventions), so this holds them to the packaging metadata that identifies the same product.
     [Fact]
     public void every_catalogue_names_the_product_and_its_copyright_as_the_build_states_them()
     {
         foreach (var tag in Tags)
         {
             var catalogue = Read(tag);
-            Assert.StartsWith(AppInfo.Copyright + " ", catalogue["about.licence"].GetString());
-            Assert.Contains(AppInfo.Product, catalogue["about.title"].GetString());
+            Assert.StartsWith(SourceScan.BuildProperty("Copyright") + " ", catalogue["about.licence"].GetString());
+            Assert.Contains(SourceScan.BuildProperty("Product"), catalogue["about.title"].GetString());
         }
     }
 
@@ -263,7 +263,7 @@ public class CatalogueTests
         foreach (var tag in Tags)
         {
             var catalogue = Read(tag);
-            var native = catalogue["nativeMenu.about"].GetString()!.Replace("{app}", AppInfo.Product);
+            var native = catalogue["nativeMenu.about"].GetString()!;
             var menu = catalogue["menu.about"].GetString();
             var title = catalogue["about.title"].GetString();
             if (menu != native)

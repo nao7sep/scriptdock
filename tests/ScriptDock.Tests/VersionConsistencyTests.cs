@@ -34,6 +34,5 @@ public sealed class VersionConsistencyTests
         var plist = SourceScan.PropertyList(SourceScan.RepoFile("macOS", "Info.plist"));
         Assert.Equal(product, plist["CFBundleName"].Value);
         Assert.Equal(product, plist["CFBundleDisplayName"].Value);
-        Assert.Equal(product, AppInfo.Product); // the running app reads the same value
     }
 }

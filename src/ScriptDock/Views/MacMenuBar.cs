@@ -69,28 +69,26 @@ internal static class MacMenuBar
 
     /// <summary>
     /// The bar's menus in order; a null item is a separator. Titles come from the catalogue in the
-    /// language showing now, as a Mac app's own menus do, and the app's name is filled in rather than
-    /// glued on, because where the name sits in "About ScriptDock" differs between languages.
+    /// language showing now, with the fixed product name written in each complete localized sentence.
     /// </summary>
-    internal static IReadOnlyList<(MenuRole Role, string Title, Item?[] Items)> Layout(string appName)
+    internal static IReadOnlyList<(MenuRole Role, string Title, Item?[] Items)> Layout()
     {
         var t = Localizer.Current;
-        MessageValue app = ("app", appName);
         return
         [
-            (MenuRole.App, appName,
+            (MenuRole.App, "ScriptDock",
             [
-                new(t.T("nativeMenu.about", app), AboutAction),
+                new(t.T("nativeMenu.about"), AboutAction),
                 null,
                 new(t.T("nativeMenu.settings"), SettingsAction, ","),
                 null,
                 new(t.T("nativeMenu.services"), ServicesSubmenu),
                 null,
-                new(t.T("nativeMenu.hide", app), "hide:", "h"),
+                new(t.T("nativeMenu.hide"), "hide:", "h"),
                 new(t.T("nativeMenu.hideOthers"), "hideOtherApplications:", "h", Modifiers.Command | Modifiers.Option),
                 new(t.T("nativeMenu.showAll"), "unhideAllApplications:"),
                 null,
-                new(t.T("nativeMenu.quit", app), QuitAction, "q"),
+                new(t.T("nativeMenu.quit"), QuitAction, "q"),
             ]),
             // Titled in the interface language: macOS adds Emoji & Symbols, Start Dictation and
             // AutoFill to this menu whatever it is called (app-chrome conventions).
@@ -189,13 +187,12 @@ internal static class MacMenuBar
     /// its main window being in front, as a Mac app disables them while a dialog is up. Does nothing
     /// off macOS.
     /// </summary>
-    public static void Install(string appName, Action showAbout, Action showSettings, Action quit, Func<bool> canShowAppDialogs)
+    public static void Install(Action showAbout, Action showSettings, Action quit, Func<bool> canShowAppDialogs)
     {
         if (!OperatingSystem.IsMacOS() || Installed)
             return;
         Installed = true;
         ConfigureAppActions(showAbout, showSettings, quit, canShowAppDialogs);
-        s_appName = appName;
 
         try
         {
@@ -209,7 +206,7 @@ internal static class MacMenuBar
 
             // The action target is a class defined once for the process, so the bar can be rebuilt in a
             // new language without defining it again.
-            s_appActionTarget = CreateAppActionTarget(appName + "MenuActions");
+            s_appActionTarget = CreateAppActionTarget("ScriptDockMenuActions");
             SetBar();
             if (s_editShortcuts)
                 AddEditActions(view);
@@ -225,13 +222,12 @@ internal static class MacMenuBar
         }
     }
 
-    private static string s_appName = "";
     private static IntPtr s_appActionTarget;
     private static bool s_editShortcuts;
 
     private static void SetBar()
     {
-        using var bar = BuildBar(s_appName, s_appActionTarget, s_editShortcuts);
+        using var bar = BuildBar(s_appActionTarget, s_editShortcuts);
         var app = Send(Class("NSApplication"), "sharedApplication");
         Send(app, "setServicesMenu:", bar.Services);
         Send(app, "setWindowsMenu:", bar.Window);
@@ -273,7 +269,7 @@ internal static class MacMenuBar
     /// Builds an owned native bar. Children belong to their menus; the caller releases the bar after
     /// AppKit takes ownership, or after inspecting it in a test.
     /// </summary>
-    internal static NativeBar BuildBar(string appName, IntPtr appActionTarget, bool editShortcuts = true)
+    internal static NativeBar BuildBar(IntPtr appActionTarget, bool editShortcuts = true)
     {
         if (Class("NSMenu") == IntPtr.Zero)
             throw new InvalidOperationException("AppKit is not loaded.");
@@ -283,7 +279,7 @@ internal static class MacMenuBar
         {
             var services = IntPtr.Zero;
             var window = IntPtr.Zero;
-            foreach (var (role, title, items) in Layout(appName))
+            foreach (var (role, title, items) in Layout())
             {
                 using var menu = NewMenu(title);
                 foreach (var item in items)

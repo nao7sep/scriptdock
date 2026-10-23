@@ -14,7 +14,7 @@ public sealed class NativeOwnershipTests
         LoadAppKit();
         for (var build = 0; build < 3; build++)
         {
-            var bar = BuildBar("ScriptDock", IntPtr.Zero);
+            var bar = BuildBar(IntPtr.Zero);
             using var root = new WeakObject(bar.Bar);
             using var services = new WeakObject(bar.Services);
             using var window = new WeakObject(bar.Window);

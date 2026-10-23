@@ -5,10 +5,9 @@
         xmlns:ctl="using:ScriptDock.Controls"
         xmlns:i18n="using:ScriptDock.I18n"
         xmlns:views="using:ScriptDock.Views"
-        xmlns:app="using:ScriptDock"
         x:Class="ScriptDock.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="{x:Static app:AppInfo.Product}"
+        Title="ScriptDock"
         Icon="/Assets/icon.png"
         Width="1100" Height="720"
         KeyDown="OnWindowKeyDown"
@@ -113,7 +112,7 @@
                         </MenuFlyout>
                     </Button.Flyout>
                 </Button>
-                <TextBlock Text="{x:Static app:AppInfo.Product}" FontWeight="Bold" FontSize="15" VerticalAlignment="Center"/>
+                <TextBlock Text="ScriptDock" FontWeight="Bold" FontSize="15" VerticalAlignment="Center"/>
             </DockPanel>
         </Border>
 

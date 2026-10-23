@@ -89,7 +89,7 @@ public sealed class AboutDialog : DialogBase
             Spacing = 0,
             Children =
             {
-                new TextBlock { Text = AppInfo.Product, FontSize = 20, FontWeight = FontWeight.Bold, Margin = new Thickness(0, 0, 0, 4) },
+                new TextBlock { Text = "ScriptDock", FontSize = 20, FontWeight = FontWeight.Bold, Margin = new Thickness(0, 0, 0, 4) },
                 new TextBlock { Text = I18n.Localizer.T("about.version", ("version", version)), FontSize = 13, Margin = new Thickness(0, 0, 0, 12) }
                     .Themed(TextBlock.ForegroundProperty, "TextSecondaryBrush"),
                 new TextBlock

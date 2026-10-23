@@ -30,7 +30,7 @@ public sealed class MacMenuBarTests
     [Fact]
     public void The_bar_is_the_app_menu_then_Edit_then_Window()
     {
-        Assert.Equal(new[] { "ScriptDock", "Edit", "Window" }, Layout("ScriptDock").Select(menu => menu.Title));
+        Assert.Equal(new[] { "ScriptDock", "Edit", "Window" }, Layout().Select(menu => menu.Title));
     }
 
     [Fact]
@@ -67,7 +67,7 @@ public sealed class MacMenuBarTests
     [Fact]
     public void Only_About_Settings_and_Quit_are_answered_by_ScriptDock()
     {
-        var actions = Layout("ScriptDock").SelectMany(menu => menu.Items).OfType<Item>()
+        var actions = Layout().SelectMany(menu => menu.Items).OfType<Item>()
             .Where(item => item.Action != ServicesSubmenu)
             .Select(item => item.Action)
             .ToList();
@@ -81,7 +81,7 @@ public sealed class MacMenuBarTests
     [Fact]
     public void No_two_items_share_a_shortcut()
     {
-        var shortcuts = Layout("ScriptDock").SelectMany(menu => menu.Items).OfType<Item>()
+        var shortcuts = Layout().SelectMany(menu => menu.Items).OfType<Item>()
             .Where(item => item.Key.Length > 0)
             .Select(item => Typed(item))
             .ToList();
@@ -185,8 +185,8 @@ public sealed class MacMenuBarTests
     {
         LoadAppKit();
         var target = CreateAppActionTarget(UniqueClassName("Target"));
-        using var bar = BuildBar("ScriptDock", target);
-        var layout = Layout("ScriptDock");
+        using var bar = BuildBar(target);
+        var layout = Layout();
 
         Assert.Equal(layout.Count, Count(bar.Bar));
         for (var m = 0; m < layout.Count; m++)
@@ -226,8 +226,8 @@ public sealed class MacMenuBarTests
     public void The_keys_that_type_each_shortcut_reach_the_native_bar()
     {
         LoadAppKit();
-        using var bar = BuildBar("ScriptDock", CreateAppActionTarget(UniqueClassName("Target")));
-        foreach (var item in Layout("ScriptDock").SelectMany(menu => menu.Items).OfType<Item>().Where(item => item.Key.Length > 0))
+        using var bar = BuildBar(CreateAppActionTarget(UniqueClassName("Target")));
+        foreach (var item in Layout().SelectMany(menu => menu.Items).OfType<Item>().Where(item => item.Key.Length > 0))
         {
             var (characters, modifiers) = Typed(item);
             Assert.True(PerformsKeyEquivalent(bar.Bar, characters, modifiers), $"{item.Title} did not take its shortcut");
@@ -241,7 +241,7 @@ public sealed class MacMenuBarTests
         LoadAppKit();
         var window = new Window();
         window.Show();
-        using var bar = BuildBar("ScriptDock", CreateAppActionTarget(UniqueClassName("Target")));
+        using var bar = BuildBar(CreateAppActionTarget(UniqueClassName("Target")));
 
         // The characters each catalog key types; a new shortcut key needs its entry here.
         var typed = new Dictionary<Key, string>
@@ -297,7 +297,7 @@ public sealed class MacMenuBarTests
     public void Without_the_Edit_actions_the_Edit_items_leave_their_shortcuts_to_Avalonia()
     {
         LoadAppKit();
-        using var bar = BuildBar("ScriptDock", CreateAppActionTarget(UniqueClassName("Target")), editShortcuts: false);
+        using var bar = BuildBar(CreateAppActionTarget(UniqueClassName("Target")), editShortcuts: false);
 
         var edit = ObjC.Send(ItemAt(bar.Bar, 1), "submenu");
         for (var i = 0; i < Count(edit); i++)
@@ -413,7 +413,7 @@ public sealed class MacMenuBarTests
 
     private static readonly KeyDownImp RecordKeyDown = (_, _, keyEvent) => s_forwarded.Add(keyEvent);
 
-    private static Item?[] Menu(string title) => Layout("ScriptDock").Single(menu => menu.Title == title).Items;
+    private static Item?[] Menu(string title) => Layout().Single(menu => menu.Title == title).Items;
 
     private static IEnumerable<string> Titles(Item?[] items) => items.Select(item => item?.Title ?? "—");
 
