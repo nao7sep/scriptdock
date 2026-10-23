@@ -16,11 +16,15 @@ sealed class Program
     {
         if (!SingleInstanceLease.TryAcquire(out var instanceLease))
         {
+            LauncherRuntime.Register(args, ownsInstance: false);
             Console.Error.WriteLine("ScriptDock is already running.");
             return 0;
         }
         using (instanceLease)
+        {
+            LauncherRuntime.Register(args, ownsInstance: true);
             return Run(args);
+        }
     }
 
     private static int Run(string[] args)

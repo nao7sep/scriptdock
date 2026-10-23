@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# run-dev: run the app from source with live reload, in its loosest configuration.
+# run-dev: build incrementally and run the app from source once (Debug).
 # For active coding and debugging. The strict, production-faithful launchers are
 # run-built (launch the existing packaged app bundle without rebuilding) and
 # rebuild (build and package a fresh bundle, then launch).
@@ -13,7 +13,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROJECT_FILE="$REPO_DIR/src/ScriptDock/ScriptDock.csproj"
-APP_EXECUTABLE="$REPO_DIR/publish/ScriptDock.app/Contents/MacOS/ScriptDock"
 RUNTIME_TOKEN="run-dev-$$-$(date +%s)-$RANDOM"
 source "$SCRIPT_DIR/launcher-runtime.sh"
 
@@ -41,7 +40,7 @@ cleanup() {
   local status="$?"
   trap - EXIT
   if is_launcher_runtime_owner "$RUNTIME_TOKEN" "$REPO_DIR"; then
-    stop_owned_runtime "ScriptDock" "$REPO_DIR" "$PROJECT_FILE" "ScriptDock" "$APP_EXECUTABLE" >/dev/null 2>&1 || true
+    stop_owned_runtime "ScriptDock" "$REPO_DIR" "$RUNTIME_TOKEN" true >/dev/null 2>&1 || true
     release_launcher_runtime "$RUNTIME_TOKEN" "$REPO_DIR"
   fi
   pause_on_failure "$status"
@@ -56,14 +55,14 @@ cd "$REPO_DIR"
 
 log_step "Replacing any existing ScriptDock runtime"
 claim_launcher_runtime "$RUNTIME_TOKEN" "$REPO_DIR"
-stop_owned_runtime "ScriptDock" "$REPO_DIR" "$PROJECT_FILE" "ScriptDock" "$APP_EXECUTABLE"
+stop_owned_runtime "ScriptDock" "$REPO_DIR" "$RUNTIME_TOKEN"
 
 log_step "Restoring packages required for launch"
 dotnet restore "$PROJECT_FILE"
 
 log_step "Starting ScriptDock (Debug, from source)"
-dotnet run --project "$PROJECT_FILE" &
+dotnet run --project "$PROJECT_FILE" -- --launcher-registration "$REPO_DIR/.git/launcher-runtime-process" --launcher-token "$RUNTIME_TOKEN" &
 DEV_PID=$!
-wait_for_owned_runtime "ScriptDock" "$REPO_DIR" "ScriptDock" "$APP_EXECUTABLE" 120
+wait_for_owned_runtime "ScriptDock" "$REPO_DIR" "$RUNTIME_TOKEN" 120
 log_step "ScriptDock is ready"
 wait "$DEV_PID"

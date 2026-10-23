@@ -11,7 +11,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROJECT_FILE="$REPO_DIR/src/ScriptDock/ScriptDock.csproj"
 APP_BUNDLE="$REPO_DIR/publish/ScriptDock.app"
-APP_EXECUTABLE="$APP_BUNDLE/Contents/MacOS/ScriptDock"
 RUNTIME_TOKEN="rebuild-$$-$(date +%s)-$RANDOM"
 source "$SCRIPT_DIR/launcher-runtime.sh"
 
@@ -42,6 +41,6 @@ rm -rf "$REPO_DIR/publish"
 dotnet publish "$PROJECT_FILE" -c Release -r "$RID" --self-contained true -o "$REPO_DIR/publish"
 
 claim_launcher_runtime "$RUNTIME_TOKEN" "$REPO_DIR"
-stop_owned_runtime "ScriptDock" "$REPO_DIR" "$PROJECT_FILE" "ScriptDock" "$APP_EXECUTABLE"
-open -n "$APP_BUNDLE"
-wait_for_owned_runtime "ScriptDock" "$REPO_DIR" "ScriptDock" "$APP_EXECUTABLE" 30
+stop_owned_runtime "ScriptDock" "$REPO_DIR" "$RUNTIME_TOKEN"
+open -n "$APP_BUNDLE" --args --launcher-registration "$REPO_DIR/.git/launcher-runtime-process" --launcher-token "$RUNTIME_TOKEN"
+wait_for_owned_runtime "ScriptDock" "$REPO_DIR" "$RUNTIME_TOKEN" 30

@@ -9,7 +9,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP_BUNDLE="$REPO_DIR/publish/ScriptDock.app"
-APP_EXECUTABLE="$APP_BUNDLE/Contents/MacOS/ScriptDock"
 RUNTIME_TOKEN="run-built-$$-$(date +%s)-$RANDOM"
 source "$SCRIPT_DIR/launcher-runtime.sh"
 
@@ -42,11 +41,11 @@ fi
 # the .app dir's own mtime — stat'ing the bundle root would report a stale date.
 built_at="$(stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S %Z' "$APP_BUNDLE/Contents/MacOS" 2>/dev/null || echo 'unknown')"
 claim_launcher_runtime "$RUNTIME_TOKEN" "$REPO_DIR"
-stop_owned_runtime "ScriptDock" "$REPO_DIR" "$REPO_DIR/src/ScriptDock/ScriptDock.csproj" "ScriptDock" "$APP_EXECUTABLE"
+stop_owned_runtime "ScriptDock" "$REPO_DIR" "$RUNTIME_TOKEN"
 log_step "Launching the existing build (built: $built_at)"
 echo "If you changed source since then, run rebuild instead."
 
 # `open` routes through Launch Services, which registers the bundle identity with
 # TCC and triggers permission prompts on first access.
-open -n "$APP_BUNDLE"
-wait_for_owned_runtime "ScriptDock" "$REPO_DIR" "ScriptDock" "$APP_EXECUTABLE" 30
+open -n "$APP_BUNDLE" --args --launcher-registration "$REPO_DIR/.git/launcher-runtime-process" --launcher-token "$RUNTIME_TOKEN"
+wait_for_owned_runtime "ScriptDock" "$REPO_DIR" "$RUNTIME_TOKEN" 30
