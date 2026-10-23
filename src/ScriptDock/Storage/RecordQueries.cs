@@ -207,11 +207,12 @@ internal static class RecordQueries
 
             case RecordKind.ScanReport:
             {
-                command.CommandText = $"SELECT id, session, time, {ScanFound}, report FROM scan_reports WHERE id = $id";
+                command.CommandText = $"SELECT id, session, time, {ScanFound}, substr(CAST(report AS BLOB), 1, {ScanReportRecordDetail.PreviewBytes}), length(CAST(report AS BLOB)) FROM scan_reports WHERE id = $id";
                 using var reader = command.ExecuteReader();
                 return reader.Read()
                     ? new ScanReportRecordDetail(reader.GetInt64(0), reader.GetString(1), reader.GetString(2),
-                        reader.IsDBNull(3) ? null : reader.GetInt32(3), reader.GetString(4))
+                        reader.IsDBNull(3) ? null : reader.GetInt32(3), DecodePrefix((byte[])reader.GetValue(4)),
+                        reader.GetInt64(5) > ScanReportRecordDetail.PreviewBytes)
                     : null;
             }
 
@@ -254,6 +255,26 @@ internal static class RecordQueries
             return true;
         }
         return false;
+    }
+
+    private static string DecodePrefix(byte[] bytes)
+    {
+        // A byte-bounded preview may end inside UTF-8; leave that unfinished character out.
+        var decoder = System.Text.Encoding.UTF8.GetDecoder();
+        var chars = new char[bytes.Length];
+        var count = decoder.GetChars(bytes, 0, bytes.Length, chars, 0, flush: false);
+        return new string(chars, 0, count);
+    }
+
+    public static bool ReadScanReport(SqliteConnection connection, long id, Action<Stream> read)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT id FROM scan_reports WHERE id = $id";
+        command.Parameters.AddWithValue("$id", id);
+        if (command.ExecuteScalar() is null) return false;
+        using var blob = new SqliteBlob(connection, "scan_reports", "report", id, readOnly: true);
+        read(blob);
+        return true;
     }
 
     private static FileStream? OpenRetainedOutput(string? path)

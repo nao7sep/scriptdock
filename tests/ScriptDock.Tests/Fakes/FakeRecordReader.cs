@@ -66,6 +66,8 @@ public sealed class FakeRecordReader : IRecordReader
         return true;
     }
 
+    public Task<bool> ReadScanReportAsync(long id, Action<System.IO.Stream> read) => ReadRunOutputAsync(id, read);
+
     public Task<RecordSources> ReadRecordSourcesAsync()
     {
         SourceReads++;

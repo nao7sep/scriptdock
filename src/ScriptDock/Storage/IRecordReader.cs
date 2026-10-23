@@ -27,6 +27,9 @@ public interface IRecordReader
     /// stream is valid only during the call. False when the run has neither.</summary>
     Task<bool> ReadRunOutputAsync(long id, Action<System.IO.Stream> read);
 
+    /// <summary>Streams the complete stored scan report through the independent export owner.</summary>
+    Task<bool> ReadScanReportAsync(long id, Action<System.IO.Stream> read);
+
     /// <summary>Every launch that has a record the window lists.</summary>
     Task<RecordSources> ReadRecordSourcesAsync();
 

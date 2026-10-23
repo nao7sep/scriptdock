@@ -86,6 +86,24 @@ public sealed class RecordQueriesTests : IDisposable
     private static Task<RecordsPage> Page(RecordStore records, RecordsQuery query) => records.ReadRecordsPageAsync(query, cancellation: TestContext.Current.CancellationToken);
 
     [Fact]
+    public async Task LargeScanReportHasABoundedPreviewAndACompleteIndependentExport()
+    {
+        using var records = new RecordStore(_dir, SessionStart);
+        var paths = Enumerable.Range(0, 20000).Select(i => $"/code/{i}/script.command").ToArray();
+        records.AddScanReport(Report(3, paths));
+        var row = Assert.Single((await Page(records, RecordsQuery.All)).Records);
+        var detail = Assert.IsType<ScanReportRecordDetail>(await records.ReadRecordDetailAsync(row.Kind, row.Id, false, TestContext.Current.CancellationToken));
+        Assert.True(detail.Partial);
+        Assert.True(Encoding.UTF8.GetByteCount(detail.Report) <= ScanReportRecordDetail.PreviewBytes);
+        using var complete = new MemoryStream();
+        Assert.True(await records.ReadScanReportAsync(row.Id, stream => stream.CopyTo(complete)));
+        using var document = System.Text.Json.JsonDocument.Parse(complete.ToArray());
+        Assert.Equal(paths.Length, document.RootElement.GetProperty("found").GetArrayLength());
+        Assert.Equal(paths[^1], document.RootElement.GetProperty("found")[paths.Length - 1].GetString());
+        Assert.False(await records.ReadScanReportAsync(long.MaxValue, _ => Assert.Fail("Missing report must not export")));
+    }
+
+    [Fact]
     public async Task FailedSeedingClosesTheRecordsOwnerBeforeReturningTheFailure()
     {
         Directory.CreateDirectory(_dir);

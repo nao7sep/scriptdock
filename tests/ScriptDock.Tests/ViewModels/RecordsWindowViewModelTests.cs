@@ -57,6 +57,45 @@ public sealed class RecordsWindowViewModelTests
     private static RecordCursor CursorOf(RecordSummary record) => new(record.Time, record.Kind, record.Id);
 
     [AvaloniaFact]
+    public async Task PartialReportShowsItsFullReportActionAndKeepsExportFailureLocal()
+    {
+        _reader.Page = new RecordsPage([Scan], false);
+        _reader.Detail = (_, _) => Task.FromResult<RecordDetail?>(new ScanReportRecordDetail(Scan.Id, Session, Scan.Time, 3,
+            new string('x', ScanReportRecordDetail.PreviewBytes), Partial: true));
+        using var vm = Started();
+        vm.SelectedRecord = vm.Rows[0];
+        Pump();
+        Assert.True(vm.CanOpenFullReport);
+        Assert.False(vm.CanOpenFullOutput);
+        var block = Assert.Single(vm.DetailBlocks);
+        Assert.True(block.Text.Length <= RecordFormat.OutputShownLineGraphemes + 1);
+        Assert.Equal(English.Of("records.reportPartial"), block.Note);
+        await vm.OpenFullReportCommand.ExecuteAsync(null); // absent export, no external app
+        Assert.True(vm.OpenReportFailed);
+        vm.DismissOpenReportErrorCommand.Execute(null);
+        Assert.False(vm.OpenReportFailed);
+        vm.SelectedRecord = null;
+        Assert.False(vm.CanOpenFullReport);
+    }
+
+    [AvaloniaFact]
+    public void PendingDetailShowsLoadingUntilTheCurrentSelectionSettles()
+    {
+        var pending = new TaskCompletionSource<RecordDetail?>();
+        _reader.Detail = (_, _) => pending.Task;
+        using var vm = Started();
+        vm.SelectedRecord = vm.Rows[0];
+        Assert.True(vm.ShowDetailLoading);
+        Assert.False(vm.ShowNoSelection);
+        vm.SelectedRecord = null;
+        Assert.False(vm.ShowDetailLoading);
+        Assert.True(vm.ShowNoSelection);
+        pending.SetResult(RunDetail());
+        Pump();
+        Assert.False(vm.HasDetail);
+    }
+
+    [AvaloniaFact]
     public void Lists_the_records_newest_first_with_every_filter_off_and_nothing_selected()
     {
         var vm = Started();

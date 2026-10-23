@@ -254,6 +254,34 @@ public sealed class RecordsWindowTests : WindowTest
         Assert.True(vm.HasDetail);
     }
 
+    [AvaloniaTheory]
+    [InlineData("en")]
+    [InlineData("de")]
+    [InlineData("es")]
+    [InlineData("fr")]
+    [InlineData("it")]
+    [InlineData("pt-BR")]
+    [InlineData("ru")]
+    [InlineData("ja")]
+    [InlineData("ko")]
+    [InlineData("zh-Hans")]
+    public void FullReportActionFitsAtTheMinimumWidth(string tag)
+    {
+        using var speaking = Localizer.Speaking(tag);
+        _reader.Page = new RecordsPage([Scan], false);
+        _reader.Detail = (_, _) => Task.FromResult<RecordDetail?>(new ScanReportRecordDetail(Scan.Id, Session, Scan.Time, 3, "partial", Partial: true));
+        var vm = NewViewModel();
+        var window = Show(new RecordsWindow { DataContext = vm, Width = RecordsLayout.MinWindowWidth, Height = 700 });
+        List(window).SelectedIndex = 0;
+        Dispatcher.UIThread.RunJobs();
+        var button = window.GetVisualDescendants().OfType<Button>().Single(b => b.Command == vm.OpenFullReportCommand);
+        Assert.True(button.IsEffectivelyVisible);
+        var text = button.GetVisualDescendants().OfType<TextBlock>().First();
+        Assert.True(text.Bounds.Width > 0);
+        Assert.DoesNotContain(text.TextLayout.TextLines, line => line.HasCollapsed);
+        Assert.True(button.Bounds.Width <= ((Control)button.Parent!).Bounds.Width);
+    }
+
     // Rule 4 of the text-cleanup conventions: what the 1 MB view leaves out has a direct keyboard path.
     [AvaloniaFact]
     public void Open_full_output_is_reached_by_tab_and_opens_with_enter()

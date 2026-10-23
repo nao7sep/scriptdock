@@ -125,10 +125,11 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty] private bool _loadingMore;
     [ObservableProperty] private bool _openOutputFailed;
+    [ObservableProperty] private bool _openReportFailed;
     [ObservableProperty] private bool _moreFailed;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowNoSelection), nameof(ShowDetailFailed))]
+    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowNoSelection), nameof(ShowDetailFailed), nameof(ShowDetailLoading))]
     private RecordsDetailStatus _detailStatus = RecordsDetailStatus.None;
 
     public bool ShowLoadingNote => ListStatus == RecordsListStatus.Loading;
@@ -137,6 +138,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
 
     public bool HasDetail => DetailStatus == RecordsDetailStatus.Ready;
     public bool ShowNoSelection => DetailStatus == RecordsDetailStatus.None;
+    public bool ShowDetailLoading => DetailStatus == RecordsDetailStatus.Loading;
     public bool ShowDetailFailed => DetailStatus == RecordsDetailStatus.Failed;
 
     public string DetailTitle => _detail switch
@@ -516,11 +518,15 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     {
         // A failed open belongs to its run: a refresh of the same run keeps it, another record clears it.
         if (detail is null || _detail is null || detail.Kind != _detail.Kind || detail.Id != _detail.Id)
+        {
             OpenOutputFailed = false;
+            OpenReportFailed = false;
+        }
         _detail = detail;
         BuildDetail();
         DetailStatus = status;
         OnPropertyChanged(nameof(CanOpenFullOutput));
+        OnPropertyChanged(nameof(CanOpenFullReport));
         OnPropertyChanged(nameof(DetailTitle));
         OnPropertyChanged(nameof(DetailIsCodeTitle));
         OnPropertyChanged(nameof(DetailIsPathTitle));
@@ -537,6 +543,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         DetailFields.Clear();
         DetailBlocks.Clear();
         _outputPartial = false;
+        _reportPartial = false;
         if (_detail is null)
             return;
 
@@ -592,12 +599,43 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
             case ScanReportRecordDetail scan:
                 Add("records.time", RecordFormat.Time(scan.Time, milliseconds: true));
                 Add("records.launch", RecordFormat.Launch(scan.Session, _reader.Session));
-                AddBlock("records.report", RecordFormat.PrettyJson(scan.Report));
+                var reportText = scan.Partial ? scan.Report : RecordFormat.PrettyJson(scan.Report);
+                var reportPreview = RecordFormat.Output(System.Text.Encoding.UTF8.GetBytes(reportText ?? ""), ScanReportRecordDetail.PreviewBytes);
+                _reportPartial = scan.Partial || reportPreview is { MoreBytes: > 0 } || reportPreview is { LinesShortened: true };
+                if (reportPreview is not null)
+                    DetailBlocks.Add(new RecordBlock(Localizer.T("records.report"), reportPreview.Text,
+                        _reportPartial ? Localizer.T("records.reportPartial") : null));
                 break;
         }
     }
 
     private bool _outputPartial;
+    private bool _reportPartial;
+    public bool CanOpenFullReport => DetailStatus == RecordsDetailStatus.Ready && _detail is ScanReportRecordDetail && _reportPartial;
+
+    [RelayCommand]
+    private async Task OpenFullReportAsync()
+    {
+        if (_detail is not ScanReportRecordDetail report) return;
+        OpenReportFailed = false;
+        try
+        {
+            string? path = null;
+            var found = await _reader.ReadScanReportAsync(report.Id, stream =>
+                path = RunOutputFile.Write(StorageRoot.Directory, "scan-report", "scan-" + report.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), stream, clean: false));
+            var opened = found && await Task.Run(() => ExternalLauncher.Open(path!));
+            if (!opened && ReferenceEquals(_detail, report)) OpenReportFailed = true;
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            Log.Error("records: open full report failed", ex);
+            if (ReferenceEquals(_detail, report)) OpenReportFailed = true;
+        }
+    }
+
+    [RelayCommand]
+    private void DismissOpenReportError() => OpenReportFailed = false;
 
     /// <summary>The detail shows the run's output only in part (its first 1 MB, or with long lines shortened), so
     /// Open full output is offered.</summary>

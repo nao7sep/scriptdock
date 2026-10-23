@@ -291,7 +291,13 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
     public Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id, bool nonZeroExitIsError, CancellationToken cancellation) =>
         WindowRead(connection => RecordQueries.ReadDetail(connection, kind, id, nonZeroExitIsError), cancellation);
 
-    public async Task<bool> ReadRunOutputAsync(long id, Action<Stream> read)
+    public Task<bool> ReadRunOutputAsync(long id, Action<Stream> read) =>
+        Export(connection => RecordQueries.ReadRunOutput(connection, id, read));
+
+    public Task<bool> ReadScanReportAsync(long id, Action<Stream> read) =>
+        Export(connection => RecordQueries.ReadScanReport(connection, id, read));
+
+    private async Task<bool> Export(Func<SqliteConnection, bool> read)
     {
         await _exportGate.WaitAsync(_closing.Token).ConfigureAwait(false);
         try
@@ -301,7 +307,7 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
             {
                 _closing.Token.ThrowIfCancellationRequested();
                 using var connection = OpenWindowConnection();
-                return RecordQueries.ReadRunOutput(connection, id, read);
+                return read(connection);
             }).ConfigureAwait(false);
         }
         finally { _exportGate.Release(); }

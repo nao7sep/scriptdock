@@ -21,8 +21,8 @@ public static class RunOutputFile
     /// <summary>Writes <paramref name="output"/> as the console shows it (<see cref="RunLog.Lines"/>), whole,
     /// and returns the file's path. Streamed through in pieces (<see cref="RunLog.Copy"/>), so memory stays at
     /// a working buffer whatever the output's size. Throws when the file cannot be written; a part-written
-    /// file is removed.</summary>
-    public static string Write(string root, string script, string id, Stream output)
+    /// file is removed. Structured reports pass clean=false to preserve their stored bytes.</summary>
+    public static string Write(string root, string script, string id, Stream output, bool clean = true)
     {
         var directory = Path.Combine(root, DirectoryName);
         var stem = Path.GetFileNameWithoutExtension(script) is { Length: > 0 } name ? name : "output";
@@ -42,8 +42,16 @@ public static class RunOutputFile
         // Published whole by a rename, so an editor never opens a half-written file; a reopen replaces it.
         try
         {
-            using (var writer = new StreamWriter(temp, append: false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
+            if (clean)
+            {
+                using var writer = new StreamWriter(temp, append: false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 RunLog.Copy(output, writer);
+            }
+            else
+            {
+                using var file = File.Create(temp);
+                output.CopyTo(file);
+            }
             File.Move(temp, path, overwrite: true);
         }
         catch

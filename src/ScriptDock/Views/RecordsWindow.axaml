@@ -245,9 +245,34 @@
                                     </Grid>
                                 </Border>
                             </StackPanel>
+                            <StackPanel Spacing="8" IsVisible="{Binding CanOpenFullReport}">
+                                <Button i18n:Localized.Content="records.openFullReport" Command="{Binding OpenFullReportCommand}"
+                                        HorizontalAlignment="Left"/>
+                                <Border x:Name="OpenReportErrorBar" IsVisible="{Binding OpenReportFailed}"
+                                        Background="{DynamicResource ErrorSurfaceBrush}" BorderBrush="{DynamicResource DangerTextBrush}"
+                                        BorderThickness="1" CornerRadius="6" Padding="9,7"
+                                        AutomationProperties.LiveSetting="Assertive">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <TextBlock x:Name="OpenReportErrorText" i18n:Localized.Text="records.openReportFailed"
+                                                   TextWrapping="Wrap" VerticalAlignment="Top"
+                                                   Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                        <Button Grid.Column="1" Classes="resultClose" VerticalAlignment="Top"
+                                                views:FirstLineAlignment.To="{Binding #OpenReportErrorText}"
+                                                Command="{Binding DismissOpenReportErrorCommand}"
+                                                i18n:Localized.AutomationName="records.closeReportResult"
+                                                i18n:Localized.ToolTip="common.close">
+                                            <Path Width="10" Height="10" Stretch="Uniform"
+                                                  Stroke="{DynamicResource DangerTextBrush}" StrokeThickness="1.8"
+                                                  StrokeLineCap="Round" Data="M1,1 L9,9 M9,1 L1,9"/>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>
+                <TextBlock IsVisible="{Binding ShowDetailLoading}" i18n:Localized.Text="records.loadingDetail"
+                           Margin="16" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
                 <TextBlock IsVisible="{Binding ShowNoSelection}" i18n:Localized.Text="records.noSelection"
                            Margin="16" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
                 <TextBlock IsVisible="{Binding ShowDetailFailed}" i18n:Localized.Text="records.detailFailed"
