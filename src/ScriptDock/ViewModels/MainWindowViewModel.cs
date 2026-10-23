@@ -441,6 +441,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public void BeginShutdown()
     {
         _quitting = true;
+        RefreshActionAvailability();
         _runner.SealLaunches();
         _scanCts?.Cancel();
     }
@@ -726,21 +727,36 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    [RelayCommand]
+    private bool CanActOnScript(ScriptItem? item) => item is not null && !_quitting;
+    private bool CanActOnEntry(RecentEntry? entry) => entry is not null && !_quitting;
+    private bool CanStopEntry(RecentEntry? entry) => CanActOnEntry(entry) && entry?.Process?.State == RunState.Running;
+
+    private void RefreshActionAvailability()
+    {
+        RunScriptCommand.NotifyCanExecuteChanged();
+        ToggleHiddenCommand.NotifyCanExecuteChanged();
+        RunOrRestartCommand.NotifyCanExecuteChanged();
+        StopEntryCommand.NotifyCanExecuteChanged();
+        DismissEntryCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnSelectedScriptChanged(ScriptItem? value) => RefreshActionAvailability();
+
+    [RelayCommand(CanExecute = nameof(CanActOnScript))]
     private async Task RunScript(ScriptItem? item)
     {
         if (item is not null)
             await RunByPath(item.Path, item.DisplayName);
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanActOnEntry))]
     private async Task RunOrRestart(RecentEntry? entry)
     {
         if (entry is not null)
             await RunByPath(entry.Path, entry.DisplayName);
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanStopEntry))]
     private async Task StopEntry(RecentEntry? entry)
     {
         if (entry?.Process is not { State: RunState.Running } || _quitting)
@@ -771,7 +787,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         finally { _scriptActions.Remove(key); }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanActOnEntry))]
     private async Task DismissEntry(RecentEntry? entry)
     {
         if (entry is null || _quitting)
@@ -834,7 +850,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         finally { _scriptActions.Remove(key); }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanActOnScript))]
     private async Task ToggleHidden(ScriptItem? item)
     {
         if (item is null || _quitting)
@@ -885,6 +901,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     partial void OnSelectedRecentEntryChanged(RecentEntry? value)
     {
+        RefreshActionAvailability();
         OnPropertyChanged(nameof(CanSendInput));
         OnPropertyChanged(nameof(HasSelection));
         RefreshOutput();
@@ -1031,6 +1048,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         SelectedRecentEntry = selectedKey is null ? null : Recent.FirstOrDefault(e =>
             PathIdentity.Comparer.Equals(e.Process?.ScriptKey ?? ScriptKeyFor(e.Path), selectedKey));
+        RefreshActionAvailability();
         RunningCount = _runner.Active.Count(p => p.State == RunState.Running);
         OnPropertyChanged(nameof(NoRecent));
         RefreshOutput();

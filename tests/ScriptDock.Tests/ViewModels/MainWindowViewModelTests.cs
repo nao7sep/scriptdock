@@ -57,6 +57,32 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task SelectionCommandsRequireAnApplicableTargetAndStopTracksRunState()
+    {
+        var (vm, runner) = BuildVm();
+        Assert.False(vm.RunScriptCommand.CanExecute(null));
+        Assert.False(vm.ToggleHiddenCommand.CanExecute(null));
+        Assert.False(vm.RunOrRestartCommand.CanExecute(null));
+        Assert.False(vm.StopEntryCommand.CanExecute(null));
+        Assert.False(vm.DismissEntryCommand.CanExecute(null));
+        var script = new ScriptItem("/tmp/selection.command");
+        Assert.True(vm.RunScriptCommand.CanExecute(script));
+        Assert.True(vm.ToggleHiddenCommand.CanExecute(script));
+        await vm.RunScriptCommand.ExecuteAsync(script);
+        var entry = Assert.Single(vm.Recent);
+        Assert.True(vm.StopEntryCommand.CanExecute(entry));
+        Assert.True(vm.RunOrRestartCommand.CanExecute(entry));
+        Assert.True(vm.DismissEntryCommand.CanExecute(entry));
+        entry.Process!.Complete();
+        Assert.False(vm.StopEntryCommand.CanExecute(entry));
+        Assert.True(vm.RunOrRestartCommand.CanExecute(entry));
+        vm.BeginShutdown();
+        Assert.False(vm.RunScriptCommand.CanExecute(script));
+        Assert.False(vm.DismissEntryCommand.CanExecute(entry));
+        await vm.ShutdownAsync();
+    }
+
+    [Fact]
     public async Task StopEntry_RunningEntry_DeclinedConfirm_DoesNotTerminate()
     {
         var (vm, runner) = BuildVm();
