@@ -111,7 +111,17 @@ public sealed class ConsoleViewTests : WindowTest, IDisposable
         window.KeyRelease(Key.C, command, PhysicalKey.C, "c");
         Settle(window);
 
-        Assert.Equal(long_ + Environment.NewLine + "third", await window.Clipboard!.TryGetTextAsync());
+        // Copy reads file-backed lines off the UI thread; layout settlement does not await it.
+        var expected = long_ + Environment.NewLine + "third";
+        var deadline = DateTime.UtcNow.AddSeconds(20);
+        string? copied;
+        do
+        {
+            copied = await window.Clipboard!.TryGetTextAsync();
+            if (copied == expected) break;
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        } while (DateTime.UtcNow < deadline);
+        Assert.Equal(expected, copied);
     }
 
     [AvaloniaFact]
