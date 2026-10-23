@@ -100,6 +100,29 @@ public sealed class MainWindowViewModelScriptsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ScanRefreshesSharedLabelsAndPreservesRecentSelection()
+    {
+        var first = Path.Combine(_root, "one", "run.command");
+        var second = Path.Combine(_root, "two", "run.command");
+        Directory.CreateDirectory(Path.GetDirectoryName(first)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(second)!);
+        File.WriteAllText(first, "#");
+        var vm = await ScannedVm();
+        await vm.RunScriptCommand.ExecuteAsync(Assert.Single(vm.Scripts));
+        Assert.Equal(Assert.Single(vm.Scripts).DisplayName, Assert.Single(vm.Recent).DisplayName);
+        File.WriteAllText(second, "#");
+        await vm.RescanCommand.ExecuteAsync(null);
+        Assert.Equal(vm.Scripts.Single(x => x.Path == first).DisplayName, Assert.Single(vm.Recent).DisplayName);
+        Assert.Equal(first, vm.SelectedRecentEntry!.Path);
+        Assert.Contains("one", vm.SelectedRecentEntry.DisplayName, StringComparison.Ordinal);
+        File.Delete(second);
+        await vm.RescanCommand.ExecuteAsync(null);
+        await vm.RescanCommand.ExecuteAsync(null); // the removed tile has left the shared label map
+        Assert.Equal(vm.Scripts.Single(x => x.Path == first).DisplayName, Assert.Single(vm.Recent).DisplayName);
+        Assert.Equal(first, vm.SelectedRecentEntry!.Path);
+    }
+
+    [Fact]
     public async Task InitializeAsync_WithUnendedRunsInTheRecords_StartsNoProcessAndShowsNoError()
     {
         var path = Path.Combine(_root, "left.command");

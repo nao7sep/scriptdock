@@ -691,6 +691,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             _removed = flags.Removed;
             _knownPaths.Paths = candidate.Paths;
             RebuildScripts();
+            RebuildRecent();
             if (report.Inaccessible.Count > 0)
                 ReportOperationalError("scan", Message.Of("scan.failed"));
             else
