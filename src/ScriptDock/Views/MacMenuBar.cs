@@ -6,6 +6,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform;
+using Avalonia.Input;
+using Avalonia.VisualTree;
 using ScriptDock.I18n;
 using ScriptDock.Services;
 using static ScriptDock.Views.ObjC;
@@ -132,7 +134,7 @@ internal static class MacMenuBar
         /// <summary>The item's own shortcut: back to Avalonia as the key it was.</summary>
         Forward,
 
-        /// <summary>A click: the focused text field's own command.</summary>
+        /// <summary>A click: the focused selection owner’s own command.</summary>
         EditField,
     }
 
@@ -140,17 +142,25 @@ internal static class MacMenuBar
     /// Routes an Edit item. Its shortcut goes back to Avalonia as the key it was, so the focused
     /// control handles it exactly as it would with no menu: a text field edits, a list selects all, a
     /// window binding runs. The item has to accept its shortcut for that, because AppKit swallows the
-    /// key of an item that reports itself disabled. A click edits the focused text field, and the item
-    /// shows disabled when that field cannot take it.
+    /// key of an item that reports itself disabled. A click routes to the focused selection owner, and the item
+    /// shows disabled when that owner cannot take it.
     /// </summary>
-    internal static EditRoute Route(string action, TextBox? field, bool shortcut) =>
+    internal static EditRoute Route(string action, InputElement? field, bool shortcut) =>
         shortcut ? EditRoute.Forward
         : field is not null && EditCommand(field, action).Available ? EditRoute.EditField
         : EditRoute.None;
 
-    /// <summary>What an Edit action does to <paramref name="field"/>, and whether it can now.</summary>
-    internal static (bool Available, Action Run) EditCommand(TextBox field, string action) => action switch
+    /// <summary>What an Edit action does to <paramref name="target"/>, and whether it can now.</summary>
+    internal static (bool Available, Action Run) EditCommand(InputElement target, string action)
     {
+        if (target is SelectableTextBlock text)
+            return action == "copy:" ? (text.CanCopy, text.Copy) : (false, static () => { });
+        if (target is Visual visual && visual.GetVisualAncestors().Prepend(visual).OfType<ListBox>().Any(list => list.Name == "ConsoleList")
+            && TopLevel.GetTopLevel(visual) is MainWindow main)
+            return action == "copy:" ? (main.CanCopyConsoleSelection, () => _ = main.CopyConsoleSelectionAsync()) : (false, static () => { });
+        if (target is not TextBox field) return (false, static () => { });
+        return action switch
+        {
         "undo:" => (field.CanUndo, field.Undo),
         "redo:" => (field.CanRedo, field.Redo),
         "cut:" => (field.CanCut, field.Cut),
@@ -158,13 +168,14 @@ internal static class MacMenuBar
         "paste:" => (field.CanPaste, field.Paste),
         "selectAll:" => (!string.IsNullOrEmpty(field.Text), field.SelectAll),
         _ => (false, static () => { }),
-    };
+        };
+    }
 
-    // What AppKit and Avalonia report to the Edit items: the focused text field of the window that owns
+    // What AppKit and Avalonia report to the Edit items: the focused selection owner of the window that owns
     // a native view, and the Command key-down being dispatched (zero for anything else). AppKit has
     // already matched that key-down to the item it validates or sends, so it is the item's own
     // shortcut. Tests replace them.
-    internal static Func<IntPtr, TextBox?> FocusedFieldOf = FocusedFieldOfWindowWithView;
+    internal static Func<IntPtr, InputElement?> FocusedFieldOf = FocusedFieldOfWindowWithView;
     internal static Func<IntPtr> CurrentShortcut = ReadCurrentShortcut;
 
     /// <summary>Whether <see cref="Install"/> has set the bar in this process.</summary>
@@ -496,13 +507,13 @@ internal static class MacMenuBar
             : IntPtr.Zero;
     }
 
-    private static TextBox? FocusedFieldOfWindowWithView(IntPtr view)
+    private static InputElement? FocusedFieldOfWindowWithView(IntPtr view)
     {
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
             return null;
         var window = desktop.Windows.FirstOrDefault(window =>
             window.TryGetPlatformHandle() is IMacOSTopLevelPlatformHandle handle && handle.NSView == view);
-        return window?.FocusManager?.GetFocusedElement() as TextBox;
+        return window?.FocusManager?.GetFocusedElement() as InputElement;
     }
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]

@@ -142,6 +142,20 @@ public sealed class MacMenuBarTests
         }
     }
 
+    [AvaloniaFact]
+    public void CopyRoutesToSelectableTextButCutAndPasteRemainEditingOnly()
+    {
+        var text = new SelectableTextBlock { Text = "record text" };
+        Assert.Equal(EditRoute.None, Route("copy:", text, shortcut: false));
+        text.SelectionStart = 0;
+        text.SelectionEnd = 6;
+        Assert.Equal(EditRoute.EditField, Route("copy:", text, shortcut: false));
+        Assert.Equal(EditRoute.None, Route("cut:", text, shortcut: false));
+        Assert.Equal(EditRoute.None, Route("paste:", text, shortcut: false));
+        text.SelectionEnd = 0;
+        Assert.Equal(EditRoute.None, Route("copy:", text, shortcut: false));
+    }
+
     // ── The app around it ───────────────────────────────────────────────────────────────────────
 
     [Fact]

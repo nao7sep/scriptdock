@@ -60,7 +60,7 @@ public sealed class ProcessFixtureTests
             Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
             Assert.Equal(RunState.Exited, handle.State);
             Assert.False(File.Exists(marker));
-            Assert.Contains(fixture.ShellHome, handle.ReadOutput());
+            Assert.Contains(fixture.ShellHome, handle.ReadConsoleOutput());
         }
         finally
         {

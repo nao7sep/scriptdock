@@ -60,6 +60,26 @@ public sealed class ConsoleViewTests : WindowTest, IDisposable
         new AppConfig(), new AppState(), new KnownPaths(), new ScriptScanner(), _runner);
 
     [AvaloniaFact]
+    public async Task NativeCopyUsesTheFocusedConsoleSelectionAndReadsItsCompleteFileRange()
+    {
+        var path = Path.Combine(_root, "copy.log");
+        var text = new string('x', ConsoleFeed.ShownBytes * 3);
+        File.WriteAllText(path, text);
+        var vm = NewVm();
+        var window = Show(new MainWindow { DataContext = vm, Width = 1100, Height = 760 });
+        vm.ApplyConsoleUpdate(new ConsoleFeed(path).Read()!);
+        Settle(window);
+        var list = window.FindControl<ListBox>("ConsoleList")!;
+        Assert.Equal(MacMenuBar.EditRoute.None, MacMenuBar.Route("copy:", list, shortcut: false));
+        list.Selection.Select(0);
+        Assert.Equal(MacMenuBar.EditRoute.EditField, MacMenuBar.Route("copy:", list, shortcut: false));
+        Assert.Equal(MacMenuBar.EditRoute.None, MacMenuBar.Route("cut:", list, shortcut: false));
+        await window.CopyConsoleSelectionAsync();
+        Assert.Equal(text, await window.Clipboard!.TryGetTextAsync());
+        Assert.True(vm.ConsoleLines[0].Text.Length <= ConsoleFeed.ShownBytes);
+    }
+
+    [AvaloniaFact]
     public void Only_the_lines_on_screen_are_laid_out()
     {
         var vm = NewVm();

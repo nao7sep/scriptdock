@@ -666,23 +666,31 @@ public partial class MainWindow : Window
             _scrollConsolePending = true;
     }
 
-    // The command key and C copies the selected lines, whole and in order, as the console holds them.
-    private async void OnConsoleKeyDown(object? sender, KeyEventArgs e)
+    internal bool CanCopyConsoleSelection => ConsoleList.Selection.SelectedIndexes.Count > 0;
+
+    // Keyboard and native-menu Copy share the same captured selection and file-backed read.
+    internal async Task CopyConsoleSelectionAsync()
     {
         try
         {
-            if (e.Key != Key.C || e.KeyModifiers != ShortcutCatalog.CommandModifier(this) || ViewModel is not { } vm)
-                return;
-            var indexes = ConsoleList.Selection.SelectedIndexes.Where(index => index >= 0 && index < vm.ConsoleLines.Count).Order().ToList();
-            if (indexes.Count == 0 || Clipboard is not { } clipboard)
-                return;
-            e.Handled = true;
-            await clipboard.SetTextAsync(string.Join(Environment.NewLine, indexes.Select(index => vm.ConsoleLines[index].Text)));
+            if (ViewModel is not { } vm || Clipboard is not { } clipboard) return;
+            var lines = ConsoleList.Selection.SelectedIndexes.Where(index => index >= 0 && index < vm.ConsoleLines.Count)
+                .Order().Select(index => vm.ConsoleLines[index]).ToArray();
+            if (lines.Length == 0) return;
+            var text = await Task.Run(() => string.Join(Environment.NewLine, lines.Select(line => line.ReadFullText())));
+            await clipboard.SetTextAsync(text);
         }
         catch (Exception ex)
         {
             Log.Warn("ui: copying console lines failed", ex);
         }
+    }
+
+    private async void OnConsoleKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.C || e.KeyModifiers != ShortcutCatalog.CommandModifier(this) || !CanCopyConsoleSelection) return;
+        e.Handled = true;
+        await CopyConsoleSelectionAsync();
     }
 
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)

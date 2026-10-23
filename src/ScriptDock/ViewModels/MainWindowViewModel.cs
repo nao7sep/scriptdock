@@ -440,6 +440,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public void BeginShutdown()
     {
+        _consoleFeed?.Cancel();
         _quitting = true;
         RefreshActionAvailability();
         _runner.SealLaunches();
@@ -902,6 +903,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     partial void OnSelectedRecentEntryChanged(RecentEntry? value)
     {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!ReferenceEquals(SelectedRecentEntry?.Process, _consoleProcess)) _consoleFeed?.Cancel();
+        });
         RefreshActionAvailability();
         OnPropertyChanged(nameof(CanSendInput));
         OnPropertyChanged(nameof(HasSelection));
@@ -1196,6 +1201,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 var process = selected?.Process;
                 if (!ReferenceEquals(process, _consoleProcess))
                 {
+                    _consoleFeed?.Cancel();
                     _consoleProcess = process;
                     _consoleFeed = null;
                     _consoleRetry.Reset();
@@ -1281,10 +1287,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
         _consoleOpenLine = null;
 
-        foreach (var text in update.Completed)
-            AddConsoleLine(new ConsoleLine(text));
+        for (var index = 0; index < update.Completed.Count; index++)
+            AddConsoleLine(new ConsoleLine(update.Completed[index], update.CompletedRanges?[index]));
         if (update.Open.Length > 0)
-            AddConsoleLine(_consoleOpenLine = new ConsoleLine(update.Open));
+            AddConsoleLine(_consoleOpenLine = new ConsoleLine(update.Open, update.OpenRange));
 
         while (_consoleChars > ConsoleFeed.ShownBytes && ConsoleLines.Count > 1)
         {

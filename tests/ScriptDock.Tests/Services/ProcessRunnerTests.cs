@@ -57,7 +57,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
 
         Assert.Equal(RunState.Exited, handle.State);
         Assert.Equal(0, handle.ExitCode);
-        Assert.Contains("hello-from-script", handle.ReadOutput());
+        Assert.Contains("hello-from-script", handle.ReadConsoleOutput());
         Assert.NotNull(handle.LogFilePath);
         Assert.True(File.Exists(handle.LogFilePath!));
     }
@@ -89,7 +89,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
 
         Assert.Equal(RunState.Exited, handle.State);
         Assert.Equal(7, handle.ExitCode);
-        Assert.Contains("windows-output", handle.ReadOutput());
+        Assert.Contains("windows-output", handle.ReadConsoleOutput());
     }
 
     [WindowsOnlyFact]
@@ -105,7 +105,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
             Assert.Equal(RunState.Exited, handle.State);
             Assert.NotNull(handle.ExitCode);
             Assert.NotEqual(0, handle.ExitCode);
-            Assert.Contains(handle.ReadOutput(), line => line.Contains("script-failed"));
+            Assert.Contains(handle.ReadConsoleOutput(), line => line.Contains("script-failed"));
         }
         finally { await runner.TerminateAsync(handle); }
     }
@@ -123,7 +123,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         {
             Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
             Assert.Equal(7, handle.ExitCode);
-            Assert.Contains("literal-batch-path", handle.ReadOutput());
+            Assert.Contains("literal-batch-path", handle.ReadConsoleOutput());
         }
         finally { await runner.TerminateAsync(handle); }
     }
@@ -139,7 +139,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         {
             Assert.True(await handle.SendInputAsync("hello-stdin"));
             Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
-            Assert.Contains(handle.ReadOutput(), line => line.Contains("got:hello-stdin"));
+            Assert.Contains(handle.ReadConsoleOutput(), line => line.Contains("got:hello-stdin"));
         }
         finally { await runner.TerminateAsync(handle); }
     }
@@ -188,7 +188,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
             Assert.True(await handle.SendInputAsync("hello-stdin"));
 
             Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
-            Assert.Contains(handle.ReadOutput(), line => line.Contains("got:hello-stdin"));
+            Assert.Contains(handle.ReadConsoleOutput(), line => line.Contains("got:hello-stdin"));
         }
         finally
         {
@@ -211,7 +211,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
             Assert.All(await Task.WhenAll(first, second), Assert.True);
 
             Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
-            Assert.Contains("one|two", handle.ReadOutput());
+            Assert.Contains("one|two", handle.ReadConsoleOutput());
         }
         finally
         {
@@ -234,8 +234,8 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         finally { gate.Release(); }
         Assert.True(await handle.SendInputAsync("healthy"));
         Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
-        Assert.Contains("healthy", handle.ReadOutput());
-        Assert.DoesNotContain("unattempted", handle.ReadOutput());
+        Assert.Contains("healthy", handle.ReadConsoleOutput());
+        Assert.DoesNotContain("unattempted", handle.ReadConsoleOutput());
     }
 
     [MacOnlyFact]
@@ -299,9 +299,9 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         try
         {
             var deadline = DateTime.UtcNow.AddSeconds(20);
-            while (!handle.ReadOutput().Contains("started") && DateTime.UtcNow < deadline)
+            while (!handle.ReadConsoleOutput().Contains("started") && DateTime.UtcNow < deadline)
                 Thread.Sleep(50);
-            Assert.Contains("started", handle.ReadOutput());
+            Assert.Contains("started", handle.ReadConsoleOutput());
 
             Assert.True(await runner.TerminateAsync(handle));
             Assert.Equal(RunState.Terminated, handle.State);
@@ -328,7 +328,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         Assert.True(await handle.SendInputAsync("still-owned"));
         Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
         Assert.Equal(RunState.Exited, handle.State);
-        Assert.Contains("got:still-owned", handle.ReadOutput());
+        Assert.Contains("got:still-owned", handle.ReadConsoleOutput());
     }
 
     [MacOnlyFact]
@@ -360,7 +360,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         Assert.True(await handle.SendInputAsync("after-timeout"));
         Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
         Assert.Equal(RunState.Exited, handle.State);
-        Assert.Contains("got:after-timeout", handle.ReadOutput());
+        Assert.Contains("got:after-timeout", handle.ReadConsoleOutput());
     }
 
     [MacOnlyFact]

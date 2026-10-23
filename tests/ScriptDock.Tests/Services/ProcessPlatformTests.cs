@@ -49,15 +49,15 @@ public sealed class ProcessPlatformTests : IAsyncLifetime
     {
         var handle = await StartAsync(runner, path);
         Assert.True(await handle.WaitForExitAsync(Bound));
-        return handle.ReadOutput();
+        return handle.ReadConsoleOutput();
     }
 
     private static void WaitForLine(ScriptProcess handle, string line)
     {
         var deadline = DateTime.UtcNow + Bound;
-        while (!handle.ReadOutput().Contains(line) && DateTime.UtcNow < deadline)
+        while (!handle.ReadConsoleOutput().Contains(line) && DateTime.UtcNow < deadline)
             Thread.Sleep(50);
-        Assert.Contains(line, handle.ReadOutput());
+        Assert.Contains(line, handle.ReadConsoleOutput());
     }
 
     // ── Both platforms ──────────────────────────────────────────────────────────────────────────
@@ -127,7 +127,7 @@ public sealed class ProcessPlatformTests : IAsyncLifetime
             Assert.True(await handle.SendInputAsync("二"));
             Assert.True(await handle.SendInputAsync("three"));
             Assert.True(await handle.WaitForExitAsync(Bound));
-            Assert.Contains("got:one,二,three", handle.ReadOutput());
+            Assert.Contains("got:one,二,three", handle.ReadConsoleOutput());
         }
         finally { await runner.TerminateAsync(handle); }
     }
@@ -230,7 +230,7 @@ public sealed class ProcessPlatformTests : IAsyncLifetime
 
         Assert.True(await handle.WaitForExitAsync(Bound));
         Assert.Equal(126, handle.ExitCode);
-        Assert.Contains(handle.ReadOutput(), line => line.Contains("permission denied", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(handle.ReadConsoleOutput(), line => line.Contains("permission denied", StringComparison.OrdinalIgnoreCase));
     }
 
     // A script with no #! line still runs: zsh runs it as a shell script.
@@ -269,7 +269,7 @@ public sealed class ProcessPlatformTests : IAsyncLifetime
 
         Assert.True(await handle.WaitForExitAsync(Bound));
         Assert.Equal(4, handle.ExitCode);
-        Assert.Contains("cmd-ran", handle.ReadOutput());
+        Assert.Contains("cmd-ran", handle.ReadConsoleOutput());
     }
 
     // Every PowerShell stream reaches the log, not only output: errors and warnings too.

@@ -29,39 +29,28 @@ public sealed class RunLogTests : IDisposable
     }
 
     [Fact]
-    public void ReadTail_MissingFile_ReturnsEmpty()
+    public void Feed_MissingFile_ReturnsEmpty()
     {
-        Assert.Empty(RunLog.ReadTail(Path.Combine(_dir, "nope.log")));
+        Assert.Throws<FileNotFoundException>(() => new ConsoleFeed(Path.Combine(_dir, "nope.log")).Read());
     }
 
     [Fact]
-    public void ReadTail_StripsAnsi_AndDropsTrailingBlank()
+    public void Feed_StripsAnsi_AndDropsTrailingBlank()
     {
         File.WriteAllText(_file, $"{Esc}[32mok{Esc}[0m\nsecond\n");
 
-        Assert.Equal(["ok", "second"], RunLog.ReadTail(_file));
+        Assert.Equal(["ok", "second"], new ConsoleFeed(_file).Read()!.Completed);
     }
 
     [Fact]
-    public void ReadTail_CapsToLastBytes_AndDropsPartialFirstLine()
-    {
-        File.WriteAllText(_file, "aaaa\nbbbb\ncccc\n");
-
-        var tail = RunLog.ReadTail(_file, maxBytes: 10);
-
-        Assert.DoesNotContain("aaaa", tail);
-        Assert.Contains("cccc", tail);
-    }
-
-    [Fact]
-    public void ReadTail_ReadsWhileFileIsOpenForWriting()
+    public void Feed_ReadsWhileFileIsOpenForWriting()
     {
         using var writer = new FileStream(_file, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
         var bytes = Encoding.UTF8.GetBytes("live line\n");
         writer.Write(bytes, 0, bytes.Length);
         writer.Flush();
 
-        Assert.Contains("live line", RunLog.ReadTail(_file));
+        Assert.Contains("live line", new ConsoleFeed(_file).Read()!.Completed);
     }
 
     [Fact]
@@ -69,7 +58,7 @@ public sealed class RunLogTests : IDisposable
     {
         File.WriteAllText(_file, "old\nlast\n");
         using var stream = new AppendOnReadStream(_file);
-        Assert.Equal(["last"], RunLog.ReadTail(stream, 6));
+        Assert.Equal(["old", "last"], new ConsoleFeed(_file).Read(stream)!.Completed);
         Assert.True(new FileInfo(_file).Length > 6);
     }
 
@@ -78,15 +67,15 @@ public sealed class RunLogTests : IDisposable
     {
         if (!OperatingSystem.IsMacOS()) return;
         File.WriteAllText(_file, "visible\n");
-        using var process = new ScriptProcess(1, _file, default) { LogFilePath = _file };
+        var feed = new ConsoleFeed(_file);
         var mode = File.GetUnixFileMode(_file);
         try
         {
             File.SetUnixFileMode(_file, UnixFileMode.None);
-            Assert.Empty(process.ReadOutput());
+            Assert.Throws<UnauthorizedAccessException>(() => feed.Read());
         }
         finally { File.SetUnixFileMode(_file, mode); }
-        Assert.Equal(["visible"], process.ReadOutput());
+        Assert.Equal(["visible"], feed.Read()!.Completed);
     }
 
     private sealed class AppendOnReadStream(string path) : Stream
@@ -115,18 +104,20 @@ public sealed class RunLogTests : IDisposable
     }
 
     [Fact]
-    public void ReadTail_CollapsesCarriageReturnProgressUpdates()
+    public void Feed_CollapsesCarriageReturnProgressUpdates()
     {
         File.WriteAllText(_file, "Building 1\rBuilding 2\rBuilding 3\n");
 
-        Assert.Equal(["Building 3"], RunLog.ReadTail(_file));
+        Assert.Equal(["Building 3"], new ConsoleFeed(_file).Read()!.Completed);
     }
 
     [Fact]
-    public void ReadTail_KeepsFinishedLines_CollapsesTrailingProgress()
+    public void Feed_KeepsFinishedLines_CollapsesTrailingProgress()
     {
         File.WriteAllText(_file, "Compiling a\nBuilding 1\rBuilding 2\rCompiling b\nBuilding 3\rBuilding 4");
 
-        Assert.Equal(["Compiling a", "Compiling b", "Building 4"], RunLog.ReadTail(_file));
+        var update = new ConsoleFeed(_file).Read()!;
+        Assert.Equal(["Compiling a", "Compiling b"], update.Completed);
+        Assert.Equal("Building 4", update.Open);
     }
 }
