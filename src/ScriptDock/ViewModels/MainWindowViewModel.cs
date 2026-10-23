@@ -1143,6 +1143,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // and about how much the console holds, which keeps it to the feed's shown amount.
     private ScriptProcess? _consoleProcess;
     private ConsoleFeed? _consoleFeed;
+    private readonly ConsoleReadRetry _consoleRetry = new();
     private ConsoleLine? _consoleOpenLine;
     private long _consoleChars;
 
@@ -1150,6 +1151,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // while one runs is folded into one more pass, and a read whose run is no longer selected is dropped.
     private bool _outputReading;
     private bool _outputRefreshAgain;
+
+    internal Func<ConsoleFeed, Task<ConsoleUpdate?>> ReadConsole { get; set; } = feed => Task.Run(() => ReadFeed(feed));
 
     private void RefreshOutput() => _ = RefreshOutputAsync();
 
@@ -1173,6 +1176,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 {
                     _consoleProcess = process;
                     _consoleFeed = null;
+                    _consoleRetry.Reset();
                     ClearConsole();
                     OnPropertyChanged(nameof(CanOpenRunOutput));
                 }
@@ -1182,15 +1186,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                     OnPropertyChanged(nameof(CanOpenRunOutput));
                 }
 
+                if (!_consoleRetry.CanRead(Time))
+                    continue;
                 try
                 {
                     var feed = _consoleFeed;
-                    var update = feed is null ? null : await Task.Run(() => ReadFeed(feed));
-                    if (!ReferenceEquals(SelectedRecentEntry, selected))
+                    var update = feed is null ? null : await ReadConsole(feed);
+                    if (!ReferenceEquals(SelectedRecentEntry?.Process, process))
                     {
                         _outputRefreshAgain = true;
                         continue;
                     }
+                    _consoleRetry.Reset();
                     if (selected is not null)
                         ResolveProcessActionError(selected.Path, "read-output");
                     if (update is not null && ReferenceEquals(feed, _consoleFeed))
@@ -1198,9 +1205,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 }
                 catch (Exception ex)
                 {
-                    Log.Warn("ui: refresh output failed", ex);
-                    if (SelectedRecentEntry is { } current)
-                        ReportProcessActionError(current.Path, "read-output", Message.Of("process.readOutputFailed"));
+                    if (!ReferenceEquals(SelectedRecentEntry?.Process, process))
+                    {
+                        _outputRefreshAgain = true;
+                        continue;
+                    }
+                    if (_consoleRetry.Failed(Time))
+                    {
+                        Log.Warn("ui: refresh output failed", ex);
+                        if (selected is not null)
+                            ReportProcessActionError(selected.Path, "read-output", Message.Of("process.readOutputFailed"));
+                    }
                 }
             }
             while (_outputRefreshAgain);

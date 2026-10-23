@@ -95,6 +95,41 @@ public sealed class ConsoleViewTests : WindowTest, IDisposable
     }
 
     [AvaloniaFact]
+    public async Task Replacing_a_recent_row_for_the_same_process_keeps_an_inflight_console_read()
+    {
+        var log = Path.Combine(_root, "pending.log");
+        File.WriteAllText(log, "first output\n");
+        var process = _runner.AddRunning("/x/serve.command");
+        process.LogFilePath = log;
+        var vm = NewVm();
+        var entered = new TaskCompletionSource();
+        var release = new TaskCompletionSource();
+        vm.ReadConsole = async feed =>
+        {
+            var update = feed.Read();
+            entered.TrySetResult();
+            await release.Task;
+            return update;
+        };
+        try
+        {
+            vm.SelectedRecentEntry = new RecentEntry(process.ScriptPath, "old row", process.StartedAt, process);
+            await entered.Task.WaitAsync(TestContext.Current.CancellationToken);
+            vm.SelectedRecentEntry = new RecentEntry(process.ScriptPath, "rebuilt row", process.StartedAt, process);
+            release.SetResult();
+            // Let the awaited read's continuation and its coalesced unchanged poll settle.
+            await Task.Yield();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(["first output"], vm.ConsoleLines.Select(line => line.Text));
+        }
+        finally
+        {
+            release.TrySetResult();
+            await vm.ShutdownAsync();
+        }
+    }
+
+    [AvaloniaFact]
     public async Task Open_full_output_writes_the_runs_whole_cleaned_output_for_the_editor()
     {
         var log = Path.Combine(_root, "run.log");
