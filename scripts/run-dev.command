@@ -13,7 +13,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROJECT_FILE="$REPO_DIR/src/ScriptDock/ScriptDock.csproj"
-RUNTIME_TOKEN="run-dev-$$-$(date +%s)-$RANDOM"
+APP_PID=""
 source "$SCRIPT_DIR/launcher-runtime.sh"
 
 log_step() {
@@ -39,9 +39,9 @@ pause_on_failure() {
 cleanup() {
   local status="$?"
   trap - EXIT
-  if is_launcher_runtime_owner "$RUNTIME_TOKEN" "$REPO_DIR"; then
-    stop_owned_runtime "ScriptDock" "$REPO_DIR" "$RUNTIME_TOKEN" true >/dev/null 2>&1 || true
-    release_launcher_runtime "$RUNTIME_TOKEN" "$REPO_DIR"
+  # Closing this launcher closes the app it started, unless a later launcher has replaced it.
+  if [[ -n "$APP_PID" && "$(recorded_runtime_pid "$REPO_DIR")" == "$APP_PID" ]]; then
+    stop_recorded_runtime "ScriptDock" "$REPO_DIR" >/dev/null 2>&1 || true
   fi
   pause_on_failure "$status"
   exit "$status"
@@ -54,15 +54,15 @@ require_command dotnet
 cd "$REPO_DIR"
 
 log_step "Replacing any existing ScriptDock runtime"
-claim_launcher_runtime "$RUNTIME_TOKEN" "$REPO_DIR"
-stop_owned_runtime "ScriptDock" "$REPO_DIR" "$RUNTIME_TOKEN"
+stop_recorded_runtime "ScriptDock" "$REPO_DIR"
 
 log_step "Restoring packages required for launch"
 dotnet restore "$PROJECT_FILE"
 
 log_step "Starting ScriptDock (Debug, from source)"
-dotnet run --project "$PROJECT_FILE" -- --launcher-registration "$REPO_DIR/.git/launcher-runtime-process" --launcher-token "$RUNTIME_TOKEN" &
+dotnet run --project "$PROJECT_FILE" &
 DEV_PID=$!
-wait_for_owned_runtime "ScriptDock" "$REPO_DIR" "$RUNTIME_TOKEN" 120
-log_step "ScriptDock is ready"
+if APP_PID="$(record_wrapped_runtime "$REPO_DIR" "$DEV_PID" "ScriptDock")"; then
+  log_step "ScriptDock is ready"
+fi
 wait "$DEV_PID"

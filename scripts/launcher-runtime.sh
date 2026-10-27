@@ -1,84 +1,87 @@
 #!/usr/bin/env bash
-# Sourced by the macOS launchers. Only an app's explicit registration grants process ownership;
-# command lines, executable names and dotnet's parent process never do.
+# Shared by the macOS launchers (run-dev, run-built, rebuild): one ScriptDock runtime per repository.
+# The launcher that starts ScriptDock records its process ID and executable under .git; the next launcher
+# asks that process to quit only while it still runs that executable. ScriptDock started any other way is
+# left to its single-instance behavior, which brings its window forward instead of opening a second one.
 
-claim_launcher_runtime() {
-  local token="$1" repo_dir="$2"
-  local owner_file="$repo_dir/.git/launcher-runtime-owner"
-  local temporary_file="${owner_file}.$$.$RANDOM"
-  printf '%s\n' "$token" > "$temporary_file"
-  mv -f "$temporary_file" "$owner_file"
+runtime_record() {
+  printf '%s/.git/launcher-runtime-process' "$1"
 }
 
-is_launcher_runtime_owner() {
-  local token="$1" repo_dir="$2"
-  local owner_file="$repo_dir/.git/launcher-runtime-owner"
-  [[ -f "$owner_file" && "$(tr -d '\r\n' < "$owner_file")" == "$token" ]]
+record_runtime() {
+  local repo_dir="$1" pid="$2"
+  printf '%s\n%s\n' "$pid" "$(ps -p "$pid" -o comm=)" > "$(runtime_record "$repo_dir")"
 }
 
-release_launcher_runtime() {
-  local token="$1" repo_dir="$2"
-  if is_launcher_runtime_owner "$token" "$repo_dir"; then
-    rm -f "$repo_dir/.git/launcher-runtime-owner"
-  fi
+# The recorded process ID, printed only while that process still runs the recorded executable.
+recorded_runtime_pid() {
+  local record pid executable
+  record="$(runtime_record "$1")"
+  [[ -f "$record" ]] || return 0
+  { IFS= read -r pid && IFS= read -r executable; } < "$record" || return 0
+  [[ "$pid" =~ ^[1-9][0-9]*$ && -n "$executable" ]] || return 0
+  [[ "$(ps -p "$pid" -o comm= 2>/dev/null)" == "$executable" ]] && printf '%s\n' "$pid"
+  return 0
 }
 
-registered_runtime_matches() {
-  local pid="$1" started="$2" actual_start actual_seconds
-  [[ "$pid" =~ ^[1-9][0-9]*$ && "$started" =~ ^[0-9]+$ ]] || return 1
-  actual_start="$(LC_ALL=C ps -p "$pid" -o lstart= 2>/dev/null)" || return 1
-  [[ -n "$actual_start" ]] || return 1
-  actual_seconds="$(LC_ALL=C date -j -f '%a %b %e %T %Y' "$actual_start" '+%s' 2>/dev/null)" || return 1
-  [[ "$actual_seconds" == "$started" ]]
+# Asks the recorded ScriptDock to quit as a user would, so it can still ask about the scripts it is running,
+# and stops with a message rather than force-closing it when it stays open.
+stop_recorded_runtime() {
+  local label="$1" repo_dir="$2" pid deadline
+  pid="$(recorded_runtime_pid "$repo_dir")"
+  [[ -z "$pid" ]] && return 0
+  echo "Asking the running $label (pid $pid) to quit."
+  /usr/bin/osascript -l JavaScript - "$pid" >/dev/null <<'JXA'
+ObjC.import('AppKit');
+function run(args) {
+  var application = $.NSRunningApplication.runningApplicationWithProcessIdentifier(Number(args[0]));
+  if (application) application.terminate;
 }
-
-read_runtime_registration() {
-  local registration_file="$1"
-  [[ -f "$registration_file" ]] || return 1
-  {
-    IFS= read -r REGISTERED_TOKEN &&
-    IFS= read -r REGISTERED_PID &&
-    IFS= read -r REGISTERED_START
-  } < "$registration_file"
-}
-
-stop_owned_runtime() {
-  local label="$1" repo_dir="$2" token="$3" require_current_registration="${4:-false}"
-  local REGISTERED_TOKEN REGISTERED_PID REGISTERED_START deadline
-  is_launcher_runtime_owner "$token" "$repo_dir" || return 0
-  read_runtime_registration "$repo_dir/.git/launcher-runtime-process" || return 0
-  if [[ "$require_current_registration" == true && "$REGISTERED_TOKEN" != "$token" ]]; then
-    return 0
-  fi
-  registered_runtime_matches "$REGISTERED_PID" "$REGISTERED_START" || return 0
-  echo "Stopping the existing $label runtime (pid $REGISTERED_PID)."
-  is_launcher_runtime_owner "$token" "$repo_dir" || return 0
-  registered_runtime_matches "$REGISTERED_PID" "$REGISTERED_START" || return 0
-  kill -TERM "$REGISTERED_PID" 2>/dev/null || true
+JXA
   deadline=$((SECONDS + 5))
   while (( SECONDS < deadline )); do
-    registered_runtime_matches "$REGISTERED_PID" "$REGISTERED_START" || return 0
+    [[ -z "$(recorded_runtime_pid "$repo_dir")" ]] && return 0
     sleep 0.1
   done
-  is_launcher_runtime_owner "$token" "$repo_dir" || return 0
-  registered_runtime_matches "$REGISTERED_PID" "$REGISTERED_START" || return 0
-  kill -KILL "$REGISTERED_PID" 2>/dev/null || true
+  echo "$label is still open. Answer its quit question or close it, then run this launcher again." >&2
+  return 1
 }
 
-wait_for_owned_runtime() {
-  local label="$1" repo_dir="$2" token="$3" timeout_seconds="$4"
-  local deadline REGISTERED_TOKEN REGISTERED_PID REGISTERED_START
-  deadline=$((SECONDS + timeout_seconds))
-  while (( SECONDS < deadline )); do
-    is_launcher_runtime_owner "$token" "$repo_dir" || return 1
-    if read_runtime_registration "$repo_dir/.git/launcher-runtime-process" && [[ "$REGISTERED_TOKEN" == "$token" ]]; then
-      # PID zero acknowledges activation of an independently started instance without owning it.
-      if [[ "$REGISTERED_PID" == 0 ]] || registered_runtime_matches "$REGISTERED_PID" "$REGISTERED_START"; then
+# Opens a new instance of the bundle through Launch Services, which gives it the bundle identity TCC
+# needs, and records the process it started.
+launch_bundle() {
+  local label="$1" repo_dir="$2" bundle="$3" pid
+  pid="$(/usr/bin/osascript -l JavaScript - "$bundle" <<'JXA'
+ObjC.import('AppKit');
+function run(args) {
+  var application = $.NSWorkspace.sharedWorkspace.launchApplicationAtURLOptionsConfigurationError(
+    $.NSURL.fileURLWithPath(args[0]), $.NSWorkspaceLaunchNewInstance, $({}), null);
+  return application.isNil() ? '' : String(application.processIdentifier);
+}
+JXA
+)"
+  if [[ ! "$pid" =~ ^[1-9][0-9]*$ ]]; then
+    echo "$label could not be opened." >&2
+    return 1
+  fi
+  record_runtime "$repo_dir" "$pid"
+  echo "If $label was already running outside these launchers, its window is brought forward instead."
+}
+
+# Records the app process that the wrapper (dotnet run) starts, once it appears. Fails when the wrapper
+# ends first, as it does when the build fails.
+record_wrapped_runtime() {
+  local repo_dir="$1" wrapper_pid="$2" executable_name="$3" pid executable
+  while kill -0 "$wrapper_pid" 2>/dev/null; do
+    for pid in $(pgrep -P "$wrapper_pid" || true); do
+      executable="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
+      if [[ "${executable##*/}" == "$executable_name" ]]; then
+        record_runtime "$repo_dir" "$pid"
+        printf '%s\n' "$pid"
         return 0
       fi
-    fi
-    sleep 0.1
+    done
+    sleep 0.2
   done
-  echo "$label did not start within ${timeout_seconds}s." >&2
   return 1
 }

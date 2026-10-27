@@ -11,7 +11,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROJECT_FILE="$REPO_DIR/src/ScriptDock/ScriptDock.csproj"
 APP_BUNDLE="$REPO_DIR/publish/ScriptDock.app"
-RUNTIME_TOKEN="rebuild-$$-$(date +%s)-$RANDOM"
 source "$SCRIPT_DIR/launcher-runtime.sh"
 
 # Apple Silicon only, matching the product that the release workflow ships.
@@ -40,7 +39,5 @@ cd "$REPO_DIR"
 rm -rf "$REPO_DIR/publish"
 dotnet publish "$PROJECT_FILE" -c Release -r "$RID" --self-contained true -o "$REPO_DIR/publish"
 
-claim_launcher_runtime "$RUNTIME_TOKEN" "$REPO_DIR"
-stop_owned_runtime "ScriptDock" "$REPO_DIR" "$RUNTIME_TOKEN"
-open -n "$APP_BUNDLE" --args --launcher-registration "$REPO_DIR/.git/launcher-runtime-process" --launcher-token "$RUNTIME_TOKEN"
-wait_for_owned_runtime "ScriptDock" "$REPO_DIR" "$RUNTIME_TOKEN" 30
+stop_recorded_runtime "ScriptDock" "$REPO_DIR"
+launch_bundle "ScriptDock" "$REPO_DIR" "$APP_BUNDLE"

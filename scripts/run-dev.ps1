@@ -48,7 +48,7 @@ function Invoke-Native {
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoDir = Split-Path -Parent $scriptDir
 $projectFile = Join-Path $repoDir "src/ScriptDock/ScriptDock.csproj"
-$runtimeToken = [guid]::NewGuid().ToString("N")
+$appProcess = $null
 
 try {
     Set-Utf8Console
@@ -58,16 +58,15 @@ try {
     Set-Location $repoDir
 
     Write-Step "Replacing any existing ScriptDock runtime"
-    Claim-LauncherRuntime -Token $runtimeToken -RepoDir $repoDir
-    Stop-OwnedRuntime -Label "ScriptDock" -RepoDir $repoDir -Token $runtimeToken
+    Stop-RecordedRuntime -Label "ScriptDock" -RepoDir $repoDir
 
     Write-Step "Restoring packages required for launch"
     Invoke-Native -FilePath "dotnet" -ArgumentList @("restore", $projectFile)
 
     Write-Step "Starting ScriptDock (Debug, from source)"
-    $devProcess = Start-Process -FilePath "dotnet" -ArgumentList @("run", "--project", "`"$projectFile`"", "--", "--launcher-registration", "`"$repoDir/.git/launcher-runtime-process`"", "--launcher-token", $runtimeToken) -NoNewWindow -PassThru
-    Wait-OwnedRuntime -Label "ScriptDock" -RepoDir $repoDir -Token $runtimeToken -TimeoutSeconds 120
-    Write-Step "ScriptDock is ready"
+    $devProcess = Start-Process -FilePath "dotnet" -ArgumentList @("run", "--project", "`"$projectFile`"") -NoNewWindow -PassThru
+    $appProcess = Save-WrappedRuntimeRecord -RepoDir $repoDir -Wrapper $devProcess -ExecutableName "ScriptDock"
+    if ($appProcess) { Write-Step "ScriptDock is ready" }
     $devProcess.WaitForExit()
     if ($devProcess.ExitCode -notin @(0, 130, -1073741510)) {
         throw "ScriptDock development runtime failed with exit code $($devProcess.ExitCode)."
@@ -79,11 +78,12 @@ catch {
     $scriptExitCode = 1
 }
 finally {
-    if (Test-LauncherRuntimeOwner -Token $runtimeToken -RepoDir $repoDir) {
-        Stop-OwnedRuntime -Label "ScriptDock" -RepoDir $repoDir -Token $runtimeToken -RequireCurrentRegistration
-        Release-LauncherRuntime -Token $runtimeToken -RepoDir $repoDir
-        Read-Host "Press Enter to close" | Out-Null
+    # Closing this launcher closes the app it started, unless a later launcher has replaced it.
+    $recorded = Get-RecordedRuntime $repoDir
+    if ($appProcess -and $recorded -and $recorded.Id -eq $appProcess.Id) {
+        Stop-RecordedRuntime -Label "ScriptDock" -RepoDir $repoDir
     }
+    Read-Host "Press Enter to close" | Out-Null
 }
 
 exit $scriptExitCode

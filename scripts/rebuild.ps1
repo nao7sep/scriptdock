@@ -49,7 +49,6 @@ $repoDir = Split-Path -Parent $scriptDir
 $projectFile = Join-Path $repoDir "src/ScriptDock/ScriptDock.csproj"
 $publishDir = Join-Path $repoDir "publish"
 $exePath = Join-Path $publishDir "ScriptDock.exe"
-$runtimeToken = [guid]::NewGuid().ToString("N")
 
 try {
     Set-Utf8Console
@@ -61,8 +60,7 @@ try {
     # Windows locks the published executable while it runs, so replacement must
     # happen before removing the publish directory.
     Write-Step "Replacing any existing ScriptDock runtime"
-    Claim-LauncherRuntime -Token $runtimeToken -RepoDir $repoDir
-    Stop-OwnedRuntime -Label "ScriptDock" -RepoDir $repoDir -Token $runtimeToken
+    Stop-RecordedRuntime -Label "ScriptDock" -RepoDir $repoDir
 
     Write-Step "Removing stale publish output"
     # Clear the publish dir first so a build that fails to emit a file cannot be
@@ -83,8 +81,7 @@ try {
     Write-Step "Launching ScriptDock"
     # GUI app: launch non-blocking via Start-Process (the Windows counterpart to
     # macOS `open`), so the console does not wait on the app's lifetime.
-    Start-Process -FilePath $exePath -ArgumentList @("--launcher-registration", "`"$repoDir/.git/launcher-runtime-process`"", "--launcher-token", $runtimeToken) -PassThru | Out-Null
-    Wait-OwnedRuntime -Label "ScriptDock" -RepoDir $repoDir -Token $runtimeToken -TimeoutSeconds 30
+    Start-RecordedRuntime -Label "ScriptDock" -RepoDir $repoDir -Executable $exePath
 }
 catch {
     Write-Host ""

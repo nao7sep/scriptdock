@@ -1,101 +1,82 @@
-# Only an app's explicit registration grants ownership. Never infer it from command lines or paths.
-function Get-LauncherOwnerFile {
+# Shared by the Windows launchers (run-dev, run-built, rebuild): one ScriptDock runtime per repository.
+# The launcher that starts ScriptDock records its process ID and executable under .git; the next launcher
+# asks that process to close only while it still runs that executable. ScriptDock started any other way is
+# left to its single-instance behavior, which brings its window forward instead of opening a second one.
+
+function Get-RuntimeRecordFile {
     param([Parameter(Mandatory = $true)][string]$RepoDir)
-    return Join-Path (Join-Path $RepoDir '.git') 'launcher-runtime-owner'
+    return Join-Path (Join-Path $RepoDir '.git') 'launcher-runtime-process'
 }
 
-function Claim-LauncherRuntime {
-    param([string]$Token, [string]$RepoDir)
-    $ownerFile = Get-LauncherOwnerFile -RepoDir $RepoDir
-    $temporaryFile = "$ownerFile.$PID.$([guid]::NewGuid().ToString('N'))"
-    [System.IO.File]::WriteAllText($temporaryFile, "$Token`n", [System.Text.UTF8Encoding]::new($false))
-    Move-Item -LiteralPath $temporaryFile -Destination $ownerFile -Force
+function Save-RuntimeRecord {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoDir,
+        [Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process
+    )
+    [System.IO.File]::WriteAllLines((Get-RuntimeRecordFile $RepoDir), [string[]]@($Process.Id, $Process.Path))
 }
 
-function Test-LauncherRuntimeOwner {
-    param([string]$Token, [string]$RepoDir)
-    $ownerFile = Get-LauncherOwnerFile -RepoDir $RepoDir
-    return (Test-Path -LiteralPath $ownerFile) -and
-        ((Get-Content -LiteralPath $ownerFile -Raw).Trim() -ceq $Token)
+# The recorded process, returned only while it still runs the recorded executable.
+function Get-RecordedRuntime {
+    param([Parameter(Mandatory = $true)][string]$RepoDir)
+    $file = Get-RuntimeRecordFile $RepoDir
+    if (-not (Test-Path -LiteralPath $file)) { return $null }
+    $lines = @(Get-Content -LiteralPath $file)
+    $processId = 0
+    if ($lines.Count -lt 2 -or -not [int]::TryParse($lines[0], [ref]$processId)) { return $null }
+    $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
+    if ($process -and $lines[1] -and $process.Path -eq $lines[1]) { return $process }
+    return $null
 }
 
-function Release-LauncherRuntime {
-    param([string]$Token, [string]$RepoDir)
-    if (Test-LauncherRuntimeOwner -Token $Token -RepoDir $RepoDir) {
-        Remove-Item -LiteralPath (Get-LauncherOwnerFile -RepoDir $RepoDir) -Force -ErrorAction SilentlyContinue
+# Asks the recorded ScriptDock to close its window as a user would, so it can still ask about the scripts it
+# is running, and stops with a message rather than force-closing it when it stays open.
+function Stop-RecordedRuntime {
+    param(
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$RepoDir
+    )
+    $process = Get-RecordedRuntime $RepoDir
+    if (-not $process) { return }
+    Write-Host "Asking the running $Label (pid $($process.Id)) to close."
+    $null = $process.CloseMainWindow()
+    if (-not $process.WaitForExit(5000)) {
+        throw "$Label is still open. Answer its quit question or close it, then run this launcher again."
     }
 }
 
-function Get-RuntimeRegistration {
-    param([string]$RepoDir)
-    $file = Join-Path (Join-Path $RepoDir '.git') 'launcher-runtime-process'
-    if (-not (Test-Path -LiteralPath $file)) { return $null }
-    $fields = @(Get-Content -LiteralPath $file)
-    if ($fields.Count -ne 3) { return $null }
-    $processId = 0
-    $started = 0L
-    if (-not [int]::TryParse($fields[1], [ref]$processId) -or $processId -lt 0 -or
-        -not [long]::TryParse($fields[2], [ref]$started)) { return $null }
-    return [pscustomobject]@{ Token = $fields[0]; ProcessId = $processId; Started = $started }
+function Start-RecordedRuntime {
+    param(
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$RepoDir,
+        [Parameter(Mandatory = $true)][string]$Executable
+    )
+    $process = Start-Process -FilePath $Executable -PassThru
+    Save-RuntimeRecord -RepoDir $RepoDir -Process $process
+    Write-Host "If $Label was already running outside these launchers, its window is brought forward instead."
 }
 
-function Get-RegisteredRuntimeProcess {
-    param($Registration)
-    if ($null -eq $Registration -or $Registration.ProcessId -le 0) { return $null }
-    $process = Get-Process -Id $Registration.ProcessId -ErrorAction SilentlyContinue
-    if ($null -eq $process) { return $null }
-    try {
-        $started = ([DateTimeOffset]$process.StartTime.ToUniversalTime()).ToUnixTimeSeconds()
-        if ($started -eq $Registration.Started) { return $process }
-    } catch [System.ComponentModel.Win32Exception] {
-        # An inaccessible process cannot establish ownership.
-    } catch [System.InvalidOperationException] {
-        # The process exited while its identity was being read.
+# Records the app process that the wrapper (dotnet run) starts, once it appears, and returns it. Returns
+# nothing when the wrapper ends first, as it does when the build fails.
+function Save-WrappedRuntimeRecord {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoDir,
+        [Parameter(Mandatory = $true)][System.Diagnostics.Process]$Wrapper,
+        [Parameter(Mandatory = $true)][string]$ExecutableName
+    )
+    while (-not $Wrapper.HasExited) {
+        $child = Get-CimInstance Win32_Process -Filter "ParentProcessId = $($Wrapper.Id) AND Name = '$ExecutableName.exe'" |
+            Select-Object -First 1
+        if ($child) {
+            $process = Get-Process -Id $child.ProcessId -ErrorAction SilentlyContinue
+            if ($process) {
+                Save-RuntimeRecord -RepoDir $RepoDir -Process $process
+                return $process
+            }
+        }
+        Start-Sleep -Milliseconds 200
     }
     return $null
 }
 
-function Stop-OwnedRuntime {
-    param([string]$Label, [string]$RepoDir, [string]$Token, [switch]$RequireCurrentRegistration)
-    if (-not (Test-LauncherRuntimeOwner -Token $Token -RepoDir $RepoDir)) { return }
-    $registration = Get-RuntimeRegistration -RepoDir $RepoDir
-    if ($null -eq $registration -or ($RequireCurrentRegistration -and $registration.Token -cne $Token)) { return }
-    $process = Get-RegisteredRuntimeProcess -Registration $registration
-    if ($null -eq $process) { return }
-    Write-Host "Stopping the existing $Label runtime (pid $($registration.ProcessId))."
-    if (-not (Test-LauncherRuntimeOwner -Token $Token -RepoDir $RepoDir)) { return }
-    $process = Get-RegisteredRuntimeProcess -Registration $registration
-    if ($null -eq $process) { return }
-    try {
-        $null = $process.CloseMainWindow()
-    } catch [System.InvalidOperationException] {
-        # Exiting between identity validation and the close request needs no replacement action.
-        return
-    }
-    $deadline = [DateTime]::UtcNow.AddSeconds(5)
-    do {
-        Start-Sleep -Milliseconds 100
-        $process = Get-RegisteredRuntimeProcess -Registration $registration
-    } while ($null -ne $process -and [DateTime]::UtcNow -lt $deadline)
-    if (-not (Test-LauncherRuntimeOwner -Token $Token -RepoDir $RepoDir)) { return }
-    $process = Get-RegisteredRuntimeProcess -Registration $registration
-    if ($null -ne $process) { Stop-Process -InputObject $process -Force -ErrorAction SilentlyContinue }
-}
-
-function Wait-OwnedRuntime {
-    param([string]$Label, [string]$RepoDir, [string]$Token, [int]$TimeoutSeconds = 30)
-    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
-    do {
-        if (-not (Test-LauncherRuntimeOwner -Token $Token -RepoDir $RepoDir)) {
-            throw 'This launch was superseded by another launcher.'
-        }
-        $registration = Get-RuntimeRegistration -RepoDir $RepoDir
-        if ($null -ne $registration -and $registration.Token -ceq $Token) {
-            if ($registration.ProcessId -eq 0 -or $null -ne (Get-RegisteredRuntimeProcess -Registration $registration)) { return }
-        }
-        Start-Sleep -Milliseconds 100
-    } while ([DateTime]::UtcNow -lt $deadline)
-    throw "$Label did not start within ${TimeoutSeconds}s."
-}
-
-Export-ModuleMember -Function Claim-LauncherRuntime, Test-LauncherRuntimeOwner, Release-LauncherRuntime, Stop-OwnedRuntime, Wait-OwnedRuntime
+Export-ModuleMember -Function Get-RecordedRuntime, Stop-RecordedRuntime, Start-RecordedRuntime, Save-WrappedRuntimeRecord

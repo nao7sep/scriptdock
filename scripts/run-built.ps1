@@ -26,7 +26,6 @@ function Write-Step {
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoDir = Split-Path -Parent $scriptDir
 $exePath = Join-Path $repoDir "publish/ScriptDock.exe"
-$runtimeToken = [guid]::NewGuid().ToString("N")
 
 try {
     Set-Utf8Console
@@ -42,14 +41,12 @@ try {
     }
 
     $builtAt = (Get-Item $exePath).LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
-    Claim-LauncherRuntime -Token $runtimeToken -RepoDir $repoDir
-    Stop-OwnedRuntime -Label "ScriptDock" -RepoDir $repoDir -Token $runtimeToken
+    Stop-RecordedRuntime -Label "ScriptDock" -RepoDir $repoDir
     Write-Step "Launching the existing build (built: $builtAt)"
     Write-Host "If you changed source since then, run rebuild instead."
 
     # GUI app: launch non-blocking via Start-Process.
-    Start-Process -FilePath $exePath -ArgumentList @("--launcher-registration", "`"$repoDir/.git/launcher-runtime-process`"", "--launcher-token", $runtimeToken) -PassThru | Out-Null
-    Wait-OwnedRuntime -Label "ScriptDock" -RepoDir $repoDir -Token $runtimeToken -TimeoutSeconds 30
+    Start-RecordedRuntime -Label "ScriptDock" -RepoDir $repoDir -Executable $exePath
 }
 catch {
     Write-Host ""
