@@ -176,7 +176,7 @@
   "records.output": "Saída",
   "records.outputKeptAsFile": "Esta saída é grande demais para ficar no registro ({size} MB), por isso continua no seu arquivo de saída. Aqui aparece só o primeiro 1 MB: Abrir saída completa mostra tudo no seu editor de texto. A busca não a inclui.",
   "records.outputLinesShortened": "Linhas muito longas são encurtadas aqui; “Abrir saída completa” as mostra inteiras.",
-  "records.outputMore": "Apenas o primeiro MB é exibido. Há mais {more} MB armazenados. Abrir saída completa mostra tudo no seu editor de texto. A pesquisa inclui a saída indexada; a saída mais recente pode ainda não estar disponível para pesquisa.",
+  "records.outputMore": "Aqui é exibido apenas o primeiro MB. O restante ({more} MB) está salvo: “Abrir saída completa” mostra toda a saída no seu editor de texto, e a pesquisa também abrange toda a saída.",
   "records.outputFile": "Arquivo de saída",
   "records.processId": "ID do processo",
   "records.processStarted": "Início do processo",

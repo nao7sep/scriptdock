@@ -22,7 +22,7 @@ public interface IRecordReader
     Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id, bool nonZeroExitIsError = false);
 
     /// <summary>Hands <paramref name="read"/> a stream over a run's whole output, beyond what its detail shows:
-    /// the run's authoritative file, falling back to the stored record when that file is absent. Read in pieces; the
+    /// the stored record, or the run's own file when the output was too large to store. Read in pieces; the
     /// stream is valid only during the call. False when the run has neither.</summary>
     Task<bool> ReadRunOutputAsync(long id, Action<System.IO.Stream> read);
 

@@ -192,16 +192,12 @@ internal static class RecordQueries
                     reader.IsDBNull(13) ? null : (byte[])reader.GetValue(13),
                     reader.IsDBNull(14) ? null : reader.GetInt64(14));
                 reader.Close();
-                // The original file remains authoritative even after a searchable snapshot is indexed.
-                // Only genuinely absent files fall back to older blob-only history; access errors propagate.
-                using var file = OpenRetainedOutput(detail.OutputPath);
-                if (file is not null)
-                    return detail with
-                    {
-                        Output = FilePrefix(file), OutputLength = file.Length,
-                        OutputKeptAsFile = file.Length > MaxStoredBytes(connection),
-                        OutputFromFile = true, OutputRevision = File.GetLastWriteTimeUtc(detail.OutputPath!).Ticks,
-                    };
+                // An output too large for one record stays as the run's file; the detail previews it from there.
+                if (detail.Output is null && KeptOutput(connection, detail.OutputPath) is { } kept)
+                {
+                    using (kept)
+                        return detail with { Output = FilePrefix(kept), OutputLength = kept.Length, OutputKeptAsFile = true };
+                }
                 return detail;
             }
 
@@ -225,7 +221,7 @@ internal static class RecordQueries
         SQLitePCL.raw.sqlite3_limit(connection.Handle, SQLitePCL.raw.SQLITE_LIMIT_LENGTH, -1);
 
     /// <summary>Hands <paramref name="read"/> the run's whole output as a stream read in pieces: its record, or
-    /// its own authoritative file, falling back to the stored record when absent. False when it has neither.</summary>
+    /// its own file when the output was too large to store. False when it has neither.</summary>
     public static bool ReadRunOutput(SqliteConnection connection, long id, Action<Stream> read)
     {
         long? outputId;
@@ -241,27 +237,31 @@ internal static class RecordQueries
             path = reader.IsDBNull(1) ? null : reader.GetString(1);
         }
 
-        using var file = OpenRetainedOutput(path);
-        if (file is not null)
-        {
-            read(file);
-            return true;
-        }
         if (outputId is { } stored)
         {
             using var blob = new SqliteBlob(connection, "run_outputs", "output", stored, readOnly: true);
             read(blob);
             return true;
         }
-        return false;
+        if (KeptOutput(connection, path) is not { } kept)
+            return false;
+        using (kept)
+            read(kept);
+        return true;
     }
 
-    private static FileStream? OpenRetainedOutput(string? path)
+    // A run's output file that is too large for one record, which the import leaves where it is. Only a
+    // missing file means there is none; any other failure to open it propagates as a failed read.
+    private static FileStream? KeptOutput(SqliteConnection connection, string? path)
     {
         if (path is null) return null;
-        try { return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete); }
-        catch (FileNotFoundException) { return null; }
-        catch (DirectoryNotFoundException) { return null; }
+        FileStream file;
+        try { file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete); }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { return null; }
+        if (file.Length > MaxStoredBytes(connection))
+            return file;
+        file.Dispose();
+        return null;
     }
 
     private static byte[] FilePrefix(Stream file)

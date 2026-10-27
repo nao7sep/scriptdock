@@ -172,7 +172,7 @@
   "records.output": "Ausgabe",
   "records.outputKeptAsFile": "Diese Ausgabe ist zu groß für das Protokoll ({size} MB) und bleibt deshalb in ihrer Ausgabedatei. Hier wird nur das erste 1 MB angezeigt: „Vollständige Ausgabe öffnen“ zeigt alles in Ihrem Texteditor. Die Suche erfasst sie nicht.",
   "records.outputLinesShortened": "Sehr lange Zeilen werden hier gekürzt; „Vollständige Ausgabe öffnen“ zeigt sie vollständig.",
-  "records.outputMore": "Hier wird nur das erste MB angezeigt. Weitere {more} MB sind gespeichert. Mit „Vollständige Ausgabe öffnen“ sehen Sie alles in Ihrem Texteditor. Die Suche umfasst die indizierte Ausgabe; neuere Ausgaben sind möglicherweise noch nicht durchsuchbar.",
+  "records.outputMore": "Hier wird nur das erste MB angezeigt. Weitere {more} MB sind gespeichert: „Vollständige Ausgabe öffnen“ zeigt die gesamte Ausgabe in Ihrem Texteditor, und die Suche umfasst sie ebenfalls.",
   "records.outputFile": "Ausgabedatei",
   "records.processId": "Prozess-ID",
   "records.processStarted": "Prozessstart",

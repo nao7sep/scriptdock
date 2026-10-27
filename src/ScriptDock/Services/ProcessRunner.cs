@@ -25,8 +25,8 @@ public sealed class ProcessRunner : IProcessRunner
     // expires: starting a replacement while the old tree is alive would create a duplicate.
     private static readonly TimeSpan DefaultTerminationGrace = TimeSpan.FromSeconds(10);
 
-    // How long a finished run's output file stays unchanged before it is indexed in the records.
-    // The source remains available because a descendant can resume writing after any quiet interval.
+    // How long a finished run's output file stays unchanged before it moves into the records, so output a
+    // process the run left behind is still writing is not cut off.
     internal static readonly TimeSpan OutputQuietPeriod = TimeSpan.FromMinutes(1);
 
     private readonly List<ScriptProcess> _processes = new();
@@ -331,11 +331,14 @@ public sealed class ProcessRunner : IProcessRunner
     }
 
     /// <summary>
-    /// Indexes the output file of each finished run without deleting its source. A file waits while a run this session holds reads it,
+    /// Moves the output file of each finished run into the records and deletes the file, per the
+    /// data-lifecycle-conventions' Records section. A file stays while a run this session holds reads it,
     /// while its run's process (by process id and start time) is alive, while it has changed within
     /// <see cref="OutputQuietPeriod"/>, and when no run record names it. An import replaces any earlier
-    /// import of the same run. An unchanged file's recorded revision skips later copies; a file that changes
-    /// during the copy remains unconfirmed and is retried after becoming quiet again.
+    /// import of the same run, so a file whose deletion failed is imported again in full on a later pass.
+    /// Right before the delete, the file's length and modification time are checked against what was
+    /// copied: a process the run left behind may still be writing, so a changed file stays and its next
+    /// quiet pass imports it again.
     /// Each file is copied in pieces, so memory stays at one buffer whatever its size, and each is its own
     /// attempt: one that fails stays for a later pass without holding up the rest. A file larger than one
     /// record can hold is known from its size alone and stays where it is as the run's output, unread and not
@@ -365,15 +368,16 @@ public sealed class ProcessRunner : IProcessRunner
 
             try
             {
-                var revision = OutputRevision(path);
-                if (revision == await records.ReadOutputFileRevisionAsync(run).ConfigureAwait(false))
+                var copied = new FileInfo(path);
+                var (length, modified) = (copied.Length, copied.LastWriteTimeUtc);
+                if (!await ImportOneAsync(records, run, path, length).ConfigureAwait(false))
                     continue;
-                if (!await ImportOneAsync(records, run, path, revision.Length).ConfigureAwait(false))
+                copied.Refresh();
+                if ((copied.Length, copied.LastWriteTimeUtc) != (length, modified))
+                {
+                    Log.Info("run output: still being written after the copy; it stays for a later pass", new { path });
                     continue;
-                // The blob commits first. A failed revision write only causes a later recopy; it
-                // never makes a changed or partially copied source look safely indexed.
-                if (OutputRevision(path) == revision)
-                    await records.RecordOutputFileRevisionAsync(run, revision).ConfigureAwait(false);
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -381,6 +385,14 @@ public sealed class ProcessRunner : IProcessRunner
                 continue;
             }
             imported++;
+            try
+            {
+                File.Delete(path);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("run output: imported but not deleted; the next pass imports it again", ex, new { path });
+            }
         }
 
         if (imported > 0)
@@ -411,12 +423,6 @@ public sealed class ProcessRunner : IProcessRunner
             }
         }
         return paths;
-    }
-
-    private static OutputFileRevision OutputRevision(string path)
-    {
-        var info = new FileInfo(path);
-        return new OutputFileRevision(info.Length, info.LastWriteTimeUtc.Ticks, info.CreationTimeUtc.Ticks);
     }
 
     // False when the file is too large for one record and stays as the run's output.

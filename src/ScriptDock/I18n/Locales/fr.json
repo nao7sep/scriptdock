@@ -176,7 +176,7 @@
   "records.output": "Sortie",
   "records.outputKeptAsFile": "Cette sortie est trop volumineuse pour être conservée dans le journal ({size} Mo) ; elle reste donc dans son fichier de sortie. Seul le premier 1 Mo est affiché ici : Ouvrir la sortie complète l’affiche en entier dans votre éditeur de texte. La recherche ne la couvre pas.",
   "records.outputLinesShortened": "Les lignes très longues sont raccourcies ici\u00a0; «\u00a0Ouvrir la sortie complète\u00a0» les affiche en entier.",
-  "records.outputMore": "Seul le premier Mo est affiché ici. {more} Mo supplémentaires sont enregistrés. Ouvrir la sortie complète affiche tout dans votre éditeur de texte. La recherche couvre la sortie indexée\u00a0; les données plus récentes ne sont peut-être pas encore consultables par recherche.",
+  "records.outputMore": "Seul le premier Mo est affiché ici. Le reste ({more} Mo) est enregistré\u00a0: «\u00a0Ouvrir la sortie complète\u00a0» affiche toute la sortie dans votre éditeur de texte, et la recherche porte aussi sur toute la sortie.",
   "records.outputFile": "Fichier de sortie",
   "records.processId": "ID du processus",
   "records.processStarted": "Démarrage du processus",

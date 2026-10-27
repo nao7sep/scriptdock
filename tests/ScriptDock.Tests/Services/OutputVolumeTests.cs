@@ -247,12 +247,10 @@ public sealed class OutputVolumeTests : IDisposable
         await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
         await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken); // a later pass changes nothing
 
-        Assert.True(File.Exists(small));
+        Assert.False(File.Exists(small));
         Assert.Equal(10, records.Outputs[("2026-01-01T00:00:00.000Z", 1)].Length);
         Assert.True(File.Exists(large));
         Assert.DoesNotContain(("2026-01-01T00:00:00.000Z", 2), records.Outputs.Keys);
-        Assert.Equal(1, records.OutputImportCount);
-        Assert.Single(records.OutputFileRevisions);
     }
 
     [MacOnlyFact]
@@ -280,8 +278,7 @@ public sealed class OutputVolumeTests : IDisposable
 
         await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
         Assert.Equal(2, records.Outputs.Count);
-        Assert.Equal(2, records.OutputFileRevisions.Count);
-        Assert.Equal(2, records.OutputImportCount); // the successful sibling was not copied again
+        Assert.False(File.Exists(unreadable));
     }
 
     [WindowsOnlyFact]
@@ -302,38 +299,21 @@ public sealed class OutputVolumeTests : IDisposable
 
         await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
         Assert.Equal(2, records.Outputs.Count);
-        Assert.Equal(2, records.OutputFileRevisions.Count);
-        Assert.Equal(2, records.OutputImportCount);
+        Assert.False(File.Exists(unreadable));
     }
 
     private static void AssertIndependentImportFailure(FakeRecordStore records, string unreadable, string fine)
     {
         Assert.True(File.Exists(unreadable));
-        Assert.True(File.Exists(fine));
+        Assert.False(File.Exists(fine));
         Assert.DoesNotContain(("2026-01-01T00:00:00.000Z", 1), records.Outputs.Keys);
         Assert.Contains(("2026-01-01T00:00:00.000Z", 2), records.Outputs.Keys);
-        Assert.DoesNotContain(("2026-01-01T00:00:00.000Z", 1), records.OutputFileRevisions.Keys);
-        Assert.Single(records.OutputFileRevisions);
     }
 
+    // Output a process the run left behind writes while the copy runs is not lost: the changed file
+    // is not deleted, and its next quiet pass imports it whole.
     [Fact]
-    public async Task An_unchanged_source_is_not_copied_again()
-    {
-        var path = QuietLog("unchanged.log", 10);
-        var records = new FakeRecordStore();
-        records.Runs.Add(Run(1, path));
-        var runner = new ProcessRunner(Path.Combine(_dir, "runs"));
-
-        await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
-        await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
-
-        Assert.Equal(1, records.OutputImportCount);
-        Assert.Single(records.OutputFileRevisions);
-        Assert.Equal(File.ReadAllBytes(path), Assert.Single(records.Outputs).Value);
-    }
-
-    [Fact]
-    public async Task A_source_that_changes_during_the_copy_is_retried_with_its_new_extent()
+    public async Task A_source_that_changes_during_the_copy_stays_and_is_imported_whole_later()
     {
         var path = QuietLog("changing.log", 10);
         var records = new FakeRecordStore();
@@ -348,19 +328,19 @@ public sealed class OutputVolumeTests : IDisposable
         await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
 
         Assert.Equal(10, Assert.Single(records.Outputs).Value.Length); // only the captured extent
+        Assert.True(File.Exists(path));
         Assert.Equal(14, new FileInfo(path).Length);
-        Assert.Empty(records.OutputFileRevisions);
 
         File.SetLastWriteTimeUtc(path, DateTime.UtcNow - ProcessRunner.OutputQuietPeriod - TimeSpan.FromMinutes(1));
+        var whole = File.ReadAllBytes(path);
         await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
 
-        Assert.Equal(File.ReadAllBytes(path), Assert.Single(records.Outputs).Value);
-        Assert.Single(records.OutputFileRevisions);
-        Assert.Equal(2, records.OutputImportCount);
+        Assert.Equal(whole, Assert.Single(records.Outputs).Value);
+        Assert.False(File.Exists(path));
     }
 
     [Fact]
-    public async Task A_failed_blob_write_retains_the_original_and_no_success_revision()
+    public async Task A_failed_blob_write_keeps_the_original_for_a_later_pass()
     {
         var path = QuietLog("failed.log", 10);
         var original = File.ReadAllBytes(path);
@@ -372,34 +352,11 @@ public sealed class OutputVolumeTests : IDisposable
 
         Assert.Equal(original, File.ReadAllBytes(path));
         Assert.Empty(records.Outputs);
-        Assert.Empty(records.OutputFileRevisions);
 
         records.ThrowOnWrite = false;
         await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
         Assert.Equal(original, Assert.Single(records.Outputs).Value);
-        Assert.Single(records.OutputFileRevisions);
-    }
-
-    [Fact]
-    public async Task A_failed_revision_write_only_causes_a_later_recopy()
-    {
-        var path = QuietLog("revision-failed.log", 10);
-        var records = new FakeRecordStore();
-        records.Runs.Add(Run(1, path));
-        records.BeforeOutputCopy = _ => records.ThrowOnWrite = true;
-        var runner = new ProcessRunner(Path.Combine(_dir, "runs"));
-
-        await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
-
-        Assert.Equal(File.ReadAllBytes(path), Assert.Single(records.Outputs).Value);
-        Assert.Empty(records.OutputFileRevisions);
-
-        records.ThrowOnWrite = false;
-        records.BeforeOutputCopy = null;
-        await runner.ImportFinishedOutputAsync(records, TestContext.Current.CancellationToken);
-        Assert.Single(records.OutputFileRevisions);
-        Assert.Equal(2, records.OutputImportCount);
-        Assert.True(File.Exists(path));
+        Assert.False(File.Exists(path));
     }
 
     [Fact]
@@ -452,5 +409,26 @@ public sealed class OutputVolumeTests : IDisposable
             whole = copy.ToArray();
         }));
         Assert.Equal(3000, whole!.Length);
+    }
+
+    // A run output file that exists but cannot be read is a failed read, not a run without output.
+    [MacOnlyFact]
+    [SupportedOSPlatform("macos")]
+    public async Task A_denied_output_file_fails_the_read_instead_of_showing_no_output()
+    {
+        var root = Path.Combine(_dir, "denied");
+        var file = Path.Combine(_dir, "denied.log");
+        File.WriteAllText(file, "output");
+        using var records = new RecordStore(root, DateTimeOffset.UtcNow);
+        await records.AddRunAsync(new RunRecord(records.Session, 1, DateTimeOffset.UtcNow, "/x/a.command", null, null, file));
+        var id = (await records.ReadRecordsPageAsync(new RecordsQuery(null, RecordKind.Run, null, "", null))).Records.Single().Id;
+        var mode = File.GetUnixFileMode(file);
+        try
+        {
+            File.SetUnixFileMode(file, UnixFileMode.UserWrite);
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => records.ReadRecordDetailAsync(RecordKind.Run, id));
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => records.ReadRunOutputAsync(id, _ => Assert.Fail("A denied file has no stream")));
+        }
+        finally { File.SetUnixFileMode(file, mode); }
     }
 }

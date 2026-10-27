@@ -80,14 +80,6 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
           output  BLOB NOT NULL,
           UNIQUE (session, run)
         );
-        CREATE TABLE IF NOT EXISTS output_files (
-          session TEXT NOT NULL,
-          run INTEGER NOT NULL,
-          length INTEGER NOT NULL,
-          modified INTEGER NOT NULL,
-          created INTEGER NOT NULL,
-          PRIMARY KEY (session, run)
-        );
         CREATE TABLE IF NOT EXISTS dismissals (
           id      INTEGER PRIMARY KEY,
           session TEXT NOT NULL,
@@ -105,7 +97,7 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
         """;
 
     // The tables Schema creates, which an unversioned database from an earlier build may hold a subset of.
-    private static readonly HashSet<string> Tables = ["logs", "runs", "run_ends", "run_outputs", "dismissals", "scan_reports", "output_files"];
+    private static readonly HashSet<string> Tables = ["logs", "runs", "run_ends", "run_outputs", "dismissals", "scan_reports"];
 
     private static readonly JsonSerializerOptions LineOptions = new(JsonOptions.Default)
     {
@@ -291,26 +283,6 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
         WindowRead(connection => new RecordSources(Session,
             RecordQueries.ReadSessions(connection).Append(Session).Distinct().OrderDescending(StringComparer.Ordinal).ToList()));
 
-    public Task<OutputFileRevision?> ReadOutputFileRevisionAsync(RunRecord run) => Read<OutputFileRevision?>(connection =>
-    {
-        using var command = connection.CreateCommand();
-        command.CommandText = "SELECT length, modified, created FROM output_files WHERE session = $session AND run = $run";
-        command.Parameters.AddWithValue("$session", run.Session);
-        command.Parameters.AddWithValue("$run", run.Run);
-        using var reader = command.ExecuteReader();
-        return reader.Read() ? new OutputFileRevision(reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2)) : null;
-    });
-
-    public Task RecordOutputFileRevisionAsync(RunRecord run, OutputFileRevision revision) =>
-        Enqueue(connection =>
-        {
-            Execute(connection, "INSERT INTO output_files (session, run, length, modified, created) VALUES ($session, $run, $length, $modified, $created) " +
-                "ON CONFLICT (session, run) DO UPDATE SET length = excluded.length, modified = excluded.modified, created = excluded.created",
-                ("$session", run.Session), ("$run", run.Run), ("$length", revision.Length),
-                ("$modified", revision.LastWriteUtcTicks), ("$created", revision.CreationUtcTicks));
-            return true;
-        }, fallbackLine: null, stores: false);
-
     /// <summary>The largest output one record can hold, as the database engine allows it.</summary>
     public long MaxOutputBytes { get; private set; } = long.MaxValue;
 
@@ -334,17 +306,6 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
                 insert.Parameters.AddWithValue("$time", TimestampConventions.IsoMillis(DateTimeOffset.UtcNow));
                 insert.Parameters.AddWithValue("$length", length);
                 insert.ExecuteNonQuery();
-            }
-
-            // A replacement blob cannot retain the previous snapshot's identity if recording the
-            // new identity later fails. Invalidation belongs to the same transaction as the copy.
-            using (var invalidate = connection.CreateCommand())
-            {
-                invalidate.Transaction = transaction;
-                invalidate.CommandText = "DELETE FROM output_files WHERE session = $session AND run = $run";
-                invalidate.Parameters.AddWithValue("$session", run.Session);
-                invalidate.Parameters.AddWithValue("$run", run.Run);
-                invalidate.ExecuteNonQuery();
             }
 
             long id;
