@@ -668,7 +668,7 @@ public partial class MainWindow : Window
 
     internal bool CanCopyConsoleSelection => ConsoleList.Selection.SelectedIndexes.Count > 0;
 
-    // Keyboard and native-menu Copy share the same captured selection and file-backed read.
+    // Keyboard and native-menu Copy copy the selected lines, whole and in order, as the console holds them.
     internal async Task CopyConsoleSelectionAsync()
     {
         try
@@ -677,8 +677,7 @@ public partial class MainWindow : Window
             var lines = ConsoleList.Selection.SelectedIndexes.Where(index => index >= 0 && index < vm.ConsoleLines.Count)
                 .Order().Select(index => vm.ConsoleLines[index]).ToArray();
             if (lines.Length == 0) return;
-            var text = await Task.Run(() => string.Join(Environment.NewLine, lines.Select(line => line.ReadFullText())));
-            await clipboard.SetTextAsync(text);
+            await clipboard.SetTextAsync(string.Join(Environment.NewLine, lines.Select(line => line.Text)));
         }
         catch (Exception ex)
         {

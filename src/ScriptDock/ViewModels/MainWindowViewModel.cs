@@ -440,7 +440,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public void BeginShutdown()
     {
-        _consoleFeed?.Cancel();
         _quitting = true;
         RefreshActionAvailability();
         _runner.SealLaunches();
@@ -903,10 +902,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     partial void OnSelectedRecentEntryChanged(RecentEntry? value)
     {
-        Dispatcher.UIThread.Post(() =>
-        {
-            if (!ReferenceEquals(SelectedRecentEntry?.Process, _consoleProcess)) _consoleFeed?.Cancel();
-        });
         RefreshActionAvailability();
         OnPropertyChanged(nameof(CanSendInput));
         OnPropertyChanged(nameof(HasSelection));
@@ -1170,7 +1165,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // and about how much the console holds, which keeps it to the feed's shown amount.
     private ScriptProcess? _consoleProcess;
     private ConsoleFeed? _consoleFeed;
-    private readonly ConsoleReadRetry _consoleRetry = new();
+    // Set by a failed read, so a persistent failure is logged and reported once; a successful read or
+    // another selected process clears it.
+    private bool _consoleReadFailing;
     private ConsoleLine? _consoleOpenLine;
     private long _consoleChars;
 
@@ -1201,10 +1198,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 var process = selected?.Process;
                 if (!ReferenceEquals(process, _consoleProcess))
                 {
-                    _consoleFeed?.Cancel();
                     _consoleProcess = process;
                     _consoleFeed = null;
-                    _consoleRetry.Reset();
+                    _consoleReadFailing = false;
                     ClearConsole();
                     OnPropertyChanged(nameof(CanOpenRunOutput));
                 }
@@ -1214,8 +1210,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                     OnPropertyChanged(nameof(CanOpenRunOutput));
                 }
 
-                if (!_consoleRetry.CanRead(Time))
-                    continue;
                 try
                 {
                     var feed = _consoleFeed;
@@ -1225,7 +1219,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                         _outputRefreshAgain = true;
                         continue;
                     }
-                    _consoleRetry.Reset();
+                    _consoleReadFailing = false;
                     if (selected is not null)
                         ResolveProcessActionError(selected.Path, "read-output");
                     if (update is not null && ReferenceEquals(feed, _consoleFeed))
@@ -1238,8 +1232,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                         _outputRefreshAgain = true;
                         continue;
                     }
-                    if (_consoleRetry.Failed(Time))
+                    if (!_consoleReadFailing)
                     {
+                        _consoleReadFailing = true;
                         Log.Warn("ui: refresh output failed", ex);
                         if (selected is not null)
                             ReportProcessActionError(selected.Path, "read-output", Message.Of("process.readOutputFailed"));
@@ -1287,10 +1282,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
         _consoleOpenLine = null;
 
-        for (var index = 0; index < update.Completed.Count; index++)
-            AddConsoleLine(new ConsoleLine(update.Completed[index], update.CompletedRanges?[index]));
+        foreach (var text in update.Completed)
+            AddConsoleLine(new ConsoleLine(text));
         if (update.Open.Length > 0)
-            AddConsoleLine(_consoleOpenLine = new ConsoleLine(update.Open, update.OpenRange));
+            AddConsoleLine(_consoleOpenLine = new ConsoleLine(update.Open));
 
         while (_consoleChars > ConsoleFeed.ShownBytes && ConsoleLines.Count > 1)
         {

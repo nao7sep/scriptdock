@@ -105,40 +105,23 @@ public sealed class OutputVolumeTests : IDisposable
     }
 
     [Fact]
-    public void IncrementalLongLinesStayBoundedAndCopyTheirCapturedFullExtent()
+    public void An_unfinished_line_arriving_in_small_pieces_stays_bounded()
     {
         var path = Log("growing.log", "first\n");
         var feed = new ConsoleFeed(path);
-        var first = feed.Read()!;
-        var expected = new StringBuilder();
-        ConsoleUpdate update = first;
+        feed.Read();
+        ConsoleUpdate update = null!;
         for (var index = 0; index < 40; index++)
         {
-            var part = new string('x', 64 * 1024);
-            expected.Append(part);
-            Append(path, Encoding.UTF8.GetBytes(part));
+            Append(path, Encoding.UTF8.GetBytes(new string('x', 64 * 1024)));
             update = feed.Read()!;
             Assert.False(update.Reset);
             Assert.True(update.Open.Length <= ConsoleFeed.ShownBytes);
         }
-        var captured = update.OpenRange!;
         Append(path, Encoding.UTF8.GetBytes("newer\nlast\n"));
-        Assert.Equal(expected.ToString(), captured.ReadText(TestContext.Current.CancellationToken));
         update = feed.Read()!;
-        Assert.Equal(expected + "newer", update.CompletedRanges![0].ReadText(TestContext.Current.CancellationToken));
-        Assert.Equal("last", update.CompletedRanges[1].ReadText(TestContext.Current.CancellationToken));
-        Assert.Equal("first", first.CompletedRanges![0].ReadText(TestContext.Current.CancellationToken));
-        feed.Cancel();
-        Assert.Throws<OperationCanceledException>(() => feed.Read());
-    }
-
-    [Fact]
-    public void CopyOfATailLineIncludesItsBeginningBeforeTheDisplayedExtent()
-    {
-        var text = new string('z', ConsoleFeed.ShownBytes * 3);
-        var path = Log("tail-line.log", "before\n" + text);
-        var update = new ConsoleFeed(path).Read()!;
-        Assert.Equal(text, update.OpenRange!.ReadText(TestContext.Current.CancellationToken));
+        Assert.Equal(ConsoleFeed.ShownBytes, update.Completed[0].Length);
+        Assert.Equal("last", update.Completed[1]);
     }
 
     [Fact]

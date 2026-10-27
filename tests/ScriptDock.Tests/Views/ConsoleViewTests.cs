@@ -60,7 +60,7 @@ public sealed class ConsoleViewTests : WindowTest, IDisposable
         new AppConfig(), new AppState(), new KnownPaths(), new ScriptScanner(), _runner);
 
     [AvaloniaFact]
-    public async Task NativeCopyUsesTheFocusedConsoleSelectionAndReadsItsCompleteFileRange()
+    public async Task NativeCopyUsesTheFocusedConsoleSelectionAndCopiesTheHeldText()
     {
         var path = Path.Combine(_root, "copy.log");
         var text = new string('x', ConsoleFeed.ShownBytes * 3);
@@ -75,8 +75,8 @@ public sealed class ConsoleViewTests : WindowTest, IDisposable
         Assert.Equal(MacMenuBar.EditRoute.EditField, MacMenuBar.Route("copy:", list, shortcut: false));
         Assert.Equal(MacMenuBar.EditRoute.None, MacMenuBar.Route("cut:", list, shortcut: false));
         await window.CopyConsoleSelectionAsync();
-        Assert.Equal(text, await window.Clipboard!.TryGetTextAsync());
         Assert.True(vm.ConsoleLines[0].Text.Length <= ConsoleFeed.ShownBytes);
+        Assert.Equal(vm.ConsoleLines[0].Text, await window.Clipboard!.TryGetTextAsync());
     }
 
     [AvaloniaFact]
@@ -111,17 +111,7 @@ public sealed class ConsoleViewTests : WindowTest, IDisposable
         window.KeyRelease(Key.C, command, PhysicalKey.C, "c");
         Settle(window);
 
-        // Copy reads file-backed lines off the UI thread; layout settlement does not await it.
-        var expected = long_ + Environment.NewLine + "third";
-        var deadline = DateTime.UtcNow.AddSeconds(20);
-        string? copied;
-        do
-        {
-            copied = await window.Clipboard!.TryGetTextAsync();
-            if (copied == expected) break;
-            await Task.Delay(10, TestContext.Current.CancellationToken);
-        } while (DateTime.UtcNow < deadline);
-        Assert.Equal(expected, copied);
+        Assert.Equal(long_ + Environment.NewLine + "third", await window.Clipboard!.TryGetTextAsync());
     }
 
     [AvaloniaFact]

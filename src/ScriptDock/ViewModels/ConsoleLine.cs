@@ -1,17 +1,14 @@
-using ScriptDock.Services;
-
 namespace ScriptDock.ViewModels;
 
 /// <summary>
 /// One line of the live console. <see cref="Shown"/> is the line as drawn: a line longer than the console
 /// draws is shortened with one marker, as the Records detail does, because laying out one very long line
-/// costs far more than its length; the file range supplies the complete line for copying, and the run's whole output
+/// costs far more than its length; <see cref="Text"/> stays whole for copying, and the run's whole output
 /// opens from the console (volume-handling-conventions, Output and text length).
 /// </summary>
-public sealed class ConsoleLine(string text, ConsoleFileRange? source = null)
+public sealed class ConsoleLine(string text)
 {
     public string Text { get; } = text;
-    public string ReadFullText() => source?.ReadText() ?? Text;
 
     public string Shown { get; } = Shorten(text);
 
