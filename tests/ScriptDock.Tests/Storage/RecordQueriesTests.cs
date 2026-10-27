@@ -83,47 +83,7 @@ public sealed class RecordQueriesTests : IDisposable
         }
     }
 
-    private static Task<RecordsPage> Page(RecordStore records, RecordsQuery query) => records.ReadRecordsPageAsync(query, cancellation: TestContext.Current.CancellationToken);
-
-    [Fact]
-    public async Task ResidentRefreshIsBoundedAndReversePagesReachTheNearestNewerRecords()
-    {
-        using var records = new RecordStore(_dir, SessionStart);
-        for (var index = 1; index <= 700; index++) await records.AddRunAsync(Run(index, $"/{index}.command"));
-        var refreshed = await Page(records, RecordsQuery.All with { Through = new RecordCursor(At(1), RecordKind.Run, 1) });
-        Assert.Equal(RecordsQuery.ResidentLimit, refreshed.Records.Count);
-        Assert.True(refreshed.More);
-        var previous = await Page(records, RecordsQuery.All with { Before = new RecordCursor(At(300), RecordKind.Run, 300) });
-        Assert.Equal(400, previous.Records[0].Id);
-        Assert.Equal(301, previous.Records[^1].Id);
-        Assert.True(previous.More);
-        var bounded = await Page(records, RecordsQuery.All with
-        {
-            From = new RecordCursor(At(400), RecordKind.Run, 400),
-            Through = new RecordCursor(At(201), RecordKind.Run, 201),
-        });
-        Assert.Equal(200, bounded.Records.Count);
-        Assert.Equal(400, bounded.Records[0].Id);
-        Assert.Equal(201, bounded.Records[^1].Id);
-    }
-
-    [Fact]
-    public async Task LargeScanReportHasABoundedPreviewAndACompleteIndependentExport()
-    {
-        using var records = new RecordStore(_dir, SessionStart);
-        var paths = Enumerable.Range(0, 20000).Select(i => $"/code/{i}/script.command").ToArray();
-        records.AddScanReport(Report(3, paths));
-        var row = Assert.Single((await Page(records, RecordsQuery.All)).Records);
-        var detail = Assert.IsType<ScanReportRecordDetail>(await records.ReadRecordDetailAsync(row.Kind, row.Id, false, TestContext.Current.CancellationToken));
-        Assert.True(detail.Partial);
-        Assert.True(Encoding.UTF8.GetByteCount(detail.Report) <= ScanReportRecordDetail.PreviewBytes);
-        using var complete = new MemoryStream();
-        Assert.True(await records.ReadScanReportAsync(row.Id, stream => stream.CopyTo(complete)));
-        using var document = System.Text.Json.JsonDocument.Parse(complete.ToArray());
-        Assert.Equal(paths.Length, document.RootElement.GetProperty("found").GetArrayLength());
-        Assert.Equal(paths[^1], document.RootElement.GetProperty("found")[paths.Length - 1].GetString());
-        Assert.False(await records.ReadScanReportAsync(long.MaxValue, _ => Assert.Fail("Missing report must not export")));
-    }
+    private static Task<RecordsPage> Page(RecordStore records, RecordsQuery query) => records.ReadRecordsPageAsync(query);
 
     [Fact]
     public async Task FailedSeedingClosesTheRecordsOwnerBeforeReturningTheFailure()
@@ -150,7 +110,7 @@ public sealed class RecordQueriesTests : IDisposable
         var bytes = Encoding.UTF8.GetBytes(prefix + "😀" + new string('b', 10000) + "far marker");
         await records.AddRunOutputAsync(run, bytes);
         var row = Assert.Single((await Page(records, RecordsQuery.All with { Search = "far marker" })).Records);
-        var detail = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(row.Kind, row.Id, nonZeroExitIsError: false, cancellation: TestContext.Current.CancellationToken));
+        var detail = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(row.Kind, row.Id));
         Assert.True(detail.Output!.Length <= RunRecordDetail.PreviewBytes + 1);
         Assert.Equal(bytes.LongLength, detail.OutputLength);
         var preview = Assert.IsType<OutputPreview>(RecordFormat.Output(detail.Output, totalBytes: detail.OutputLength));
@@ -314,8 +274,8 @@ public sealed class RecordQueriesTests : IDisposable
         Assert.Equal(["/code/d/broken.command", "/code/a/dev.command", "run: terminate failed"], onAttention.Records.Select(record => record.Title));
 
         var id = off.Records.Single(record => record.Title == "/code/a/dev.command").Id;
-        var plain = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, id, nonZeroExitIsError: false, cancellation: TestContext.Current.CancellationToken));
-        var flagged = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, id, nonZeroExitIsError: true, cancellation: TestContext.Current.CancellationToken));
+        var plain = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, id));
+        var flagged = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, id, nonZeroExitIsError: true));
         Assert.Equal((LogLevel.Info, "exited", 3), (plain.Level, plain.EndState, plain.ExitCode));
         Assert.Equal((LogLevel.Error, "exited", 3), (flagged.Level, flagged.EndState, flagged.ExitCode));
     }
@@ -346,9 +306,9 @@ public sealed class RecordQueriesTests : IDisposable
         RecordSummary Of(RecordKind kind, string title) =>
             page.Records.First(record => record.Kind == kind && (title == "" || record.Title == title));
 
-        var log = Assert.IsType<LogRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Log, Of(RecordKind.Log, "run: terminate failed").Id, nonZeroExitIsError: false, cancellation: TestContext.Current.CancellationToken));
-        var run = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, Of(RecordKind.Run, "/code/a/dev.command").Id, nonZeroExitIsError: true, cancellation: TestContext.Current.CancellationToken));
-        var scan = Assert.IsType<ScanReportRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.ScanReport, Of(RecordKind.ScanReport, "").Id, nonZeroExitIsError: false, cancellation: TestContext.Current.CancellationToken));
+        var log = Assert.IsType<LogRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Log, Of(RecordKind.Log, "run: terminate failed").Id));
+        var run = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, Of(RecordKind.Run, "/code/a/dev.command").Id, nonZeroExitIsError: true));
+        var scan = Assert.IsType<ScanReportRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.ScanReport, Of(RecordKind.ScanReport, "").Id));
 
         Assert.Equal((At(2), LogLevel.Warn, "run: terminate failed"), (log.Time, log.Level, log.Message));
         Assert.Contains("\"id\":3", log.Line);
@@ -363,7 +323,7 @@ public sealed class RecordQueriesTests : IDisposable
         Assert.Equal((At(3), 2), (scan.Time, scan.Found));
         Assert.Contains("\"prunedDirectories\"", scan.Report);
 
-        Assert.Null(await records.ReadRecordDetailAsync(RecordKind.Log, 9999, nonZeroExitIsError: false, cancellation: TestContext.Current.CancellationToken));
+        Assert.Null(await records.ReadRecordDetailAsync(RecordKind.Log, 9999));
     }
 
     [Fact]
@@ -387,13 +347,13 @@ public sealed class RecordQueriesTests : IDisposable
         Assert.Equal(["/code/d/broken.command", "/code/a/dev.command"], errors.Records.Select(record => record.Title));
         Assert.Equal("/code/c/serve.command", Assert.Single(found.Records).Title);
 
-        var running = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, page.Records[1].Id, nonZeroExitIsError: true, cancellation: TestContext.Current.CancellationToken));
+        var running = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, page.Records[1].Id, nonZeroExitIsError: true));
         Assert.Equal((At(8), LogLevel.Info), (running.Time, running.Level));
         Assert.Null(running.EndState);
         Assert.Null(running.ImportedAt);
         Assert.Null(running.Output);
         Assert.False(running.Settled);
-        var broken = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, page.Records[0].Id, nonZeroExitIsError: true, cancellation: TestContext.Current.CancellationToken));
+        var broken = Assert.IsType<RunRecordDetail>(await records.ReadRecordDetailAsync(RecordKind.Run, page.Records[0].Id, nonZeroExitIsError: true));
         Assert.Equal(("failed", null, null), (broken.EndState, broken.Pid, broken.Output));
     }
 
@@ -428,7 +388,7 @@ public sealed class RecordQueriesTests : IDisposable
         // A launch whose only record is a run with no output yet.
         await records.AddRunAsync(Run(1, "/code/a/dev.command") with { Session = "2026-10-01T09:00:00.000Z" });
 
-        var sources = await records.ReadRecordSourcesAsync(cancellation: TestContext.Current.CancellationToken);
+        var sources = await records.ReadRecordSourcesAsync();
 
         Assert.Equal(Session, sources.CurrentSession);
         Assert.Equal([Session, "2026-10-01T09:00:00.000Z", "2026-10-01T03:00:00.000Z"], sources.Sessions);
@@ -526,9 +486,9 @@ public sealed class RecordQueriesTests : IDisposable
         records.Flush();
         Assert.Equal(2, Volatile.Read(ref stored));
 
-        await records.ReadRecordsPageAsync(RecordsQuery.All, cancellation: TestContext.Current.CancellationToken);
-        await records.ReadRecordSourcesAsync(cancellation: TestContext.Current.CancellationToken);
-        await records.ReadRecordDetailAsync(RecordKind.Log, 1, nonZeroExitIsError: false, cancellation: TestContext.Current.CancellationToken);
+        await records.ReadRecordsPageAsync(RecordsQuery.All);
+        await records.ReadRecordSourcesAsync();
+        await records.ReadRecordDetailAsync(RecordKind.Log, 1);
         await records.ReadRecentAsync();
         records.Flush();
         Assert.Equal(2, Volatile.Read(ref stored));

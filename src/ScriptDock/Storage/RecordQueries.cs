@@ -9,7 +9,7 @@ namespace ScriptDock.Storage;
 /// <summary>
 /// The Records window's reads over <c>records.sqlite3</c>: a filtered page of summaries, newest first,
 /// keyset-paged by the last summary shown, one record whole, and the launches that have records. Each runs
-/// on a reader owned by <see cref="RecordStore"/>, after its prior-write barrier.
+/// on the Records window's reader (<see cref="RecordStore"/>), so a read sees every entry queued before it.
 /// </summary>
 internal static class RecordQueries
 {
@@ -99,43 +99,27 @@ internal static class RecordQueries
             command.Parameters.AddWithValue("$afterId", cursor.Id);
         }
 
-        if (query.Before is { } before)
-        {
-            after = "WHERE (time, kind, id) > ($beforeTime, $beforeKind, $beforeId)";
-            command.Parameters.AddWithValue("$beforeTime", before.Time);
-            command.Parameters.AddWithValue("$beforeKind", RecordKinds.Name(before.Kind));
-            command.Parameters.AddWithValue("$beforeId", before.Id);
-        }
-        var upper = "";
-        if (query.From is { } from)
-        {
-            upper = " AND (time, kind, id) <= ($fromTime, $fromKind, $fromId)";
-            command.Parameters.AddWithValue("$fromTime", from.Time);
-            command.Parameters.AddWithValue("$fromKind", RecordKinds.Name(from.Kind));
-            command.Parameters.AddWithValue("$fromId", from.Id);
-        }
-
         var filtered = string.Join(" UNION ALL ", parts);
         if (query.Through is { } through)
         {
             command.Parameters.AddWithValue("$throughTime", through.Time);
             command.Parameters.AddWithValue("$throughKind", RecordKinds.Name(through.Kind));
             command.Parameters.AddWithValue("$throughId", through.Id);
-            // Refresh the resident interval and one existence sentinel below it. The hard page bound
-            // keeps a burst of new records from materializing the entire accumulated history.
+            // Refresh the entire already-loaded interval and one existence sentinel below it. This
+            // makes membership and More one snapshot without sorting/materializing all older history.
             command.CommandText = $"WITH filtered AS NOT MATERIALIZED ({filtered}) " +
                 "SELECT kind, id, session, time, level, title, text, found, 0 AS older FROM filtered " +
-                "WHERE (time, kind, id) >= ($throughTime, $throughKind, $throughId)" + upper + " UNION ALL " +
+                "WHERE (time, kind, id) >= ($throughTime, $throughKind, $throughId) UNION ALL " +
                 "SELECT kind, id, session, time, level, title, text, found, 1 AS older FROM " +
                 "(SELECT * FROM filtered WHERE (time, kind, id) < ($throughTime, $throughKind, $throughId) LIMIT 1) " +
-                $"ORDER BY time DESC, kind DESC, id DESC LIMIT {RecordsQuery.ResidentLimit + 1}";
+                "ORDER BY time DESC, kind DESC, id DESC";
         }
         else
         {
             command.Parameters.AddWithValue("$limit", PageSize + 1);
             command.CommandText =
                 $"SELECT kind, id, session, time, level, title, text, found, 0 AS older FROM ({filtered}) {after} " +
-                (query.Before is null ? "ORDER BY time DESC, kind DESC, id DESC LIMIT $limit" : "ORDER BY time ASC, kind ASC, id ASC LIMIT $limit");
+                "ORDER BY time DESC, kind DESC, id DESC LIMIT $limit";
         }
 
         var records = new List<RecordSummary>();
@@ -155,13 +139,11 @@ internal static class RecordQueries
                 reader.IsDBNull(7) ? null : reader.GetInt32(7)));
         }
 
-        var limit = query.Through is null ? PageSize : RecordsQuery.ResidentLimit;
-        if (records.Count > limit)
+        if (query.Through is null && records.Count > PageSize)
         {
             more = true;
             records.RemoveAt(records.Count - 1);
         }
-        if (query.Before is not null) records.Reverse();
         return new RecordsPage(records, more);
     }
 
@@ -225,12 +207,11 @@ internal static class RecordQueries
 
             case RecordKind.ScanReport:
             {
-                command.CommandText = $"SELECT id, session, time, {ScanFound}, substr(CAST(report AS BLOB), 1, {ScanReportRecordDetail.PreviewBytes}), length(CAST(report AS BLOB)) FROM scan_reports WHERE id = $id";
+                command.CommandText = $"SELECT id, session, time, {ScanFound}, report FROM scan_reports WHERE id = $id";
                 using var reader = command.ExecuteReader();
                 return reader.Read()
                     ? new ScanReportRecordDetail(reader.GetInt64(0), reader.GetString(1), reader.GetString(2),
-                        reader.IsDBNull(3) ? null : reader.GetInt32(3), DecodePrefix((byte[])reader.GetValue(4)),
-                        reader.GetInt64(5) > ScanReportRecordDetail.PreviewBytes)
+                        reader.IsDBNull(3) ? null : reader.GetInt32(3), reader.GetString(4))
                     : null;
             }
 
@@ -273,26 +254,6 @@ internal static class RecordQueries
             return true;
         }
         return false;
-    }
-
-    private static string DecodePrefix(byte[] bytes)
-    {
-        // A byte-bounded preview may end inside UTF-8; leave that unfinished character out.
-        var decoder = System.Text.Encoding.UTF8.GetDecoder();
-        var chars = new char[bytes.Length];
-        var count = decoder.GetChars(bytes, 0, bytes.Length, chars, 0, flush: false);
-        return new string(chars, 0, count);
-    }
-
-    public static bool ReadScanReport(SqliteConnection connection, long id, Action<Stream> read)
-    {
-        using var command = connection.CreateCommand();
-        command.CommandText = "SELECT id FROM scan_reports WHERE id = $id";
-        command.Parameters.AddWithValue("$id", id);
-        if (command.ExecuteScalar() is null) return false;
-        using var blob = new SqliteBlob(connection, "scan_reports", "report", id, readOnly: true);
-        read(blob);
-        return true;
     }
 
     private static FileStream? OpenRetainedOutput(string? path)

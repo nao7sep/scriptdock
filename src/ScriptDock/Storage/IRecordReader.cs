@@ -1,6 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using System.Threading;
 using ScriptDock.Models;
 
 namespace ScriptDock.Storage;
@@ -27,18 +26,8 @@ public interface IRecordReader
     /// stream is valid only during the call. False when the run has neither.</summary>
     Task<bool> ReadRunOutputAsync(long id, Action<System.IO.Stream> read);
 
-    /// <summary>Streams the complete stored scan report through the independent export owner.</summary>
-    Task<bool> ReadScanReportAsync(long id, Action<System.IO.Stream> read);
-
     /// <summary>Every launch that has a record the window lists.</summary>
     Task<RecordSources> ReadRecordSourcesAsync();
-
-    Task<RecordsPage> ReadRecordsPageAsync(RecordsQuery query, CancellationToken cancellation) =>
-        ReadRecordsPageAsync(query).WaitAsync(cancellation);
-    Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id, bool nonZeroExitIsError, CancellationToken cancellation) =>
-        ReadRecordDetailAsync(kind, id, nonZeroExitIsError).WaitAsync(cancellation);
-    Task<RecordSources> ReadRecordSourcesAsync(CancellationToken cancellation) =>
-        ReadRecordSourcesAsync().WaitAsync(cancellation);
 
     /// <summary>Raised, on the records' own thread, after each entry the database stored. An entry that went
     /// to the fallback file is not in the database, so it raises nothing.</summary>

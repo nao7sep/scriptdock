@@ -19,8 +19,8 @@ namespace ScriptDock.Storage;
 /// <c>records.sqlite3</c> under the storage root: log lines, runs, run ends, run output, dismissals from the
 /// Recent list and scan reports, each carrying
 /// the session it came from, per the data-lifecycle-conventions' Records section and the logging-conventions.
-/// One thread serializes writes and Recent reads. Browsing has its own cancellable reader; streamed
-/// exports use a separately owned connection, so neither blocks the other or the writer. A write that fails is appended to this session's plain text file under <c>logs/</c>,
+/// One thread serializes writes and Recent reads; the Records window has its own reader thread, so its
+/// reads never block the writer. A write that fails is appended to this session's plain text file under <c>logs/</c>,
 /// then to the console. The Records window's reads are <see cref="RecordQueries"/>.
 /// </summary>
 public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
@@ -120,11 +120,7 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
 
     // The Records window's reader, started on its first read.
     private readonly object _windowGate = new();
-    private sealed record WindowOperation(Action Run, Action Cancel, CancellationToken Token);
-    private readonly Dictionary<object, WindowOperation> _windowPending = [];
-    private readonly AutoResetEvent _windowReady = new(false);
-    private readonly CancellationTokenSource _closing = new();
-    private readonly SemaphoreSlim _exportGate = new(1, 1);
+    private BlockingCollection<Action>? _windowQueue;
     private Thread? _windowReader;
     private SqliteConnection? _windowConnection;
     private int _disposed;
@@ -282,41 +278,18 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
     // The Records window's reads run on their own thread over a read-only connection, so a long search
     // never holds up the writes, the Recent list or the quit's flush queued behind it; WAL lets a reader
     // and the writer work side by side.
-    public Task<RecordsPage> ReadRecordsPageAsync(RecordsQuery query) => ReadRecordsPageAsync(query, CancellationToken.None);
-    public Task<RecordsPage> ReadRecordsPageAsync(RecordsQuery query, CancellationToken cancellation) =>
-        WindowRead(connection => RecordQueries.ReadPage(connection, query), cancellation);
+    public Task<RecordsPage> ReadRecordsPageAsync(RecordsQuery query) =>
+        WindowRead(connection => RecordQueries.ReadPage(connection, query));
 
     public Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id, bool nonZeroExitIsError = false) =>
-        ReadRecordDetailAsync(kind, id, nonZeroExitIsError, CancellationToken.None);
-    public Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id, bool nonZeroExitIsError, CancellationToken cancellation) =>
-        WindowRead(connection => RecordQueries.ReadDetail(connection, kind, id, nonZeroExitIsError), cancellation);
+        WindowRead(connection => RecordQueries.ReadDetail(connection, kind, id, nonZeroExitIsError));
 
     public Task<bool> ReadRunOutputAsync(long id, Action<Stream> read) =>
-        Export(connection => RecordQueries.ReadRunOutput(connection, id, read));
+        WindowRead(connection => RecordQueries.ReadRunOutput(connection, id, read));
 
-    public Task<bool> ReadScanReportAsync(long id, Action<Stream> read) =>
-        Export(connection => RecordQueries.ReadScanReport(connection, id, read));
-
-    private async Task<bool> Export(Func<SqliteConnection, bool> read)
-    {
-        await _exportGate.WaitAsync(_closing.Token).ConfigureAwait(false);
-        try
-        {
-            await Read(_ => true).ConfigureAwait(false);
-            return await Task.Run(() =>
-            {
-                _closing.Token.ThrowIfCancellationRequested();
-                using var connection = OpenWindowConnection();
-                return read(connection);
-            }).ConfigureAwait(false);
-        }
-        finally { _exportGate.Release(); }
-    }
-
-    public Task<RecordSources> ReadRecordSourcesAsync() => ReadRecordSourcesAsync(CancellationToken.None);
-    public Task<RecordSources> ReadRecordSourcesAsync(CancellationToken cancellation) =>
+    public Task<RecordSources> ReadRecordSourcesAsync() =>
         WindowRead(connection => new RecordSources(Session,
-            RecordQueries.ReadSessions(connection).Append(Session).Distinct().OrderDescending(StringComparer.Ordinal).ToList()), cancellation);
+            RecordQueries.ReadSessions(connection).Append(Session).Distinct().OrderDescending(StringComparer.Ordinal).ToList()));
 
     public Task<OutputFileRevision?> ReadOutputFileRevisionAsync(RunRecord run) => Read<OutputFileRevision?>(connection =>
     {
@@ -426,92 +399,57 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
         if (_owner.Join(CloseWait))
             _connection?.Dispose();
 
-        _closing.Cancel();
         lock (_windowGate)
         {
-            foreach (var operation in _windowPending.Values) operation.Cancel();
-            _windowPending.Clear();
-            _windowReady.Set();
+            _windowQueue?.CompleteAdding();
+            if (_windowReader?.Join(WindowReadCloseWait) == true)
+                _windowConnection?.Dispose();
         }
-        _windowReader?.Join(WindowReadCloseWait);
     }
 
-    private Task<T> WindowRead<T>(Func<SqliteConnection, T> read, CancellationToken cancellation)
+    private Task<T> WindowRead<T>(Func<SqliteConnection, T> read)
     {
         var done = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellation, _closing.Token);
-        var token = lifetime.Token;
-        // No blocking event is allocated per request. The write barrier is cheap and cannot retain a
-        // disposed callback if a read is replaced while waiting for the writer.
-        var barrier = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!TryQueue(() => barrier.TrySetResult(true))) barrier.TrySetResult(true);
-        var writesBefore = barrier.Task;
-        void Cancel()
-        {
-            done.TrySetCanceled();
-            lifetime.Dispose();
-        }
+
+        // A read still sees every write queued before it; the writer never waits for a read.
+        var writesBefore = new ManualResetEventSlim();
+        if (!TryQueue(writesBefore.Set))
+            writesBefore.Set();
+
         void Run()
         {
             try
             {
-                token.ThrowIfCancellationRequested();
-                writesBefore.WaitAsync(token).GetAwaiter().GetResult();
+                writesBefore.Wait();
+                writesBefore.Dispose();
                 _windowConnection ??= OpenWindowConnection();
-                using var interrupted = token.Register(() => SQLitePCL.raw.sqlite3_interrupt(_windowConnection.Handle));
-                token.ThrowIfCancellationRequested();
-                var result = read(_windowConnection);
-                token.ThrowIfCancellationRequested();
-                done.TrySetResult(result);
+                done.SetResult(read(_windowConnection));
             }
-            catch (Exception) when (token.IsCancellationRequested) { done.TrySetCanceled(token); }
-            catch (Exception ex) { done.TrySetException(ex); }
-            finally { lifetime.Dispose(); }
+            catch (Exception ex)
+            {
+                done.SetException(ex);
+            }
         }
+
         lock (_windowGate)
         {
             if (Volatile.Read(ref _disposed) == 1)
             {
-                lifetime.Dispose();
                 done.SetException(new ObjectDisposedException(nameof(RecordStore)));
                 return done.Task;
             }
-            // Remove obsolete work physically, not only its waiter. Independent live requests
-            // retain their semantics; the window cancels each superseded request before admitting one.
-            foreach (var key in _windowPending.Where(pair => pair.Value.Token.IsCancellationRequested).Select(pair => pair.Key).ToArray())
+            if (_windowQueue is null)
             {
-                _windowPending[key].Cancel();
-                _windowPending.Remove(key);
-            }
-            _windowPending.Add(new object(), new WindowOperation(Run, Cancel, token));
-            if (_windowReader is null)
-            {
+                var queue = new BlockingCollection<Action>();
+                _windowQueue = queue;
                 _windowReader = new Thread(() =>
                 {
-                    try
-                    {
-                        while (true)
-                        {
-                            WindowOperation? operation = null;
-                            lock (_windowGate)
-                            {
-                                if (_disposed == 1) break;
-                                if (_windowPending.Count > 0)
-                                {
-                                    var first = _windowPending.First();
-                                    operation = first.Value;
-                                    _windowPending.Remove(first.Key);
-                                }
-                            }
-                            if (operation is null) _windowReady.WaitOne();
-                            else operation.Run();
-                        }
-                    }
-                    finally { _windowConnection?.Dispose(); }
+                    foreach (var operation in queue.GetConsumingEnumerable())
+                        operation();
                 }) { IsBackground = true, Name = "records window" };
                 _windowReader.Start();
             }
-            _windowReady.Set();
+            _windowQueue.Add(Run);
         }
         return done.Task;
     }

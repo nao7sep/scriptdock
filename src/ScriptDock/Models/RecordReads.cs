@@ -70,11 +70,6 @@ public sealed record RecordsQuery(
     /// <summary>Whether a run that exited with a code other than 0 reads as an error (<see cref="Services.ExitCodes"/>).</summary>
     public bool NonZeroExitIsError { get; init; }
 
-    // Three ordinary pages cover the visible neighborhood without retaining the whole browsing session.
-    public const int ResidentLimit = 300;
-    public RecordCursor? Before { get; init; }
-    public RecordCursor? From { get; init; }
-
     public static readonly RecordsQuery All = new(null, null, null, string.Empty, null);
 }
 
@@ -141,12 +136,9 @@ public sealed record RunRecordDetail(
         (EndedAt, EndState, ExitCode, ImportedAt, Level, OutputLength, OutputRevision) == (other.EndedAt, other.EndState, other.ExitCode, other.ImportedAt, other.Level, other.OutputLength, other.OutputRevision);
 }
 
-/// <summary>A scan report: when the scan completed and a bounded prefix of its stored JSON.</summary>
-public sealed record ScanReportRecordDetail(long Id, string Session, string Time, int? Found, string Report, bool Partial = false)
-    : RecordDetail(RecordKind.ScanReport, Id, Session, Time, LogLevel.Info)
-{
-    public const int PreviewBytes = 64 * 1024;
-}
+/// <summary>A scan report: when the scan completed and the whole report as stored.</summary>
+public sealed record ScanReportRecordDetail(long Id, string Session, string Time, int? Found, string Report)
+    : RecordDetail(RecordKind.ScanReport, Id, Session, Time, LogLevel.Info);
 
 /// <summary>The launches the filter offers, newest first, and this one.</summary>
 public sealed record RecordSources(string CurrentSession, System.Collections.Generic.IReadOnlyList<string> Sessions);

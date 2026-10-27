@@ -47,8 +47,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     private readonly IJsonStore<AppState> _stateStore;
     private readonly AppState _state;
     private readonly TimeProvider _time;
-    private readonly Func<RunRecordDetail, Stream, bool>? _openOutput;
-    private readonly Dictionary<string, CancellationTokenSource> _reads = [];
+    private readonly Func<RunRecordDetail, Stream, bool> _openOutput;
 
     // The filters the list is read for; a page's own cursor is added per read.
     private RecordsQuery _filters = RecordsQuery.All with { NonZeroExitIsError = ExitCodes.NonZeroIsError };
@@ -58,9 +57,6 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     // The busy claim for the next page, taken before the read starts.
     private bool _fetchingMore;
     private RecordCursor? _loadedThrough;
-    private bool _hasNewer;
-    public event Action<bool>? RowsChanging;
-    public event Action? RowsChanged;
     private Task? _refreshing;
     // New records arrived while the list was scrolled away from its top.
     private bool _newestPending;
@@ -92,7 +88,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         _stateStore = stateStore;
         _state = state;
         _time = time ?? TimeProvider.System;
-        _openOutput = openOutput;
+        _openOutput = openOutput ?? OpenInEditor;
 
         LaunchOptions.Add(new RecordFilterOption(null, () => Localizer.T("records.allLaunches")));
         KindOptions =
@@ -128,7 +124,6 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty] private bool _loadingMore;
     [ObservableProperty] private bool _openOutputFailed;
-    [ObservableProperty] private bool _openReportFailed;
     [ObservableProperty] private bool _moreFailed;
 
     [ObservableProperty]
@@ -190,8 +185,6 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
 
             if (value is not null && Rows.Count > 0 && ReferenceEquals(Rows[^1], value))
                 LoadMore();
-            else if (value is not null && Rows.Count > 0 && ReferenceEquals(Rows[0], value) && _hasNewer)
-                LoadPrevious();
         }
     }
 
@@ -217,11 +210,6 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     public void ListScrolled(bool atTop, bool nearEnd)
     {
         _atTop = atTop;
-        if (_hasNewer && atTop)
-        {
-            LoadPrevious();
-            return;
-        }
         if (_newestPending && atTop)
         {
             _newestPending = false;
@@ -266,7 +254,6 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         _disposed = true;
         _generation++;
         _detailVersion++;
-        foreach (var read in _reads.Values.ToArray()) read.Cancel();
         _reader.Stored -= OnStored;
         Localizer.Changed -= OnLanguageChanged;
         DisplayTime.Changed -= OnLanguageChanged;
@@ -321,18 +308,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
             _ = ReloadAsync();
     }
 
-    private async Task<T> Bounded<T>(string lane, Func<CancellationToken, Task<T>> read)
-    {
-        if (_reads.TryGetValue(lane, out var previous)) previous.Cancel();
-        using var current = new CancellationTokenSource();
-        _reads[lane] = current;
-        try { return await read(current.Token).WaitAsync(ReadTimeout, _time, current.Token); }
-        finally
-        {
-            current.Cancel(); // A timeout ends the underlying query too, not merely its waiter.
-            if (_reads.TryGetValue(lane, out var latest) && ReferenceEquals(latest, current)) _reads.Remove(lane);
-        }
-    }
+    private Task<T> Bounded<T>(Task<T> read) => read.WaitAsync(ReadTimeout, _time);
 
     private async Task ReloadAsync()
     {
@@ -340,7 +316,6 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         var query = _filters;
         _fetchingMore = false;
         _loadedThrough = null;
-        _hasNewer = false;
         _refreshing = null;
         _newestPending = false;
         _more = false;
@@ -352,9 +327,8 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         RecordsPage page;
         try
         {
-            page = await Bounded("page", token => _reader.ReadRecordsPageAsync(query, token));
+            page = await Bounded(_reader.ReadRecordsPageAsync(query));
         }
-        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             if (generation != _generation)
@@ -387,18 +361,17 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         return _refreshing = RefreshLoadedAsync();
     }
 
-    // The resident interval is authoritative: runs can leave a level filter after ending or enter a
+    // The loaded interval is authoritative: runs can leave a level filter after ending or enter a
     // search after output is imported. Keep the floor even if every visible row stops matching.
     private async Task RefreshLoadedAsync()
     {
         var generation = _generation;
-        var query = _filters with { Through = _loadedThrough, From = _hasNewer && Rows.Count > 0 ? CursorOf(Rows[0].Summary) : null };
+        var query = _filters with { Through = _loadedThrough };
         RecordsPage page;
         try
         {
-            page = await Bounded("page", token => _reader.ReadRecordsPageAsync(query, token));
+            page = await Bounded(_reader.ReadRecordsPageAsync(query));
         }
-        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             if (generation == _generation)
@@ -415,7 +388,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         }
         _liveSuspended = false;
         SyncRows(page.Records);
-        _loadedThrough = RecordsPaging.CursorAfter(page.Records) ?? _loadedThrough;
+        _loadedThrough ??= RecordsPaging.CursorAfter(page.Records);
         _more = page.More;
         ListStatus = RecordsListStatus.Ready;
         // Defer a coalesced successor until this refresh's task has settled.
@@ -439,9 +412,8 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
                 await refresh;
             if (generation != _generation || _disposed) return;
             var query = _filters with { After = _loadedThrough };
-            page = await Bounded("page", token => _reader.ReadRecordsPageAsync(query, token));
+            page = await Bounded(_reader.ReadRecordsPageAsync(query));
         }
-        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             if (generation != _generation)
@@ -458,13 +430,7 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         _fetchingMore = false;
         _liveSuspended = false;
         var keys = Rows.Select(row => row.Key).ToHashSet(StringComparer.Ordinal);
-        var expanded = Summaries().Concat(page.Records.Where(record => !keys.Contains(record.Key))).ToList();
-        if (expanded.Count > RecordsQuery.ResidentLimit)
-        {
-            expanded.RemoveRange(0, expanded.Count - RecordsQuery.ResidentLimit);
-            _hasNewer = true;
-        }
-        SyncRows(expanded, preserveAnchor: true);
+        SyncRows([.. Summaries(), .. page.Records.Where(record => !keys.Contains(record.Key))]);
         _loadedThrough = RecordsPaging.CursorAfter(page.Records) ?? _loadedThrough;
         _more = page.More;
         LoadingMore = false;
@@ -472,54 +438,13 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
             _ = ReadNewestAsync();
     }
 
-    private static RecordCursor CursorOf(RecordSummary row) => new(row.Time, row.Kind, row.Id);
-
-    public void LoadPrevious() => _ = LoadPreviousAsync();
-
-    private async Task LoadPreviousAsync()
-    {
-        if (_disposed || !_hasNewer || _fetchingMore || Rows.Count == 0 || ListStatus != RecordsListStatus.Ready) return;
-        _fetchingMore = true;
-        LoadingMore = true;
-        MoreFailed = false;
-        var generation = _generation;
-        try
-        {
-            if (_refreshing is { IsCompleted: false } refresh) await refresh;
-            if (_disposed || generation != _generation) return;
-            var page = await Bounded("page", token => _reader.ReadRecordsPageAsync(_filters with { Before = CursorOf(Rows[0].Summary) }, token));
-            if (_disposed || generation != _generation) return;
-            var keys = page.Records.Select(row => row.Key).ToHashSet(StringComparer.Ordinal);
-            var expanded = page.Records.Concat(Summaries().Where(row => !keys.Contains(row.Key))).ToList();
-            if (expanded.Count > RecordsQuery.ResidentLimit)
-            {
-                expanded.RemoveRange(RecordsQuery.ResidentLimit, expanded.Count - RecordsQuery.ResidentLimit);
-                _more = true;
-            }
-            _hasNewer = page.More;
-            SyncRows(expanded, preserveAnchor: true);
-            _loadedThrough = RecordsPaging.CursorAfter(expanded);
-            _liveSuspended = false;
-        }
-        catch (OperationCanceledException) { }
-        catch (Exception ex)
-        {
-            if (generation == _generation) { ReadFailed(ex, "previous page"); MoreFailed = true; }
-        }
-        finally
-        {
-            if (generation == _generation) { _fetchingMore = false; LoadingMore = false; }
-        }
-    }
-
     private async Task ReadSourcesAsync()
     {
         RecordSources sources;
         try
         {
-            sources = await Bounded("sources", token => _reader.ReadRecordSourcesAsync(token));
+            sources = await Bounded(_reader.ReadRecordSourcesAsync());
         }
-        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             if (!_disposed)
@@ -544,7 +469,6 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     private async Task ReadDetailAsync(RecordSummary? summary)
     {
         var version = ++_detailVersion;
-        if (_reads.TryGetValue("detail", out var pending)) pending.Cancel();
         if (summary is null)
         {
             ShowDetail(null, RecordsDetailStatus.None);
@@ -555,9 +479,8 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         RecordDetail? detail;
         try
         {
-            detail = await Bounded("detail", token => _reader.ReadRecordDetailAsync(summary.Kind, summary.Id, _filters.NonZeroExitIsError, token));
+            detail = await Bounded(_reader.ReadRecordDetailAsync(summary.Kind, summary.Id, _filters.NonZeroExitIsError));
         }
-        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             if (version != _detailVersion)
@@ -575,15 +498,11 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     {
         // A failed open belongs to its run: a refresh of the same run keeps it, another record clears it.
         if (detail is null || _detail is null || detail.Kind != _detail.Kind || detail.Id != _detail.Id)
-        {
             OpenOutputFailed = false;
-            OpenReportFailed = false;
-        }
         _detail = detail;
         BuildDetail();
         DetailStatus = status;
         OnPropertyChanged(nameof(CanOpenFullOutput));
-        OnPropertyChanged(nameof(CanOpenFullReport));
         OnPropertyChanged(nameof(DetailTitle));
         OnPropertyChanged(nameof(DetailIsCodeTitle));
         OnPropertyChanged(nameof(DetailIsPathTitle));
@@ -600,7 +519,6 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         DetailFields.Clear();
         DetailBlocks.Clear();
         _outputPartial = false;
-        _reportPartial = false;
         if (_detail is null)
             return;
 
@@ -656,43 +574,12 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
             case ScanReportRecordDetail scan:
                 Add("records.time", RecordFormat.Time(scan.Time, milliseconds: true));
                 Add("records.launch", RecordFormat.Launch(scan.Session, _reader.Session));
-                var reportText = scan.Partial ? scan.Report : RecordFormat.PrettyJson(scan.Report);
-                var reportPreview = RecordFormat.Output(System.Text.Encoding.UTF8.GetBytes(reportText ?? ""), ScanReportRecordDetail.PreviewBytes);
-                _reportPartial = scan.Partial || reportPreview is { MoreBytes: > 0 } || reportPreview is { LinesShortened: true };
-                if (reportPreview is not null)
-                    DetailBlocks.Add(new RecordBlock(Localizer.T("records.report"), reportPreview.Text,
-                        _reportPartial ? Localizer.T("records.reportPartial") : null));
+                AddBlock("records.report", RecordFormat.PrettyJson(scan.Report));
                 break;
         }
     }
 
     private bool _outputPartial;
-    private bool _reportPartial;
-    public bool CanOpenFullReport => DetailStatus == RecordsDetailStatus.Ready && _detail is ScanReportRecordDetail && _reportPartial;
-
-    [RelayCommand]
-    private async Task OpenFullReportAsync()
-    {
-        if (_detail is not ScanReportRecordDetail report) return;
-        OpenReportFailed = false;
-        try
-        {
-            string? path = null;
-            var found = await _reader.ReadScanReportAsync(report.Id, stream =>
-                path = RunOutputFile.Write(StorageRoot.Directory, "scan-report", "scan-" + report.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), stream, clean: false));
-            var opened = found && await Task.Run(() => ExternalLauncher.Open(path!));
-            if (!opened && ReferenceEquals(_detail, report)) OpenReportFailed = true;
-        }
-        catch (OperationCanceledException) { }
-        catch (Exception ex)
-        {
-            Log.Error("records: open full report failed", ex);
-            if (ReferenceEquals(_detail, report)) OpenReportFailed = true;
-        }
-    }
-
-    [RelayCommand]
-    private void DismissOpenReportError() => OpenReportFailed = false;
 
     /// <summary>The detail shows the run's output only in part (its first 1 MB, or with long lines shortened), so
     /// Open full output is offered.</summary>
@@ -713,25 +600,13 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         bool opened;
         try
         {
-            // The export reader owns only streaming. The shell handoff happens after it releases
-            // its database connection, so an external application cannot prolong a read transaction.
+            // Streamed from the record into the file on the Records reader's thread, in pieces.
             var written = false;
-            string? path = null;
-            var found = await _reader.ReadRunOutputAsync(run.Id, output =>
-            {
-                if (_openOutput is not null) written = _openOutput(run, output);
-                else
-                {
-                    path = RunOutputFile.Write(StorageRoot.Directory, run.Script,
-                        run.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), output);
-                    written = true;
-                }
-            });
-            opened = found && written && (_openOutput is not null || await Task.Run(() => ExternalLauncher.Open(path!)));
+            var found = await _reader.ReadRunOutputAsync(run.Id, output => written = _openOutput(run, output));
+            opened = found && written;
             if (!found)
                 Log.Error("records: run has no stored output to open", new { run = run.Id });
         }
-        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             Log.Error("records: read full output failed", ex, new { run = run.Id });
@@ -745,6 +620,21 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void DismissOpenOutputError() => OpenOutputFailed = false;
 
+    private static bool OpenInEditor(RunRecordDetail run, Stream output)
+    {
+        string path;
+        try
+        {
+            path = RunOutputFile.Write(StorageRoot.Directory, run.Script, run.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), output);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Error("records: write full output failed", ex, new { run = run.Id });
+            return false;
+        }
+        return ExternalLauncher.Open(path);
+    }
+
     // Rounded up to a tenth, so a few bytes left out never read as none.
     private static double Megabytes(long bytes) => Math.Ceiling(bytes / (1024.0 * 1024.0) * 10) / 10;
 
@@ -756,9 +646,8 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         RecordDetail? detail;
         try
         {
-            detail = await Bounded("detail", token => _reader.ReadRecordDetailAsync(shown.Kind, shown.Id, _filters.NonZeroExitIsError, token));
+            detail = await Bounded(_reader.ReadRecordDetailAsync(shown.Kind, shown.Id, _filters.NonZeroExitIsError));
         }
-        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             if (version == _detailVersion)
@@ -809,9 +698,8 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
 
     // The rows become exactly the given summaries, newest first. A row whose summary is unchanged keeps its
     // object, so the list keeps its selection and scroll position; the selection is then restored by key.
-    private void SyncRows(IReadOnlyList<RecordSummary> desired, bool preserveAnchor = false)
+    private void SyncRows(IReadOnlyList<RecordSummary> desired)
     {
-        RowsChanging?.Invoke(preserveAnchor);
         _syncingRows = true;
         try
         {
@@ -843,7 +731,6 @@ public sealed partial class RecordsWindowViewModel : ViewModelBase, IDisposable
         _selectedRecord = _selectedKey is null ? null : Rows.FirstOrDefault(row => row.Key == _selectedKey);
         OnPropertyChanged(nameof(SelectedRecord));
         OnPropertyChanged(nameof(ShowEmptyNote));
-        RowsChanged?.Invoke();
     }
 
     // A run's level is read under the setting, so the list is read again, a level filter's members

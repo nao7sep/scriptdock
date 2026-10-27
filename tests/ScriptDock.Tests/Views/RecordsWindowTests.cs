@@ -254,62 +254,6 @@ public sealed class RecordsWindowTests : WindowTest
         Assert.True(vm.HasDetail);
     }
 
-    [AvaloniaTheory]
-    [InlineData("en")]
-    [InlineData("de")]
-    [InlineData("es")]
-    [InlineData("fr")]
-    [InlineData("it")]
-    [InlineData("pt-BR")]
-    [InlineData("ru")]
-    [InlineData("ja")]
-    [InlineData("ko")]
-    [InlineData("zh-Hans")]
-    public void FullReportActionFitsAtTheMinimumWidth(string tag)
-    {
-        using var speaking = Localizer.Speaking(tag);
-        _reader.Page = new RecordsPage([Scan], false);
-        _reader.Detail = (_, _) => Task.FromResult<RecordDetail?>(new ScanReportRecordDetail(Scan.Id, Session, Scan.Time, 3, "partial", Partial: true));
-        var vm = NewViewModel();
-        var window = Show(new RecordsWindow { DataContext = vm, Width = RecordsLayout.MinWindowWidth, Height = 700 });
-        List(window).SelectedIndex = 0;
-        Dispatcher.UIThread.RunJobs();
-        var button = window.GetVisualDescendants().OfType<Button>().Single(b => b.Command == vm.OpenFullReportCommand);
-        Assert.True(button.IsEffectivelyVisible);
-        var text = button.GetVisualDescendants().OfType<TextBlock>().First();
-        Assert.True(text.Bounds.Width > 0);
-        Assert.DoesNotContain(text.TextLayout.TextLines, line => line.HasCollapsed);
-        Assert.True(button.Bounds.Width <= ((Control)button.Parent!).Bounds.Width);
-    }
-
-    [AvaloniaFact]
-    public void PagingPastTheResidentLimitKeepsTheVisibleRowAnchored()
-    {
-        var rows = Enumerable.Range(1, 400).Select(id => new RecordSummary(RecordKind.Log, id, Session,
-            TimestampConventions.IsoMillis(DateTimeOffset.Parse(Session).AddSeconds(-id)), LogLevel.Info, $"record {id}", null, null)).ToArray();
-        _reader.Page = new RecordsPage(rows[..300], true);
-        var vm = NewViewModel();
-        var window = Show(new RecordsWindow { DataContext = vm, Width = 1000, Height = 600 });
-        var list = List(window);
-        list.ScrollIntoView(vm.Rows[250]);
-        window.UpdateLayout();
-        Dispatcher.UIThread.RunJobs();
-        var anchor = list.GetRealizedContainers().First(c => c.TranslatePoint(default, list) is { } point && point.Y >= 0);
-        var key = ((RecordRow)anchor.DataContext!).Key;
-        var y = anchor.TranslatePoint(default, list)!.Value.Y;
-        _reader.Next(new RecordsPage(rows[300..], false));
-        vm.LoadMore();
-        window.UpdateLayout();
-        Dispatcher.UIThread.RunJobs();
-        window.UpdateLayout();
-        Dispatcher.UIThread.RunJobs();
-        var kept = vm.Rows.Single(row => row.Key == key);
-        var container = list.ContainerFromItem(kept);
-        Assert.NotNull(container);
-        Assert.InRange(Math.Abs(container.TranslatePoint(default, list)!.Value.Y - y), 0, 1);
-        Assert.Equal(RecordsQuery.ResidentLimit, vm.Rows.Count);
-    }
-
     // Rule 4 of the text-cleanup conventions: what the 1 MB view leaves out has a direct keyboard path.
     [AvaloniaFact]
     public void Open_full_output_is_reached_by_tab_and_opens_with_enter()

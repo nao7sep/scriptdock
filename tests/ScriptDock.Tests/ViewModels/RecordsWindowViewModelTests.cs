@@ -57,64 +57,6 @@ public sealed class RecordsWindowViewModelTests
     private static RecordCursor CursorOf(RecordSummary record) => new(record.Time, record.Kind, record.Id);
 
     [AvaloniaFact]
-    public void LongBrowsingRetainsOnlyItsNeighborhoodAndCanReturnToEvictedRows()
-    {
-        var rows = Enumerable.Range(1, 1000).Select(id => new RecordSummary(RecordKind.Log, id, Session,
-            TimestampConventions.IsoMillis(DateTimeOffset.Parse(Session).AddSeconds(-id)), LogLevel.Info, $"row {id}", null, null)).ToArray();
-        _reader.Page = new RecordsPage(rows[..100], true);
-        using var vm = Started();
-        vm.SelectedRecord = vm.Rows[50];
-        for (var offset = 100; offset < rows.Length; offset += 100)
-        {
-            _reader.Next(new RecordsPage(rows[offset..(offset + 100)], offset + 100 < rows.Length));
-            vm.LoadMore();
-            Pump();
-            Assert.True(vm.Rows.Count <= RecordsQuery.ResidentLimit);
-        }
-        Assert.Equal(701, vm.Rows[0].Summary.Id);
-        Assert.Equal(1000, vm.Rows[^1].Summary.Id);
-        _reader.Page = new RecordsPage(rows[700..1000], false);
-        _reader.RaiseStored();
-        Pump();
-        Advance(RecordsWindowViewModel.LiveInterval);
-        Assert.Equal(CursorOf(rows[700]), _reader.LastQuery.From);
-        Assert.Equal(CursorOf(rows[999]), _reader.LastQuery.Through);
-        for (var start = 600; start >= 0; start -= 100)
-        {
-            _reader.Next(new RecordsPage(rows[start..(start + 100)], start > 0));
-            vm.LoadPrevious();
-            Pump();
-            Assert.Equal(CursorOf(rows[start + 100]), _reader.LastQuery.Before);
-            Assert.True(vm.Rows.Count <= RecordsQuery.ResidentLimit);
-        }
-        Assert.Equal(1, vm.Rows[0].Summary.Id);
-        Assert.Equal(51, vm.SelectedRecord!.Summary.Id);
-        Assert.Equal(300, vm.Rows[^1].Summary.Id);
-    }
-
-    [AvaloniaFact]
-    public async Task PartialReportShowsItsFullReportActionAndKeepsExportFailureLocal()
-    {
-        _reader.Page = new RecordsPage([Scan], false);
-        _reader.Detail = (_, _) => Task.FromResult<RecordDetail?>(new ScanReportRecordDetail(Scan.Id, Session, Scan.Time, 3,
-            new string('x', ScanReportRecordDetail.PreviewBytes), Partial: true));
-        using var vm = Started();
-        vm.SelectedRecord = vm.Rows[0];
-        Pump();
-        Assert.True(vm.CanOpenFullReport);
-        Assert.False(vm.CanOpenFullOutput);
-        var block = Assert.Single(vm.DetailBlocks);
-        Assert.True(block.Text.Length <= RecordFormat.OutputShownLineGraphemes + 1);
-        Assert.Equal(English.Of("records.reportPartial"), block.Note);
-        await vm.OpenFullReportCommand.ExecuteAsync(null); // absent export, no external app
-        Assert.True(vm.OpenReportFailed);
-        vm.DismissOpenReportErrorCommand.Execute(null);
-        Assert.False(vm.OpenReportFailed);
-        vm.SelectedRecord = null;
-        Assert.False(vm.CanOpenFullReport);
-    }
-
-    [AvaloniaFact]
     public void PendingDetailShowsLoadingUntilTheCurrentSelectionSettles()
     {
         var pending = new TaskCompletionSource<RecordDetail?>();

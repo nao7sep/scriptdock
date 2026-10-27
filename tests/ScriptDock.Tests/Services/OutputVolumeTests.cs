@@ -411,7 +411,7 @@ public sealed class OutputVolumeTests : IDisposable
         await records.AddRunAsync(run);
         var big = Enumerable.Range(0, RecordStore.CopyBufferBytes * 3 + 7).Select(i => (byte)('a' + i % 26)).ToArray();
         await records.AddRunOutputAsync(run, big);
-        var id = (await records.ReadRecordsPageAsync(new RecordsQuery(null, RecordKind.Run, null, "", null), cancellation: TestContext.Current.CancellationToken)).Records.Single(summary => summary.Kind == RecordKind.Run).Id;
+        var id = (await records.ReadRecordsPageAsync(new RecordsQuery(null, RecordKind.Run, null, "", null))).Records.Single(summary => summary.Kind == RecordKind.Run).Id;
         Assert.Equal(big, await records.ReadRunOutputAsync(id));
 
         await Assert.ThrowsAnyAsync<Exception>(() => records.AddRunOutputAsync(run, new MemoryStream(new byte[10]), 20));
@@ -432,7 +432,7 @@ public sealed class OutputVolumeTests : IDisposable
         {
             session = records.Session;
             await records.AddRunAsync(new RunRecord(session, 1, DateTimeOffset.UtcNow, "/x/a.command", null, null, file));
-            id = (await records.ReadRecordsPageAsync(new RecordsQuery(null, RecordKind.Run, null, "", null), cancellation: TestContext.Current.CancellationToken)).Records.Single().Id;
+            id = (await records.ReadRecordsPageAsync(new RecordsQuery(null, RecordKind.Run, null, "", null))).Records.Single().Id;
         }
 
         using var connection = new SqliteConnection($"Data Source={Path.Combine(root, "records.sqlite3")}");

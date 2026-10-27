@@ -24,10 +24,6 @@ public partial class RecordsWindow : Window
     private double _listWidthIntent;
     private (int X, int Y, double Width, double Height)? _normalGeometry;
     private bool _closed;
-    private RecordsWindowViewModel? _anchoredVm;
-    private (string Key, double Y)? _anchor;
-    private bool _restoringAnchor;
-    private int _anchorVersion;
 
     public RecordsWindow()
     {
@@ -76,11 +72,6 @@ public partial class RecordsWindow : Window
         Closed += (_, _) =>
         {
             _closed = true;
-            if (_anchoredVm is { } anchored)
-            {
-                anchored.RowsChanging -= CaptureAnchor;
-                anchored.RowsChanged -= RestoreAnchor;
-            }
             ViewModel?.Dispose();
         };
     }
@@ -92,18 +83,9 @@ public partial class RecordsWindow : Window
     // The pane opens at its saved width, so the first frame already has it.
     protected override void OnDataContextChanged(EventArgs e)
     {
-        if (_anchoredVm is { } old)
-        {
-            old.RowsChanging -= CaptureAnchor;
-            old.RowsChanged -= RestoreAnchor;
-        }
-        _anchoredVm = null;
         base.OnDataContextChanged(e);
         if (ViewModel is not { } vm)
             return;
-        _anchoredVm = vm;
-        vm.RowsChanging += CaptureAnchor;
-        vm.RowsChanged += RestoreAnchor;
         _listWidthIntent = vm.ListWidth;
         ListColumn.Width = new GridLength(_listWidthIntent, GridUnitType.Pixel);
     }
@@ -167,48 +149,6 @@ public partial class RecordsWindow : Window
             _ = vm.CommitListWidthAsync(_listWidthIntent);
     }
 
-    private void CaptureAnchor(bool preserve)
-    {
-        _anchorVersion++;
-        _anchor = null;
-        _restoringAnchor = preserve;
-        if (!preserve) return;
-        foreach (var container in RecordsList.GetRealizedContainers())
-        {
-            if (container.DataContext is RecordRow row && container.TranslatePoint(default, RecordsList) is { } point
-                && point.Y + container.Bounds.Height > 0)
-            {
-                _anchor = (row.Key, point.Y);
-                break;
-            }
-        }
-    }
-
-    private void RestoreAnchor()
-    {
-        if (_anchor is not { } anchor || ViewModel is not { } vm)
-        {
-            _restoringAnchor = false;
-            return;
-        }
-        var version = _anchorVersion;
-        var row = vm.Rows.FirstOrDefault(row => row.Key == anchor.Key);
-        if (row is null) { _restoringAnchor = false; return; }
-        Dispatcher.UIThread.Post(() =>
-        {
-            if (_closed || version != _anchorVersion) return;
-            RecordsList.ScrollIntoView(row);
-            Dispatcher.UIThread.Post(() =>
-            {
-                if (_closed || version != _anchorVersion) return;
-                if (_listScroll is { } scroll && RecordsList.ContainerFromItem(row) is { } container
-                    && container.TranslatePoint(default, RecordsList) is { } point)
-                    scroll.Offset = new Vector(scroll.Offset.X, Math.Max(0, scroll.Offset.Y + point.Y - anchor.Y));
-                _restoringAnchor = false;
-            }, DispatcherPriority.Loaded);
-        }, DispatcherPriority.Loaded);
-    }
-
     private void AttachListScroll(ScrollViewer? scroll)
     {
         if (_listScroll is not null)
@@ -222,7 +162,7 @@ public partial class RecordsWindow : Window
     // being laid out again, after a page arrived or the window was resized.
     private void OnListScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
-        if (_restoringAnchor || _listScroll is not { } scroll || ViewModel is not { } vm)
+        if (_listScroll is not { } scroll || ViewModel is not { } vm)
             return;
         var atTop = RecordsLayout.AtTop(scroll.Offset.Y);
         var nearEnd = RecordsLayout.NearEnd(scroll.Extent.Height, scroll.Offset.Y, scroll.Viewport.Height);
@@ -244,10 +184,6 @@ public partial class RecordsWindow : Window
         {
             vm.LoadMore();
         }
-        else if (ViewModel is { } earlier && e.KeyModifiers == KeyModifiers.None
-            && e.Key is Key.Up or Key.Home or Key.PageUp && earlier.Rows.Count > 0
-            && ReferenceEquals(earlier.SelectedRecord, earlier.Rows[0]))
-            earlier.LoadPrevious();
     }
 
     private void OnClosing(object? sender, WindowClosingEventArgs e)
