@@ -21,8 +21,4 @@ public interface IJsonStore<T> where T : class, new()
     /// most recently queued call also waits for every write queued before it on the same store.
     /// </summary>
     Task SaveAsync(T value);
-
-    /// <summary>Transfers an isolated snapshot that the caller will no longer mutate. Serialization
-    /// may run off-thread while save admission order remains the same as SaveAsync.</summary>
-    Task SaveSnapshotAsync(T snapshot) => SaveAsync(snapshot);
 }

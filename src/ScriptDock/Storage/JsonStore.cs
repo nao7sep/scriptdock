@@ -43,8 +43,7 @@ namespace ScriptDock.Storage;
 /// regardless of how long either takes on a slow disk. The document itself is serialized to bytes
 /// synchronously, on the calling thread, before it is queued: callers hold one shared mutable
 /// document and mutate it in place, so the snapshot for a given call must be taken at the moment of
-/// the call, not whenever its turn in the queue happens to arrive. Isolated owned snapshots can use
-/// <see cref="SaveSnapshotAsync"/> to serialize on a worker while retaining admission order.
+/// the call, not whenever its turn in the queue happens to arrive.
 /// </remarks>
 public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
 {
@@ -60,8 +59,6 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
     // the order they were queued. Guarded by _queueGate since callers may queue from any thread.
     private readonly object _queueGate = new();
     private Task _queueTail = Task.CompletedTask;
-    private bool _publicationUnconfirmed;
-    internal Action<string, string> Publish { get; set; } = DurableFile.Publish;
 
     /// <summary>
     /// Creates a store rooted at <see cref="StorageRoot.Directory"/>.
@@ -93,31 +90,29 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
 
     public Task SaveAsync(T value)
     {
-        return Queue(Task.FromResult(Serialize(value)));
-    }
-
-    // The caller transfers an isolated value; admission still happens synchronously, so worker
-    // scheduling cannot reorder saves. Shared mutable values must use SaveAsync instead.
-    public Task SaveSnapshotAsync(T snapshot) => Queue(Task.Run(() => Serialize(snapshot)));
-
-    private byte[] Serialize(T value)
-    {
+        // Cheap, in-memory, CPU-only work: takes the exact snapshot the caller intends, right now,
+        // before the caller can mutate the shared document any further. Only the disk write below is
+        // queued off the calling thread.
         var document = JsonSerializer.SerializeToNode(value, JsonOptions.Default) as JsonObject
             ?? throw new InvalidOperationException($"The {_label} store's document is not a JSON object.");
         document.Insert(0, FormatVersionKey, _formatVersion);
-        return new UTF8Encoding(false).GetBytes(document.ToJsonString(JsonOptions.Default));
-    }
+        var json = document.ToJsonString(JsonOptions.Default);
+        // Encode once to raw bytes and write those exact bytes, so the copy the backup records is
+        // byte-identical to what lands on disk (no re-encode, no BOM surprise). UTF-8 without a BOM,
+        // matching File.WriteAllText's default so the on-disk shape is unchanged from before.
+        var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(json);
 
-    private Task Queue(Task<byte[]> bytes)
-    {
         lock (_queueGate)
-            return _queueTail = ContinueQueue(_queueTail, bytes);
+        {
+            _queueTail = ContinueQueue(_queueTail, bytes);
+            return _queueTail;
+        }
     }
 
     // Awaits the previous write (swallowing its failure — the call that queued it already observes
     // that failure on its own returned task) before running this write on a background thread, so
     // the queue never runs two writes to the same file at once and never runs them out of order.
-    private async Task ContinueQueue(Task previous, Task<byte[]> serialized)
+    private async Task ContinueQueue(Task previous, byte[] bytes)
     {
         try
         {
@@ -128,17 +123,13 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
             // Already surfaced to whoever queued that earlier write; this write proceeds regardless.
         }
 
-        var bytes = await serialized.ConfigureAwait(false);
         await Task.Run(() =>
         {
-            if (!_publicationUnconfirmed && MatchesFile(bytes))
+            // A write that changes nothing is skipped (content-lifecycle-conventions).
+            if (MatchesFile(bytes))
                 return;
             StorageRoot.EnsureExists();
-            // A failed publication may already have renamed the file. An identical retry must
-            // confirm durability again rather than treating matching bytes as a completed save.
-            _publicationUnconfirmed = true;
             WriteAtomically(bytes);
-            _publicationUnconfirmed = false;
             Log.Info("store: saved", new { label = _label, path = _filePath });
         }).ConfigureAwait(false);
     }
@@ -242,9 +233,9 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         }
     }
 
-    // The single managed-text atomic-write choke point (data-backup conventions). Write-to-temp-then-
-    // rename: the temp holds the full new content before it ever replaces the live file, so a crash
-    // mid-write leaves the old file intact rather than a torn one. No .bak sidecar is produced —
+    // The single managed-text atomic-write choke point (data-backup conventions). Write-to-temp, flush,
+    // then rename: the temp holds the full new content on disk before it ever replaces the live file, so
+    // a crash mid-write leaves the old file intact rather than a torn or empty one. No .bak sidecar is produced —
     // File.Replace's backup argument is null and the first-write path is a plain move (see the class
     // remarks). A managed-text write that bypasses this helper is a silent backup gap; there is
     // deliberately no second atomic-write path for the app's own managed text.
@@ -264,13 +255,13 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
 
         try
         {
-            File.WriteAllBytes(tempPath, bytes);
-
-            if (_recordBackups)
+            using (var temp = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write))
             {
-                Publish(tempPath, _filePath);
+                temp.Write(bytes);
+                temp.Flush(flushToDisk: true);
             }
-            else if (File.Exists(_filePath))
+
+            if (File.Exists(_filePath))
             {
                 if (OperatingSystem.IsMacOS())
                     File.SetUnixFileMode(tempPath, File.GetUnixFileMode(_filePath));
