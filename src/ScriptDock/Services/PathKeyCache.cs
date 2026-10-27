@@ -26,10 +26,9 @@ public sealed class PathKeyCache
 
     // Preparing a superseded operation must not alter the live projection. Its caller adopts this
     // snapshot only after checking currentness; decisions for that operation use the same prepared keys.
-    public IReadOnlyDictionary<string, string> Prepare(IEnumerable<string> paths, CancellationToken cancellationToken = default, IReadOnlyDictionary<string, string>? resolved = null)
+    public IReadOnlyDictionary<string, string> Prepare(IEnumerable<string> paths, CancellationToken cancellationToken = default)
     {
-        var prepared = resolved is null ? new Dictionary<string, string>(StringComparer.Ordinal)
-            : new Dictionary<string, string>(resolved, StringComparer.Ordinal);
+        var prepared = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var path in paths)
         {
             cancellationToken.ThrowIfCancellationRequested();

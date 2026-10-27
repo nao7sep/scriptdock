@@ -78,7 +78,6 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         }
         var keys = new PathKeyCache(Resolve);
         typeof(MainWindowViewModel).GetField("_keys", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(vm, keys);
-        typeof(MainWindowViewModel).GetField("_scanner", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(vm, new ScriptScanner(File.GetAttributes, Resolve));
         var startup = Track(vm.InitializeAsync());
         Task? manual = null;
         try
@@ -122,7 +121,6 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         }
         var keys = new PathKeyCache(Resolve);
         typeof(MainWindowViewModel).GetField("_keys", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(vm, keys);
-        typeof(MainWindowViewModel).GetField("_scanner", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(vm, new ScriptScanner(File.GetAttributes, Resolve));
         var earlier = Track(vm.RescanCommand.ExecuteAsync(null));
         Task? current = null;
         try
@@ -216,7 +214,6 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         }
         var keys = new PathKeyCache(Resolve);
         typeof(MainWindowViewModel).GetField("_keys", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(vm, keys);
-        typeof(MainWindowViewModel).GetField("_scanner", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(vm, new ScriptScanner(File.GetAttributes, Resolve));
         var scan = Track(vm.RescanCommand.ExecuteAsync(null));
         var held = await _store.NextAsync();
         Assert.Empty(vm.Scripts);

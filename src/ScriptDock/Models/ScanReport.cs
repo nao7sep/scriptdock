@@ -13,9 +13,6 @@ public sealed record IgnoredEntry(string Path, string Pattern);
 /// </summary>
 public sealed class ScanReport
 {
-    // Operation-local physical identities are handed to catalog preparation, never persisted in the report.
-    [System.Text.Json.Serialization.JsonIgnore]
-    public IReadOnlyDictionary<string, string> PathKeys { get; init; } = new Dictionary<string, string>();
     public required DateTimeOffset CompletedAt { get; init; }
     public required IReadOnlyList<string> Roots { get; init; }
     public required IReadOnlyList<string> Found { get; init; }

@@ -11,10 +11,6 @@ public sealed class RecentRun
     /// <summary>Absolute path of the launched script.</summary>
     public required string Path { get; set; }
 
-    /// <summary>Physical identity resolved by this load, carried to catalog preparation.</summary>
-    [System.Text.Json.Serialization.JsonIgnore]
-    public string? PathKey { get; set; }
-
     /// <summary>When it was last launched, UTC.</summary>
     public required DateTimeOffset RanAt { get; set; }
 

@@ -41,29 +41,6 @@ public sealed class ScriptScannerTests : IDisposable
     }
 
     [Fact]
-    public void Scan_identity_map_is_reused_by_preparation_and_refreshed_by_the_next_scan()
-    {
-        Touch("a.command");
-        var calls = new System.Collections.Generic.Dictionary<string, int>();
-        var generation = "first";
-        string Key(string path)
-        {
-            calls[path] = (calls.TryGetValue(path, out var count) ? count : 0) + 1;
-            return generation + path;
-        }
-        var scanner = new ScriptScanner(File.GetAttributes, Key);
-        var first = scanner.Scan([_root, _root], [".command"], [], TestContext.Current.CancellationToken);
-        var cache = new PathKeyCache(_ => throw new InvalidOperationException("identity was already prepared"));
-        var prepared = cache.Prepare(first.Found, TestContext.Current.CancellationToken, first.PathKeys);
-        Assert.All(calls.Values, count => Assert.Equal(1, count));
-        Assert.Equal("first" + first.Found[0], prepared[first.Found[0]]);
-        generation = "second";
-        var second = scanner.Scan([_root], [".command"], [], TestContext.Current.CancellationToken);
-        Assert.Equal("second" + first.Found[0], second.PathKeys[first.Found[0]]);
-        Assert.All(calls.Values, count => Assert.Equal(2, count));
-    }
-
-    [Fact]
     public void Preparation_stops_resolving_paths_when_cancelled()
     {
         using var cancellation = new CancellationTokenSource();

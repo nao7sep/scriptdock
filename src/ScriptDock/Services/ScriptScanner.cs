@@ -34,12 +34,10 @@ public sealed class ScriptScanner
         CancellationToken cancellationToken = default)
     {
         var rules = IgnoreRules.Compile(ignorePatterns);
-        var identities = new Dictionary<string, string>(StringComparer.Ordinal);
         string Key(string path)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!identities.TryGetValue(path, out var key)) identities[path] = key = _pathKey(path);
-            return key;
+            return _pathKey(path);
         }
 
         // Normalize each configured extension to the leading-dot form Path.GetExtension returns, and
@@ -139,7 +137,6 @@ public sealed class ScriptScanner
             PrunedDirectories = SortedEntries(prunedDirectories),
             SkippedFiles = SortedEntries(skippedFiles),
             Inaccessible = SortedPaths(inaccessible, cancellationToken, Key),
-            PathKeys = identities,
             InvalidPatterns = rules.InvalidPatterns,
         };
     }
