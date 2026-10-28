@@ -12,9 +12,9 @@ using Xunit;
 namespace ScriptDock.Tests.Storage;
 
 /// <summary>
-/// Each store's format version (store-recovery-conventions): a store an earlier build wrote without its
-/// marker reads as format 1, the current version round-trips, and a newer one is refused with the file left
-/// byte-identical, except in the disposable stores, which rebuild instead.
+/// Each store's format version (store-recovery-conventions): a store without its marker reads as the
+/// current format, the current version round-trips, and a newer one, or an older backup history, is refused
+/// with the file left byte-identical, except in the disposable stores, which rebuild instead.
 /// </summary>
 [Collection(StorageRootEnvironment.CollectionName)]
 public sealed class FormatVersionTests : IDisposable
@@ -44,45 +44,8 @@ public sealed class FormatVersionTests : IDisposable
 
     // config.json
 
-    // v0.1.0 stored every setting, the built-in seeds and two since-retired process settings included.
-    private const string V010Config = """
-        {
-          "uiFontFamily": "Inter",
-          "rootDirs": ["/Users/me/scripts"],
-          "extensions": [".command"],
-          "ignorePatterns": ["/node_modules/", "/\\.venv/", "/venv/", "/__pycache__/", "/bin/", "/obj/", "/target/", "/\\.git/"],
-          "hidden": ["/Users/me/scripts/old.command"],
-          "killProcessesOnClose": false,
-          "recaptureProcessesOnLaunch": true
-        }
-        """;
-
     [Fact]
-    public async Task Config_FromV010WithoutMarker_KeepsItsSettings()
-    {
-        // v0.1.0 seeded the platform's own launcher extension.
-        File.WriteAllText(PathOf(AppPaths.ConfigFileName),
-            V010Config.Replace("\".command\"", $"\"{ConfigDefaults.DefaultExtension}\""));
-        var store = new ConfigStore();
-
-        var config = store.Load();
-        Assert.Equal(["/Users/me/scripts"], config.RootDirs);
-        Assert.Equal(["/Users/me/scripts/old.command"], config.Hidden);
-        Assert.Equal([ConfigDefaults.DefaultExtension], config.Extensions);
-        Assert.Equal(ConfigDefaults.BuiltInIgnorePatterns, config.IgnorePatterns);
-        Assert.Empty(store.KeptKeys);
-        Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
-        Assert.Empty(QuarantineJournal.Drain());
-
-        // The seeds equal today's built-ins and the retired settings are dropped, so only real choices stay.
-        await store.SaveAsync(config);
-        using var saved = JsonDocument.Parse(File.ReadAllText(PathOf(AppPaths.ConfigFileName)));
-        Assert.Equal(["formatVersion", "uiFontFamily", "rootDirs", "hidden"],
-            saved.RootElement.EnumerateObject().Select(property => property.Name));
-    }
-
-    [Fact]
-    public void Config_FromOctoberWithoutMarker_KeepsItsSettings()
+    public void Config_WithoutMarker_ReadsAsTheCurrentFormat()
     {
         File.WriteAllText(PathOf(AppPaths.ConfigFileName), """{"theme":"dark","hidden":["/a.command"]}""");
 
@@ -112,7 +75,7 @@ public sealed class FormatVersionTests : IDisposable
     // state.json
 
     [Fact]
-    public void State_WithoutMarker_ReadsAsFormatOne()
+    public void State_WithoutMarker_ReadsAsTheCurrentFormat()
     {
         File.WriteAllText(PathOf(AppPaths.StateFileName), """{"windowWidth":900}""");
 
@@ -141,7 +104,7 @@ public sealed class FormatVersionTests : IDisposable
     // known-paths.json
 
     [Fact]
-    public void KnownPaths_WithoutMarker_ReadsAsFormatOne()
+    public void KnownPaths_WithoutMarker_ReadsAsTheCurrentFormat()
     {
         File.WriteAllText(PathOf(AppPaths.KnownPathsFileName), """{"paths":["/a.command"]}""");
 
@@ -185,7 +148,7 @@ public sealed class FormatVersionTests : IDisposable
     // records.sqlite3
 
     // The schema builds from 2026-10-02 wrote without a version: every table but run_ends.
-    private const string October2Records = """
+    private const string UnversionedRecords = """
         CREATE TABLE logs (id INTEGER PRIMARY KEY, session TEXT NOT NULL, time TEXT NOT NULL, level TEXT NOT NULL, message TEXT NOT NULL, line TEXT NOT NULL);
         CREATE INDEX idx_logs_session ON logs (session);
         CREATE TABLE runs (id INTEGER PRIMARY KEY, session TEXT NOT NULL, run INTEGER NOT NULL, time TEXT NOT NULL, script TEXT NOT NULL, pid INTEGER, os_started_at TEXT, output_path TEXT, UNIQUE (session, run));
@@ -197,10 +160,10 @@ public sealed class FormatVersionTests : IDisposable
         """;
 
     [Fact]
-    public async Task Records_FromOctoberWithoutVersion_OpenAndKeepTheirRuns()
+    public async Task Records_WithoutVersion_ReadAsTheCurrentFormat()
     {
         var file = PathOf(RecordStore.FileName);
-        Execute(file, October2Records);
+        Execute(file, UnversionedRecords);
 
         using (var records = new RecordStore(_root, SessionStart))
         {
@@ -210,24 +173,6 @@ public sealed class FormatVersionTests : IDisposable
         }
 
         Assert.Equal(FormatVersions.Records, UserVersion(file));
-    }
-
-    [Fact]
-    public async Task Records_WithoutVersionAndWithAnUnknownTable_AreUnreadableAndLeftAlone()
-    {
-        var file = PathOf(RecordStore.FileName);
-        CreateDatabase(file, userVersion: 0);
-        var before = File.ReadAllBytes(file);
-
-        using (var records = new RecordStore(_root, SessionStart))
-        {
-            Assert.True(records.DatabaseUnavailable);
-            await Assert.ThrowsAnyAsync<Exception>(() => records.AddDismissalAsync("/a.command"));
-            Assert.True(File.Exists(records.FallbackPath));
-        }
-
-        SqliteConnection.ClearAllPools();
-        Assert.Equal(before, File.ReadAllBytes(file));
     }
 
     [Fact]
@@ -258,26 +203,7 @@ public sealed class FormatVersionTests : IDisposable
     // backups.sqlite3, a side store: a newer one disables recording for the session instead of stopping the app.
 
     [Fact]
-    public void Backups_FromV010WithoutVersion_KeepTheirHistoryAndRecord()
-    {
-        Execute(BackupStore.StoreFile, """
-            CREATE TABLE backups (id INTEGER PRIMARY KEY, path TEXT NOT NULL, content BLOB NOT NULL, content_sha256 TEXT NOT NULL, byte_size INTEGER NOT NULL, written_at_utc TEXT NOT NULL);
-            CREATE INDEX idx_backups_path_id ON backups (path, id);
-            INSERT INTO backups (path, content, content_sha256, byte_size, written_at_utc) VALUES ('/old.json', x'00', 'x', 1, '2026-07-08T00:00:00.000Z');
-            """);
-
-        BackupStore.Session = "now";
-        BackupStore.Record(PathOf("doc.json"), [1]);
-        BackupStore.Close();
-
-        // Format 1's rows stay as earlier history, without a session.
-        Assert.Equal(FormatVersions.Backups, UserVersion(BackupStore.StoreFile));
-        Assert.Equal(1L, Scalar(BackupStore.StoreFile, "SELECT COUNT(*) FROM backups WHERE path = '/old.json' AND session_id IS NULL"));
-        Assert.Equal(1L, Scalar(BackupStore.StoreFile, "SELECT COUNT(*) FROM backups WHERE session_id = 'now'"));
-    }
-
-    [Fact]
-    public void Backups_AtFormatOne_GainSessionsAndKeepTheirRows()
+    public void Backups_AtAnOlderFormat_AreLeftAloneAndRecordNothing()
     {
         Execute(BackupStore.StoreFile, """
             CREATE TABLE backups (id INTEGER PRIMARY KEY, path TEXT NOT NULL, content BLOB NOT NULL, content_sha256 TEXT NOT NULL, byte_size INTEGER NOT NULL, written_at_utc TEXT NOT NULL);
@@ -287,23 +213,13 @@ public sealed class FormatVersionTests : IDisposable
             PRAGMA user_version = 1;
             """);
 
+        SqliteConnection.ClearAllPools();
+        var before = File.ReadAllBytes(BackupStore.StoreFile);
+
         BackupStore.Session = "now";
         BackupStore.Record("/a.json", [3]);
         BackupStore.Close();
 
-        Assert.Equal(FormatVersions.Backups, UserVersion(BackupStore.StoreFile));
-        Assert.Equal(3L, Scalar(BackupStore.StoreFile, "SELECT COUNT(*) FROM backups WHERE path = '/a.json'"));
-    }
-
-    [Fact]
-    public void Backups_WithoutVersionAndWithAnUnknownTable_AreUnreadableAndLeftAlone()
-    {
-        CreateDatabase(BackupStore.StoreFile, userVersion: 0);
-        var before = File.ReadAllBytes(BackupStore.StoreFile);
-
-        Assert.Null(Record.Exception(() => BackupStore.Record(PathOf("doc.json"), [1, 2, 3])));
-
-        BackupStore.Close();
         SqliteConnection.ClearAllPools();
         Assert.Equal(before, File.ReadAllBytes(BackupStore.StoreFile));
     }

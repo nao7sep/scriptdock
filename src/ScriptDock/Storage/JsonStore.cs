@@ -21,8 +21,7 @@ namespace ScriptDock.Storage;
 /// <remarks>
 /// The store owns its format version (store-recovery-conventions): every write puts it first in the
 /// document as <c>formatVersion</c>, and a read takes it out before the document is deserialized, so
-/// the stored type never sees it. A file without it was written by a build before 2026-10-05 (v0.1.0
-/// included) in a shape format 1 still reads, so it reads as format 1. A file recording a newer version
+/// the stored type never sees it. A file without it reads as the current format. A file recording a newer version
 /// than the store's is refused with <see cref="NewerFormatVersionException"/> and left exactly in place,
 /// except in a rebuildable store, whose disposable contents are rebuilt like any unreadable file.
 /// </remarks>
@@ -196,12 +195,12 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
         }
     }
 
-    // A missing marker is a pre-marker file, format 1; one that is present but not a positive integer
-    // makes the file unreadable.
-    private static int FormatVersionOf(JsonObject document)
+    // A missing marker means the current format; one that is present but not a positive integer makes the
+    // file unreadable.
+    private int FormatVersionOf(JsonObject document)
     {
         if (!document.TryGetPropertyValue(FormatVersionKey, out var marker))
-            return 1;
+            return _formatVersion;
         return marker is JsonValue value && value.TryGetValue<int>(out var version) && version >= 1
             ? version
             : throw new JsonException($"{FormatVersionKey} is not a positive integer.");

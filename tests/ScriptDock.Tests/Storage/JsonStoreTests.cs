@@ -334,9 +334,8 @@ public sealed class JsonStoreTests : IDisposable
     }
 
     [Fact]
-    public void Load_ObjectWithoutTheMarker_ReadsAsFormatOne()
+    public void Load_ObjectWithoutTheMarker_ReadsAsTheCurrentFormat()
     {
-        // Builds before the markers, v0.1.0 included, wrote the same shapes without one.
         const string json = """{"name":"x"}""";
         File.WriteAllText(PathOf("doc.json"), json);
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);

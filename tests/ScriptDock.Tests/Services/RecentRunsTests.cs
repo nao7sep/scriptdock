@@ -75,17 +75,6 @@ public sealed class RecentRunsTests
         Assert.Equal("/b", list[1].Path);
     }
 
-    [Fact]
-    public void Add_CapsAtMax()
-    {
-        var existing = Enumerable.Range(0, 5).Select(i => Run($"/p{i}", i)).ToList();
-
-        var list = RecentRuns.Add(existing, "/new", new DateTimeOffset(2026, 6, 17, 0, 30, 0, TimeSpan.Zero), max: 3);
-
-        Assert.Equal(3, list.Count);
-        Assert.Equal("/new", list[0].Path);
-    }
-
     private static (string, DateTimeOffset) At(string path, int minute) =>
         (path, new DateTimeOffset(2026, 6, 17, 0, minute, 0, TimeSpan.Zero));
 

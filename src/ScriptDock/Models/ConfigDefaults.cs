@@ -81,9 +81,4 @@ public static class ConfigDefaults
         ["windows.recycled"] = "ignoreNote.oldRecycleBin",
         ["windows.system-volume-information"] = "ignoreNote.systemVolume",
     };
-
-    /// <summary>The list v0.1.0 stored as its seed, regular expressions as every pattern then was. It was
-    /// never the user's choice, so it reads as the built-in rather than as a copy that would stop following it.</summary>
-    internal static IReadOnlyList<string> V010SeededIgnorePatterns { get; } =
-        ["/node_modules/", "/\\.venv/", "/venv/", "/__pycache__/", "/bin/", "/obj/", "/target/", "/\\.git/"];
 }

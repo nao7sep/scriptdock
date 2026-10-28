@@ -32,8 +32,8 @@ public static class BackupStore
 
     /// <summary>
     /// <c>content</c> is a BLOB of the exact bytes written, never decoded text. <c>written_at_utc</c> is the
-    /// serialized ISO-8601-ms time of the row's latest save. <c>session_id</c> is NULL for rows recorded
-    /// before sessions (format 1, v0.1.0 included). The unique <c>(path, session_id)</c> index owns the
+    /// serialized ISO-8601-ms time of the row's latest save. <c>session_id</c> is the session (one process
+    /// launch) the row's save came from. The unique <c>(path, session_id)</c> index owns the
     /// one-row-per-session rule; <c>(path, id)</c> serves the latest-row lookup.
     /// </summary>
     private const string Schema = """
@@ -49,9 +49,6 @@ public static class BackupStore
         CREATE UNIQUE INDEX IF NOT EXISTS idx_backups_path_session ON backups (path, session_id);
         CREATE INDEX IF NOT EXISTS idx_backups_path_id ON backups (path, id);
         """;
-
-    // The table Schema creates; v0.1.0 wrote it without a version and without session_id.
-    private static readonly HashSet<string> Tables = ["backups"];
 
     // One owner for the process: its thread applies the recordings in the order they arrived. A background
     // thread, so a recording never holds the process at exit.
@@ -212,16 +209,8 @@ public static class BackupStore
             Execute(connection, "PRAGMA busy_timeout = 1000;");
 
             // Before anything writes, the journal mode included.
-            var version = SqliteFormatVersion.Check(connection, file, FormatVersions.Backups, Tables, unversioned: 1);
+            SqliteFormatVersion.Check(connection, file, FormatVersions.Backups);
             Execute(connection, "PRAGMA journal_mode = WAL;");
-            if (version == 1)
-            {
-                // Format 1 kept every changed save; its rows stay as earlier history, with no session.
-                using var migration = connection.BeginTransaction();
-                Execute(connection, "ALTER TABLE backups ADD COLUMN session_id TEXT;", migration);
-                Execute(connection, $"PRAGMA user_version = {FormatVersions.Backups};", migration);
-                migration.Commit();
-            }
             Execute(connection, Schema);
             owner.Value = connection;
         }
@@ -233,6 +222,7 @@ public static class BackupStore
         }
         catch (Exception ex)
         {
+            // An older format among them: left untouched, like a newer one.
             connection?.Dispose();
             Log.Warn("backup store: could not open; recording off for this session", ex, new { file });
         }
@@ -240,10 +230,9 @@ public static class BackupStore
         return owner.Value;
     }
 
-    private static void Execute(SqliteConnection connection, string sql, SqliteTransaction? transaction = null)
+    private static void Execute(SqliteConnection connection, string sql)
     {
         using var command = connection.CreateCommand();
-        command.Transaction = transaction;
         command.CommandText = sql;
         command.ExecuteNonQuery();
     }

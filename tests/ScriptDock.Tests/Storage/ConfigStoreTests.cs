@@ -86,10 +86,10 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Dialog_WritesEverySetThatDiffers_KeepsUnknownKeysAndDropsRetiredOnes()
+    public async Task Dialog_WritesEverySetThatDiffers_AndKeepsUnknownKeys()
     {
-        // The retired process settings are dropped; keys this version does not know are kept unchanged.
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"hidden":["/hidden"],"extensions":[],"version":1,"unknown":true,"killProcessesOnClose":true,"recaptureProcessesOnLaunch":false}""");
+        // Keys this version does not know are kept unchanged.
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"hidden":["/hidden"],"extensions":[],"version":1,"unknown":true}""");
         var store = new ConfigStore();
         var config = store.Load();
         var vm = NewViewModel(store, config);
@@ -141,7 +141,7 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [Fact]
     public async Task Reset_RemovesTheResetSets()
     {
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[".sh"],"ignorePatterns":["/custom/"]}""");
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[".sh"],"ignorePatterns":[{"pattern":"/custom/","kind":"regex"}]}""");
         var store = new ConfigStore();
         var config = store.Load();
         var vm = NewViewModel(store, config);
@@ -265,17 +265,16 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [InlineData("""[".sh\n.py"]""")]         // multiline, which cleanup would flatten into ".sh .py"
     public void InvalidExtensions_ReadAsTheirBuiltIn_AndKeepTheOtherSets(string extensions)
     {
-        File.WriteAllText(ConfigPath, $$"""{"formatVersion":1,"extensions":{{extensions}},"ignorePatterns":["/build/"],"hidden":["/ok"]}""");
+        File.WriteAllText(ConfigPath, $$"""{"formatVersion":1,"extensions":{{extensions}},"ignorePatterns":[{"pattern":"/build/","kind":"regex"}],"hidden":["/ok"]}""");
         var loaded = new ConfigStore().Load();
         Assert.Equal([ConfigDefaults.DefaultExtension], loaded.Extensions);
         Assert.Equal([new IgnorePattern("/build/", IgnorePatternKind.Regex)], loaded.IgnorePatterns);
         Assert.Equal(["/ok"], loaded.Hidden);
     }
 
-    // A pattern is stored with its kind, and a built-in with its id; a string is a pattern stored before
-    // patterns had a kind, when every one was a regular expression, so nothing it matched is lost.
+    // A pattern is stored with its kind, and a built-in with its id.
     [Fact]
-    public async Task IgnorePatterns_RoundTripWithTheirKindAndId_AndAStoredStringReadsAsARegularExpression()
+    public async Task IgnorePatterns_RoundTripWithTheirKindAndId()
     {
         var store = new ConfigStore();
         var patterns = new List<IgnorePattern>
@@ -290,11 +289,6 @@ public sealed class ConfigStoreTests : IAsyncLifetime
             """[{"pattern":".git/","kind":"wildcard","id":"dev.git"},{"pattern":"*.bak.command","kind":"wildcard"},{"pattern":"/old/","kind":"regex"}]""",
             ReadRaw("ignorePatterns"));
         Assert.Equal(patterns, new ConfigStore().Load().IgnorePatterns);
-
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"ignorePatterns":["/node_modules/","\\.bak$"]}""");
-        Assert.Equal(
-            [new IgnorePattern("/node_modules/", IgnorePatternKind.Regex), new IgnorePattern("\\.bak$", IgnorePatternKind.Regex)],
-            new ConfigStore().Load().IgnorePatterns);
     }
 
     [Fact]

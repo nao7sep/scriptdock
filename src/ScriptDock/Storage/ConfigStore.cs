@@ -12,13 +12,10 @@ namespace ScriptDock.Storage;
 /// <remarks>
 /// A stored entry the app cannot apply — a set whose value fails its checks, or a key this version does not
 /// know — is not the app's to delete: the user may have authored it, or a newer version may own it. Each
-/// later save writes it back unchanged, until the user saves a new value for that set. The two process
-/// settings v0.1.0 stored were retired deliberately, so they are dropped instead.
+/// later save writes it back unchanged, until the user saves a new value for that set.
 /// </remarks>
 public sealed class ConfigStore : IConfigStore
 {
-    private static readonly HashSet<string> RetiredKeys = ["killProcessesOnClose", "recaptureProcessesOnLaunch"];
-
     private readonly JsonStore<Dictionary<string, JsonElement>> _store = new(AppPaths.ConfigFileName, "config", FormatVersions.Config);
 
     // The stored entries the last Load could not apply, by key, kept for every later save.
@@ -36,8 +33,6 @@ public sealed class ConfigStore : IConfigStore
         var config = new AppConfig();
         foreach (var (key, value) in _store.Load())
         {
-            if (RetiredKeys.Contains(key))
-                continue;
             if (!ConfigSets.IsKnown(key))
             {
                 Log.Warn("config: unknown key, kept unchanged", new { key });
@@ -47,12 +42,6 @@ public sealed class ConfigStore : IConfigStore
             try
             {
                 ConfigSets.Apply(config, key, value);
-                // v0.1.0 stored its seed list, not a user's choice: it follows today's built-in. Its patterns
-                // were strings, which read as regular expressions with no id.
-                if (key == "ignorePatterns"
-                    && config.IgnorePatterns.All(pattern => pattern is { Kind: IgnorePatternKind.Regex, Id: null })
-                    && SameMembers(config.IgnorePatterns.Select(pattern => pattern.Pattern), ConfigDefaults.V010SeededIgnorePatterns))
-                    config.IgnorePatterns = [.. ConfigDefaults.BuiltInIgnorePatterns];
             }
             catch (Exception ex) when (ex is JsonException or InvalidOperationException)
             {
@@ -62,9 +51,6 @@ public sealed class ConfigStore : IConfigStore
         }
         return config;
     }
-
-    private static bool SameMembers(IEnumerable<string> a, IEnumerable<string> b) =>
-        new HashSet<string>(a, StringComparer.OrdinalIgnoreCase).SetEquals(b);
 
     /// <summary>
     /// Saves <paramref name="value"/>, keeping each stored entry the app could not apply unless

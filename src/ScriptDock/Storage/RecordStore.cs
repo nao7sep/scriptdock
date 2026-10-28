@@ -93,9 +93,6 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
         CREATE INDEX IF NOT EXISTS idx_scans_session_time ON scan_reports (session, time DESC, id DESC);
         """;
 
-    // The tables Schema creates, which an unversioned database from an earlier build may hold a subset of.
-    private static readonly HashSet<string> Tables = ["logs", "runs", "run_ends", "run_outputs", "dismissals", "scan_reports"];
-
     private static readonly JsonSerializerOptions LineOptions = new(JsonOptions.Default)
     {
         WriteIndented = false,
@@ -131,7 +128,7 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
             connection.Open();
             Execute(connection, "PRAGMA busy_timeout = 1000;");
             // Before anything writes, the journal mode included.
-            SqliteFormatVersion.Check(connection, FilePath, FormatVersions.Records, Tables);
+            SqliteFormatVersion.Check(connection, FilePath, FormatVersions.Records);
             Execute(connection, "PRAGMA journal_mode = WAL;");
             Execute(connection, "PRAGMA synchronous = NORMAL;");
             Execute(connection, Schema);

@@ -6,21 +6,16 @@ using ScriptDock.Models;
 namespace ScriptDock.Services;
 
 /// <summary>
-/// The Recent list, newest first, a path appearing once (by physical identity) and the list capped. Pure:
+/// The Recent list, newest first, a path appearing once (by physical identity), kept until dismissed. Pure:
 /// <see cref="From"/> reads it out of the run and dismissal records; <see cref="Add"/> keeps the list in
 /// memory current as a run is recorded.
 /// </summary>
 public static class RecentRuns
 {
-    // High safety bound only — curation is by dismissal, not eviction (the Recent list is the
-    // user's auto-favorites, kept until explicitly dismissed).
-    public const int DefaultMax = 500;
-
     /// <summary>Each script's latest run, with its recorded end, unless a dismissal came at or after it.</summary>
     public static List<RecentRun> From(
         IEnumerable<RecentRun> runs,
         IEnumerable<(string Path, DateTimeOffset At)> dismissals,
-        int max = DefaultMax,
         Func<string, string>? pathKey = null)
     {
         pathKey ??= PathIdentity.Key;
@@ -44,21 +39,16 @@ public static class RecentRuns
             .Where(pair => !dismissedAt.TryGetValue(pair.Key, out var dismissed) || dismissed < pair.Value.RanAt)
             .Select(pair => pair.Value)
             .OrderByDescending(run => run.RanAt)
-            .Take(max)
             .ToList();
     }
 
-    public static List<RecentRun> Add(IReadOnlyList<RecentRun> existing, string path, DateTimeOffset ranAt, int max = DefaultMax,
+    public static List<RecentRun> Add(IReadOnlyList<RecentRun> existing, string path, DateTimeOffset ranAt,
         Func<string, string>? key = null, string? scriptKey = null)
     {
         key ??= PathIdentity.Key;
         scriptKey ??= key(path);
         var result = new List<RecentRun> { new() { Path = path, RanAt = ranAt } };
         result.AddRange(existing.Where(r => !PathIdentity.Comparer.Equals(key(r.Path), scriptKey)));
-
-        if (result.Count > max)
-            result.RemoveRange(max, result.Count - max);
-
         return result;
     }
 }

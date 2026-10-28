@@ -108,14 +108,11 @@ public static class ConfigSets
             .Select(text => error(text.Trim()) is null ? TextCleanup.SingleLine(text) : throw new JsonException("Invalid member"))
             .ToList();
 
-    // Each pattern is an object; a string is one stored before patterns had a kind, when every pattern was
-    // a regular expression over the full path, so it reads as one and nothing it matched is lost.
+    // Each pattern is an object with its pattern, kind and id.
     private static List<IgnorePattern> Patterns(JsonElement value) =>
         value.EnumerateArray().Select(member =>
         {
-            var pattern = member.ValueKind == JsonValueKind.String
-                ? new IgnorePattern(String(member), IgnorePatternKind.Regex)
-                : new IgnorePattern(
+            var pattern = new IgnorePattern(
                     member.TryGetProperty("pattern", out var text) ? String(text) : throw new JsonException("No pattern"),
                     member.TryGetProperty("kind", out var kind) ? Kind(kind) : IgnorePatternKind.Wildcard,
                     member.TryGetProperty("id", out var id) ? String(id) : null);
