@@ -81,7 +81,7 @@ public sealed class MainWindowViewModelRunnerTests : IAsyncLifetime
         var first = Assert.Single(runner.Active);
         var lastRan = Assert.Single(vm.Recent).LastRanAt;
 
-        Wait.Until(() => File.Exists(ready));
+        await Wait.ForFileAsync(ready, () => File.Exists(ready));
 
         // The running script keeps its folder under the new name; the restart has no folder to run in.
         Directory.Move(work, Path.Combine(_dir, "moved"));

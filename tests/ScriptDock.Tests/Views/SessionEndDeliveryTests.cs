@@ -39,7 +39,7 @@ public sealed class SessionEndDeliveryTests : WindowTest, IDisposable
         Dispose();
     }
 
-    private (MainWindow Window, MainWindowViewModel Vm) ShowWithRunningScript()
+    private async Task<(MainWindow Window, MainWindowViewModel Vm)> ShowWithRunningScriptAsync()
     {
         var vm = new MainWindowViewModel(
             _configStore, _stateStore, new FakeJsonStore<KnownPaths>(), new FakeRecordStore(),
@@ -51,7 +51,7 @@ public sealed class SessionEndDeliveryTests : WindowTest, IDisposable
         var window = _window = Show(new MainWindow { DataContext = vm });
         // The window's first load builds the Recent list, and with it the running count, after an
         // off-thread read.
-        Wait.UntilOnUi(() => vm.ShouldConfirmQuit());
+        await Wait.UntilAsync(vm.ShouldConfirmQuit, vm);
         return (window, vm);
     }
 
@@ -68,9 +68,9 @@ public sealed class SessionEndDeliveryTests : WindowTest, IDisposable
     }
 
     [AvaloniaFact]
-    public void A_session_end_closes_at_once_without_asking_and_stops_the_scripts()
+    public async Task A_session_end_closes_at_once_without_asking_and_stops_the_scripts()
     {
-        var (window, _) = ShowWithRunningScript();
+        var (window, _) = await ShowWithRunningScriptAsync();
         var closed = false;
         window.Closed += (_, _) => closed = true;
 
@@ -86,7 +86,7 @@ public sealed class SessionEndDeliveryTests : WindowTest, IDisposable
     [AvaloniaFact]
     public async Task A_settings_write_still_running_at_a_session_end_holds_it_only_to_the_exit_deadline()
     {
-        var (window, vm) = ShowWithRunningScript();
+        var (window, vm) = await ShowWithRunningScriptAsync();
         _settingsWrite = new TaskCompletionSource();
         _configStore.SaveGate = _settingsWrite;
         var hide = vm.ToggleHiddenCommand.ExecuteAsync(new ScriptItem("/x/a.command") { DisplayName = "a" });
@@ -106,9 +106,9 @@ public sealed class SessionEndDeliveryTests : WindowTest, IDisposable
     }
 
     [AvaloniaFact]
-    public void A_session_end_takes_over_a_quit_question_already_showing()
+    public async Task A_session_end_takes_over_a_quit_question_already_showing()
     {
-        var (window, _) = ShowWithRunningScript();
+        var (window, _) = await ShowWithRunningScriptAsync();
         window.Close(); // the user's own close asks first
         Dispatcher.UIThread.RunJobs();
         var question = Assert.Single(window.OwnedWindows);
@@ -126,9 +126,9 @@ public sealed class SessionEndDeliveryTests : WindowTest, IDisposable
     // Windows reports a logoff as an app shutdown, a session end; on macOS an app shutdown whose quit event
     // carries no reason is the Dock's or the menu's Quit, which asks while scripts run.
     [AvaloniaFact]
-    public void An_app_shutdown_asks_only_where_it_is_the_users_quit()
+    public async Task An_app_shutdown_asks_only_where_it_is_the_users_quit()
     {
-        var (window, _) = ShowWithRunningScript();
+        var (window, _) = await ShowWithRunningScriptAsync();
         var closed = false;
         window.Closed += (_, _) => closed = true;
 
@@ -150,9 +150,9 @@ public sealed class SessionEndDeliveryTests : WindowTest, IDisposable
     }
 
     [AvaloniaFact]
-    public void A_users_close_with_scripts_running_asks_before_stopping_them()
+    public async Task A_users_close_with_scripts_running_asks_before_stopping_them()
     {
-        var (window, _) = ShowWithRunningScript();
+        var (window, _) = await ShowWithRunningScriptAsync();
         var closed = false;
         window.Closed += (_, _) => closed = true;
 

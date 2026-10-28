@@ -67,6 +67,9 @@ public static class BackupStore
     /// owner, so a history row and the run records of the same launch share it.</summary>
     public static string Session { get; set; } = TimestampConventions.IsoMillis(DateTimeOffset.UtcNow);
 
+    /// <summary>The clock a recording's save instant comes from; tests set a fake one.</summary>
+    internal static TimeProvider Time { get; set; } = TimeProvider.System;
+
     /// <summary>The store file under the resolved storage root.</summary>
     public static string StoreFile => Path.Combine(StorageRoot.Directory, FileName);
 
@@ -78,7 +81,7 @@ public static class BackupStore
     public static void Record(string absolutePath, byte[] bytes)
     {
         var session = Session;
-        var writtenAtUtc = DateTimeOffset.UtcNow;
+        var writtenAtUtc = Time.GetUtcNow();
         Post(connection => Write(connection, absolutePath, bytes, session, writtenAtUtc));
     }
 

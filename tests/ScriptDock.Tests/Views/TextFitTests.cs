@@ -71,14 +71,14 @@ public sealed class TextFitTests : WindowTest
     }
 
     [AvaloniaFact]
-    public void A_long_recent_name_takes_one_line()
+    public async Task A_long_recent_name_takes_one_line()
     {
         // Recent is built from the records by the window's first load.
         var records = new FakeRecordStore();
         records.Runs.Add(new RunRecord(records.Session, 1, DateTimeOffset.UtcNow, "/x/" + LongName, null, null, null));
         var vm = NewMainVm(records);
         var window = Show(new MainWindow { DataContext = vm, Width = 1100, Height = 760 });
-        Wait.UntilOnUi(() => vm.Recent.Count == 1 && !vm.IsScanning);
+        await Wait.UntilAsync(() => vm.Recent.Count == 1 && !vm.IsScanning, vm, vm.Recent);
         Settle();
         var list = window.FindControl<ListBox>("RecentList")!;
         var row = (Control)list.ContainerFromIndex(0)!;
@@ -149,12 +149,11 @@ public sealed class TextFitTests : WindowTest
         Assert.NotNull(TextIn(scanRow, vm.Rows[2].MoreRootsText));
 
         list.SelectedIndex = 1;
-        Wait.UntilOnUi(() => vm.HasDetail);
+        await Wait.UntilAsync(() => vm.HasDetail, vm);
         Settle();
         var header = window.GetVisualDescendants().OfType<SelectableTextBlock>().First(b => b.Text == LongMessage);
         Assert.Single(header.TextLayout.TextLines);
         Assert.Contains(vm.DetailFields, field => field.Value == LongMessage);
-        await Task.CompletedTask;
     }
 
     [Fact]

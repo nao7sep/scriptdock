@@ -190,11 +190,11 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         int? child = null;
         try
         {
-            child = ReadPid(pidFile);
+            child = await ReadPidAsync(pidFile);
             Assert.True(IsAlive(child.Value));
             Assert.True(await runner.TerminateAsync(handle));
             Assert.Equal(RunState.Terminated, handle.State);
-            Gone(child.Value);
+            await GoneAsync(child.Value);
         }
         finally
         {
@@ -243,7 +243,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         {
             var sent = await handle.SendInputAsync("already-delivered\n" + new string('x', 8 * 1024 * 1024), TimeSpan.FromMilliseconds(200));
             Assert.False(sent);
-            Wait.Until(() => File.Exists(firstFile));
+            await Wait.ForFileAsync(firstFile, () => File.Exists(firstFile));
             Assert.Equal("already-delivered", File.ReadAllText(firstFile));
             File.WriteAllText(release, "drain");
             Assert.False(handle.CanSendInput);
@@ -281,13 +281,15 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
     [MacOnlyFact]
     public async Task Terminate_StopsALongRunningScript()
     {
-        var script = WriteExecutableScript("sleeper.command", "echo started\nsleep 60\n");
+        // The script creates a marker once it runs; its run log, held open, reports no change until it closes.
+        var started = Path.Combine(_dir, "sleeper.started");
+        var script = WriteExecutableScript("sleeper.command", $"touch '{started}'\nsleep 60\n");
         var runner = _fixture.Runner();
 
         var handle = await StartAsync(runner, script);
         try
         {
-            Wait.Until(() => handle.ReadConsoleOutput().Contains("started"));
+            await Wait.ForFileAsync(started, () => File.Exists(started));
 
             Assert.True(await runner.TerminateAsync(handle));
             Assert.Equal(RunState.Terminated, handle.State);
@@ -338,8 +340,8 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         var runner = _fixture.Runner();
         var first = await StartAsync(runner, script);
 
-        // Wait until the first run is genuinely live before restarting it.
-        Wait.Until(() => first.Pid is not null);
+        // The first run is live before it restarts: its process started with the launch.
+        Assert.NotNull(first.Pid);
 
         var second = await runner.RestartAsync(first);
         Assert.NotNull(second);
@@ -406,10 +408,10 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         return WriteExecutableScript(name, $"sleep 300 &\necho $! > '{pidFile}'\nwait\n");
     }
 
-    private static int ReadPid(string pidFile)
+    private static async Task<int> ReadPidAsync(string pidFile)
     {
         var pid = 0;
-        Wait.Until(() => File.Exists(pidFile) && int.TryParse(File.ReadAllText(pidFile).Trim(), out pid));
+        await Wait.ForFileAsync(pidFile, () => File.Exists(pidFile) && int.TryParse(File.ReadAllText(pidFile).Trim(), out pid));
         return pid;
     }
 
@@ -426,8 +428,16 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         }
     }
 
-    // A killed process is reaped by launchd shortly after its parent dies; wait for that.
-    private static void Gone(int pid) => Wait.Until(() => !IsAlive(pid));
+    // A killed process is reaped by launchd shortly after its parent dies; wait for that. It is not this
+    // process's child, so its end comes from the framework's own wait for another process.
+    private static async Task GoneAsync(int pid)
+    {
+        Process process;
+        try { process = Process.GetProcessById(pid); }
+        catch (ArgumentException) { return; }
+        using (process)
+            await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+    }
 
     [MacOnlyFact]
     public async Task TerminateAsync_KillsAGrandchildTheScriptStarted()
@@ -440,7 +450,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
             $"bash -c 'sleep 300 & echo $! > \"$1\"; wait' _ '{pidFile}' &\nwait\n");
         var runner = _fixture.Runner();
         var handle = await StartAsync(runner, script);
-        var grandchild = ReadPid(pidFile);
+        var grandchild = await ReadPidAsync(pidFile);
         try
         {
             Assert.True(IsAlive(grandchild));
@@ -448,7 +458,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
             Assert.True(await runner.TerminateAsync(handle));
 
             Assert.Equal(RunState.Terminated, handle.State);
-            Gone(grandchild);
+            await GoneAsync(grandchild);
         }
         finally
         {
@@ -468,7 +478,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
 
         var a = await StartAsync(runner, first);
         var b = await StartAsync(runner, second);
-        var children = new[] { ReadPid(firstPidFile), ReadPid(secondPidFile) };
+        var children = new[] { await ReadPidAsync(firstPidFile), await ReadPidAsync(secondPidFile) };
         try
         {
             await runner.StopAllAsync();
@@ -477,7 +487,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
             Assert.Equal(RunState.Terminated, b.State);
             lock (ended)
                 Assert.Equal(new[] { a, b }.OrderBy(p => p.Id), ended.OrderBy(p => p.Id));
-            foreach (var pid in children) Gone(pid);
+            foreach (var pid in children) await GoneAsync(pid);
         }
         finally
         {

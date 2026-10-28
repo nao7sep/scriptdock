@@ -90,7 +90,7 @@ public sealed class RecordsWindowTests : WindowTest
     }
 
     [AvaloniaFact]
-    public void Saves_the_list_width_when_a_drag_ends_and_never_on_a_resize()
+    public async Task Saves_the_list_width_when_a_drag_ends_and_never_on_a_resize()
     {
         var window = Show(new RecordsWindow { DataContext = NewViewModel(), Width = 1200, Height = 700 });
         var grid = window.GetVisualDescendants().OfType<Grid>().Single(grid => grid.Name == "Shell");
@@ -109,13 +109,13 @@ public sealed class RecordsWindowTests : WindowTest
         Dispatcher.UIThread.RunJobs();
 
         // The fake store saves on a pool thread, as the real one does.
-        Wait.Until(() => _stateStore.SaveCount > 0);
+        await _stateStore.LastSave;
         Assert.Equal(470, _stateStore.Value.RecordsListWidth);
         Assert.Equal(470, window.ListWidthIntent);
     }
 
     [AvaloniaFact]
-    public void The_list_splitter_takes_the_keyboard_and_saves_once_per_key()
+    public async Task The_list_splitter_takes_the_keyboard_and_saves_once_per_key()
     {
         var window = Show(new RecordsWindow { DataContext = NewViewModel(), Width = 1200, Height = 700 });
         var splitter = window.GetVisualDescendants().OfType<GridSplitter>().Single();
@@ -129,7 +129,7 @@ public sealed class RecordsWindowTests : WindowTest
         splitter.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = Key.Right });
         Dispatcher.UIThread.RunJobs();
         // The fake store saves on a pool thread, as the real one does.
-        Wait.Until(() => _stateStore.SaveCount > 0);
+        await _stateStore.LastSave;
         Assert.Equal(1, _stateStore.SaveCount);
         Assert.Equal(RecordsLayout.ListDefaultWidth + 32, _stateStore.Value.RecordsListWidth);
 
@@ -256,7 +256,7 @@ public sealed class RecordsWindowTests : WindowTest
 
     // Rule 4 of the text-cleanup conventions: what the 1 MB view leaves out has a direct keyboard path.
     [AvaloniaFact]
-    public void Open_full_output_is_reached_by_tab_and_opens_with_enter()
+    public async Task Open_full_output_is_reached_by_tab_and_opens_with_enter()
     {
         var run = new RecordSummary(RecordKind.Run, 4, Session, "2026-10-04T08:01:00.000Z", LogLevel.Info, "/repo/dev.command", null, null);
         _reader.Page = new RecordsPage([run], false);
@@ -284,7 +284,9 @@ public sealed class RecordsWindowTests : WindowTest
         Assert.True(button.IsFocused);
 
         Press(window, Key.Enter);
-        Wait.UntilOnUi(() => opened == 1);
+        Assert.NotNull(vm.OpenFullOutputCommand.ExecutionTask);
+        await vm.OpenFullOutputCommand.ExecutionTask;
+        Assert.Equal(1, opened);
         Assert.Equal([4L], _reader.OutputReads);
     }
 

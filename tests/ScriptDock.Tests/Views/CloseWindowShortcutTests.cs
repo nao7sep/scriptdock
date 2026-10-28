@@ -31,9 +31,6 @@ public sealed class CloseWindowShortcutTests : WindowTest
         Dispatcher.UIThread.RunJobs();
     }
 
-    private static void SettleUntil(Func<bool> done) =>
-        Wait.UntilOnUi(() => done());
-
     private static MainWindowViewModel NewMainVm(FakeProcessRunner runner)
     {
         var config = new AppConfig();
@@ -85,7 +82,7 @@ public sealed class CloseWindowShortcutTests : WindowTest
         var main = Show(new MainWindow { DataContext = vm });
         try
         {
-            SettleUntil(vm.ShouldConfirmQuit);
+            await Wait.UntilAsync(vm.ShouldConfirmQuit, vm);
 
             PressClose(main);
 
@@ -103,20 +100,20 @@ public sealed class CloseWindowShortcutTests : WindowTest
             await vm.ShutdownAsync();
             main.DataContext = null;
             main.Close();
-            SettleUntil(() => !main.IsVisible);
+            await Wait.UntilAsync(() => !main.IsVisible, main);
             Assert.Empty(main.OwnedWindows);
         }
     }
 
     [AvaloniaFact]
-    public void On_the_main_window_with_nothing_running_it_closes_after_the_quits_saves()
+    public async Task On_the_main_window_with_nothing_running_it_closes_after_the_quits_saves()
     {
         var runner = new FakeProcessRunner();
         var main = Show(new MainWindow { DataContext = NewMainVm(runner) });
 
         PressClose(main);
 
-        SettleUntil(() => !main.IsVisible);
+        await Wait.UntilAsync(() => !main.IsVisible, main);
         Assert.Equal(1, runner.StopAllCalls);
     }
 

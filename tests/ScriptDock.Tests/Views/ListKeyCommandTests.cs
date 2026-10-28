@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -34,7 +35,7 @@ public sealed class ListKeyCommandTests : WindowTest, IDisposable
     [AvaloniaTheory]
     [InlineData(Key.Enter)]
     [InlineData(Key.Space)]
-    public void Enter_and_space_on_a_focused_script_run_it(Key key)
+    public async Task Enter_and_space_on_a_focused_script_run_it(Key key)
     {
         Directory.CreateDirectory(_dir);
         var script = Path.Combine(_dir, "dev.command");
@@ -55,14 +56,15 @@ public sealed class ListKeyCommandTests : WindowTest, IDisposable
         window.KeyPress(key, RawInputModifiers.None, PhysicalKey.None, null);
         window.KeyRelease(key, RawInputModifiers.None, PhysicalKey.None, null);
 
-        Wait.UntilOnUi(() => runner.StartCalls.Count > 0);
+        Assert.NotNull(vm.RunScriptCommand.ExecutionTask);
+        await vm.RunScriptCommand.ExecutionTask;
         Assert.Equal(script, runner.StartCalls.Single());
     }
 
     [AvaloniaTheory]
     [InlineData(Key.Delete)]
     [InlineData(Key.Back)]
-    public void Delete_and_backspace_on_a_focused_recent_entry_dismiss_it(Key key)
+    public async Task Delete_and_backspace_on_a_focused_recent_entry_dismiss_it(Key key)
     {
         var config = new AppConfig();
         var state = new AppState();
@@ -74,7 +76,7 @@ public sealed class ListKeyCommandTests : WindowTest, IDisposable
             new FakeConfigStore { Value = config }, new FakeJsonStore<AppState> { Value = state }, new FakeJsonStore<KnownPaths>(),
             records, config, state, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
         var window = Show(new MainWindow { DataContext = vm });
-        Wait.UntilOnUi(() => vm.Recent.Count == 1 && !vm.IsScanning);
+        await Wait.UntilAsync(() => vm.Recent.Count == 1 && !vm.IsScanning, vm, vm.Recent);
         var list = window.FindControl<ListBox>("RecentList")!;
         list.SelectedIndex = 0;
         list.ContainerFromIndex(0)!.Focus(NavigationMethod.Tab);
@@ -82,7 +84,9 @@ public sealed class ListKeyCommandTests : WindowTest, IDisposable
         window.KeyPress(key, RawInputModifiers.None, PhysicalKey.None, null);
         window.KeyRelease(key, RawInputModifiers.None, PhysicalKey.None, null);
 
-        Wait.UntilOnUi(() => vm.Recent.Count == 0);
+        Assert.NotNull(vm.DismissEntryCommand.ExecutionTask);
+        await vm.DismissEntryCommand.ExecutionTask;
+        Assert.Empty(vm.Recent);
         Assert.Equal(["/x/old.command"], records.Dismissals);
     }
 }

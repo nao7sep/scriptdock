@@ -151,28 +151,27 @@ public sealed class BackupStoreTests : IDisposable
         var path = Path.Combine(_root, "doc.json");
         using var entered = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
+        var clock = new FakeTimeProvider();
+        var saved = clock.GetUtcNow();
         Post(() => { entered.Set(); release.Wait(); });
-        DateTimeOffset before;
-        DateTimeOffset after;
         try
         {
+            BackupStore.Time = clock;
             entered.Wait(TestContext.Current.CancellationToken);
-            before = DateTimeOffset.UtcNow;
             BackupStore.Record(path, [1]);
             BackupStore.Record(path, [2]);
-            after = DateTimeOffset.UtcNow;
-            // Advance beyond the serialized millisecond before allowing the worker to dequeue.
-            Wait.Until(() => DateTimeOffset.UtcNow > after.AddMilliseconds(2));
+            // The worker dequeues a second after the saves.
+            clock.Advance(TimeSpan.FromSeconds(1));
         }
         finally
         {
             release.Set();
+            BackupStore.Time = TimeProvider.System;
         }
 
         var row = Assert.Single(RowsFor(path));
         Assert.Equal(new byte[] { 2 }, row.Content);
-        var writtenAt = DateTimeOffset.Parse(row.WrittenAtUtc);
-        Assert.InRange(writtenAt, before.AddMilliseconds(-1), after);
+        Assert.Equal(saved, DateTimeOffset.Parse(row.WrittenAtUtc));
     }
 
     [Fact]

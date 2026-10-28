@@ -52,10 +52,16 @@ public sealed class ProcessPlatformTests : IAsyncLifetime
         return handle.ReadConsoleOutput();
     }
 
-    private static void WaitForLine(ScriptProcess handle, string line)
+    // A long run that creates its marker file once it is running. The run log cannot say so: the shell holds
+    // it open, and macOS reports a file's change only when it closes.
+    private string Sleeper(string name, out string started)
     {
-        Wait.Until(() => handle.ReadConsoleOutput().Contains(line));
+        started = Path.Combine(_fixture.Root, name + ".started");
+        return Script(name, $"touch '{started}'\nsleep 300\n",
+            $"New-Item -ItemType File -Path '{started.Replace("'", "''")}' | Out-Null\nStart-Sleep 300\n");
     }
+
+    private static Task StartedAsync(string marker) => Wait.ForFileAsync(marker, () => File.Exists(marker));
 
     // ── Both platforms ──────────────────────────────────────────────────────────────────────────
 
@@ -132,12 +138,12 @@ public sealed class ProcessPlatformTests : IAsyncLifetime
     [Fact]
     public async Task Stop_ends_a_long_running_script()
     {
-        var script = Script("sleeper", "echo started\nsleep 300\n", "Write-Output 'started'\nStart-Sleep 300\n");
+        var script = Sleeper("sleeper", out var started);
         var runner = _fixture.Runner();
         var handle = await StartAsync(runner, script);
         try
         {
-            WaitForLine(handle, "started");
+            await StartedAsync(started);
             Assert.True(await runner.TerminateAsync(handle));
             Assert.Equal(RunState.Terminated, handle.State);
         }
@@ -147,10 +153,11 @@ public sealed class ProcessPlatformTests : IAsyncLifetime
     [Fact]
     public async Task Restart_stops_the_old_run_and_starts_a_fresh_one()
     {
-        var script = Script("restartee", "echo started\nsleep 300\n", "Write-Output 'started'\nStart-Sleep 300\n");
+        var script = Sleeper("restartee", out var started);
         var runner = _fixture.Runner();
         var first = await StartAsync(runner, script);
-        WaitForLine(first, "started");
+        await StartedAsync(started);
+        File.Delete(started);
 
         var second = await runner.RestartAsync(first);
         Assert.NotNull(second);
@@ -158,7 +165,7 @@ public sealed class ProcessPlatformTests : IAsyncLifetime
         {
             Assert.Equal(RunState.Terminated, first.State);
             Assert.Same(second, Assert.Single(runner.Active));
-            WaitForLine(second!, "started");
+            await StartedAsync(started);
         }
         finally { await runner.TerminateAsync(second!); }
     }
@@ -168,17 +175,25 @@ public sealed class ProcessPlatformTests : IAsyncLifetime
     {
         var runner = _fixture.Runner();
         var ended = new List<ScriptProcess>();
-        runner.RunEnded += (_, process) => { lock (ended) ended.Add(process); };
-        var a = await StartAsync(runner, Script("first", "echo started\nsleep 300\n", "Write-Output 'started'\nStart-Sleep 300\n"));
-        var b = await StartAsync(runner, Script("second", "echo started\nsleep 300\n", "Write-Output 'started'\nStart-Sleep 300\n"));
-        WaitForLine(a, "started");
-        WaitForLine(b, "started");
+        var bothEnded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        runner.RunEnded += (_, process) =>
+        {
+            lock (ended)
+            {
+                ended.Add(process);
+                if (ended.Count >= 2) bothEnded.TrySetResult();
+            }
+        };
+        var a = await StartAsync(runner, Sleeper("first", out var aStarted));
+        var b = await StartAsync(runner, Sleeper("second", out var bStarted));
+        await StartedAsync(aStarted);
+        await StartedAsync(bStarted);
 
         await runner.StopAllAsync();
 
         Assert.Equal(RunState.Terminated, a.State);
         Assert.Equal(RunState.Terminated, b.State);
-        Wait.Until(() => { lock (ended) return ended.Count >= 2; });
+        await bothEnded.Task.WaitAsync(TestContext.Current.CancellationToken);
         lock (ended)
             Assert.Equal(new[] { a.Id, b.Id }.Order(), ended.Select(process => process.Id).Order());
     }

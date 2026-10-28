@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
@@ -18,9 +19,6 @@ namespace ScriptDock.Tests.Views;
 /// </summary>
 public sealed class QuitQuestionOwnerTests : WindowTest
 {
-    private static void SettleUntil(Func<bool> done) =>
-        Wait.UntilOnUi(() => done());
-
     [AvaloniaFact]
     public void The_owner_is_the_first_window_showing()
     {
@@ -36,7 +34,7 @@ public sealed class QuitQuestionOwnerTests : WindowTest
     }
 
     [AvaloniaFact]
-    public void Quitting_with_the_main_window_minimized_asks_in_a_standalone_dialog_and_leaves_it_minimized()
+    public async Task Quitting_with_the_main_window_minimized_asks_in_a_standalone_dialog_and_leaves_it_minimized()
     {
         var runner = new FakeProcessRunner();
         runner.AddRunning("/x/a.command");
@@ -46,7 +44,7 @@ public sealed class QuitQuestionOwnerTests : WindowTest
             new FakeConfigStore { Value = config }, new FakeJsonStore<AppState> { Value = state }, new FakeJsonStore<KnownPaths>(),
             new FakeRecordStore(), config, state, new KnownPaths(), new ScriptScanner(), runner);
         var main = Show(new MainWindow { DataContext = vm });
-        SettleUntil(vm.ShouldConfirmQuit);
+        await Wait.UntilAsync(vm.ShouldConfirmQuit, vm);
         main.WindowState = WindowState.Minimized;
         Dispatcher.UIThread.RunJobs();
         s_lastConfirm = null;

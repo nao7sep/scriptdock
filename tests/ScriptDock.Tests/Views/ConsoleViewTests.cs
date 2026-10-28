@@ -162,7 +162,7 @@ public sealed class ConsoleViewTests : WindowTest, IDisposable
         var window = Show(new MainWindow { DataContext = vm });
         vm.Recent.Add(new RecentEntry("/x/serve.command", "serve.command", DateTimeOffset.UtcNow, process));
         vm.SelectedRecentEntry = vm.Recent.Last();
-        Wait.UntilOnUi(() => vm.CanOpenRunOutput && vm.ConsoleLines.Count > 0);
+        await Wait.UntilAsync(() => vm.CanOpenRunOutput && vm.ConsoleLines.Count > 0, vm, vm.ConsoleLines);
         Assert.Equal(["ready", "progress 9"], vm.ConsoleLines.Select(line => line.Text));
 
         await vm.OpenRunOutputCommand.ExecuteAsync(null);

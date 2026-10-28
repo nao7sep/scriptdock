@@ -1,37 +1,80 @@
 using System;
-using System.Threading;
+using System.Collections.Specialized;
+using System.ComponentModel;
+using System.IO;
 using System.Threading.Tasks;
-using Avalonia.Threading;
 using Xunit;
 
 namespace ScriptDock.Tests.Fakes;
 
 /// <summary>
-/// Waits for something a test cannot be told about directly, such as a file another process writes or a
-/// process ending, by checking until it holds. There is no deadline: the test's own cancellation ends a wait.
+/// Waits for a condition the code under test reports through change events: it checks the condition at
+/// once, then again on each change. There is no deadline: the test's own cancellation ends a wait.
 /// </summary>
 internal static class Wait
 {
-    public static void Until(Func<bool> done)
+    /// <summary>
+    /// Completes once <paramref name="done"/> holds, re-checked on every change the
+    /// <paramref name="sources"/> raise: view models, collections and windows. In an interface test, await it
+    /// so the dispatcher runs the work that posts back to the interface thread.
+    /// </summary>
+    public static async Task UntilAsync(Func<bool> done, params object[] sources)
     {
-        var token = TestContext.Current.CancellationToken;
-        while (!done())
+        var met = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Check()
         {
-            token.ThrowIfCancellationRequested();
-            Thread.Sleep(10);
+            try { if (done()) met.TrySetResult(); }
+            catch (Exception ex) { met.TrySetException(ex); }
+        }
+
+        PropertyChangedEventHandler onProperty = (_, _) => Check();
+        NotifyCollectionChangedEventHandler onCollection = (_, _) => Check();
+        foreach (var source in sources)
+        {
+            if (source is INotifyPropertyChanged properties) properties.PropertyChanged += onProperty;
+            if (source is INotifyCollectionChanged collection) collection.CollectionChanged += onCollection;
+        }
+
+        try
+        {
+            Check();
+            await met.Task.WaitAsync(TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            foreach (var source in sources)
+            {
+                if (source is INotifyPropertyChanged properties) properties.PropertyChanged -= onProperty;
+                if (source is INotifyCollectionChanged collection) collection.CollectionChanged -= onCollection;
+            }
         }
     }
 
-    /// <summary>Runs the dispatcher's jobs between checks, for work that posts back to the interface thread.</summary>
-    public static void UntilOnUi(Func<bool> done) => Until(() =>
+    /// <summary>
+    /// Completes once <paramref name="done"/> holds for <paramref name="path"/>, a file another process
+    /// writes, re-checked on every change the operating system reports for it. A read that meets the file
+    /// mid-write counts as not yet; the write's next change checks again.
+    /// </summary>
+    public static async Task ForFileAsync(string path, Func<bool> done)
     {
-        Dispatcher.UIThread.RunJobs();
-        return done();
-    });
+        var met = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Check()
+        {
+            try { if (done()) met.TrySetResult(); }
+            catch (IOException) { }
+            catch (Exception ex) { met.TrySetException(ex); }
+        }
 
-    public static async Task UntilAsync(Func<bool> done)
-    {
-        while (!done())
-            await Task.Delay(10, TestContext.Current.CancellationToken);
+        using var watcher = new FileSystemWatcher(Path.GetDirectoryName(path)!, Path.GetFileName(path))
+        {
+            NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
+        };
+        watcher.Created += (_, _) => Check();
+        watcher.Changed += (_, _) => Check();
+        watcher.Renamed += (_, _) => Check();
+        watcher.EnableRaisingEvents = true;
+
+        Check();
+        await met.Task.WaitAsync(TestContext.Current.CancellationToken);
     }
 }
