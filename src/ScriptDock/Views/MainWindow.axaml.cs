@@ -33,8 +33,6 @@ public partial class MainWindow : Window
     private bool _consolePinnedToBottom = true;
     private bool _scrollConsolePending = true; // follow the console on the next layout after output/selection changes
     private ScrollViewer? _consoleScroll; // the console list's own scroller
-    private bool _quitConfirmed; // set once the user confirms quitting with scripts running, so the re-close proceeds
-    private bool _quitPromptOpen; // a quit prompt is up, so a second quit request is dropped rather than asking twice
 
     // The user's INTENT for the two fixed panes, in pixels: what they last dragged the Recent column /
     // console row to. The on-screen size is DERIVED from this (clamped to what the current window can
@@ -314,24 +312,28 @@ public partial class MainWindow : Window
     private void OnConsoleSplitterDragCompleted(object? sender, VectorEventArgs e) =>
         _consoleHeightIntent = LeftPanesGrid.RowDefinitions[2].ActualHeight;
 
-    // Set once the quit's work has run, or the session is ending, so the re-triggered Close() below is let
-    // through instead of holding the window open (and re-running the work) forever.
-    private bool _shutdownSaved;
-
-    // Set while a quit the user started runs the quit's work; see MainWindowCloseGuard.
-    private bool _shutdownSaveInProgress;
-
-    // The quit's work, started once by whichever quit reaches it first.
+    // The quit's work, started once by whichever quit reaches it first. Once it has ended, the next close
+    // passes, whatever it did, so a failure in it never holds the window open.
     private Task? _quitWork;
+
+    // The quit the user started, while it asks or runs; a second close request joins it by doing nothing.
+    private Task<bool>? _quit;
+
+    // The operating system is ending the session and has taken the quit over.
+    private bool _sessionEnding;
+
+    // The quit's question on screen, which a session end closes.
+    private DialogBase? _quitQuestion;
 
     /// <summary>
     /// First-run setup (config-sets-conventions): with no folder to scan, ask for one in a single step and
     /// scan it. Not Now writes nothing, so the question returns at the next launch while there is still no
-    /// folder; Settings can add folders at any time.
+    /// folder; Settings can add folders at any time. Nothing more is shown once a quit has begun.
     /// </summary>
     internal async Task AskForFirstScanFolderAsync()
     {
-        if (ViewModel is not { NeedsScanFolder: true } vm || !await FirstRunFolderDialog.AskAsync(this))
+        if (ViewModel is not { NeedsScanFolder: true } vm || vm.Quitting.IsCancellationRequested
+            || !await FirstRunFolderDialog.AskAsync(this) || vm.Quitting.IsCancellationRequested)
             return;
 
         try
@@ -340,123 +342,98 @@ public partial class MainWindow : Window
             {
                 Title = Localizer.T("settings.pickRootTitle"),
             });
-            if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } path)
+            if (vm.Quitting.IsCancellationRequested || folders.Count == 0 || folders[0].TryGetLocalPath() is not { } path)
                 return;
-            if (!await vm.AddFirstScanFolderAsync(path))
+            if (!await vm.AddFirstScanFolderAsync(path) && !vm.Quitting.IsCancellationRequested)
                 await NoticeDialog.ShowAsync(this, Message.Of("firstRun.title"), Message.Of("settings.saveFailed"));
         }
         catch (Exception ex)
         {
             Log.Error("ui: first-run folder choice failed", ex);
-            await NoticeDialog.ShowAsync(this, Message.Of("firstRun.title"), FailurePresentation.RootPicker(ex));
+            if (!vm.Quitting.IsCancellationRequested)
+                await NoticeDialog.ShowAsync(this, Message.Of("firstRun.title"), FailurePresentation.RootPicker(ex));
         }
     }
 
-    // Every quit path closes the main window: the menu's Quit and Cmd+Q and the Dock's Quit through the
+    // Every quit path closes the main window: the menu's Quit and Cmd+Q, the Dock's Quit through the
     // lifetime, the window's own close, and the operating system ending the session
     // (unsaved-edits-conventions, Quitting).
     private async void OnClosing(object? sender, WindowClosingEventArgs e)
     {
+        var vm = ViewModel;
+        if (vm is null || _quitWork is { IsCompleted: true })
+            return;
+
+        if (SessionEnd.Is(e.CloseReason))
+        {
+            // The system waits for this close to answer, so the quit's work runs here to its deadline, and
+            // the window closes whatever it did. A question still up closes, and a quit the user started
+            // ends with this one.
+            _sessionEnding = true;
+            _quitQuestion?.Close();
+            RunUntilDone(EndSessionAsync(vm));
+            return;
+        }
+
+        // Closing does not itself wait for an async handler, so without this the window (and, as the last
+        // window, the app) would finish closing while the quit's work is still in flight. Cancel this
+        // attempt, do the work, then close again.
+        e.Cancel = true;
+        if (_quit is not null)
+            return;
         try
         {
-            var vm = ViewModel;
-            if (vm is null)
-                return;
-
-            var action = MainWindowCloseGuard.DecideAction(
-                e.CloseReason,
-                SessionEnd.Is(e.CloseReason),
-                _quitConfirmed,
-                vm.ShouldConfirmQuit(),
-                _shutdownSaved,
-                _shutdownSaveInProgress);
-
-            switch (action)
-            {
-                case MainWindowCloseAction.ProceedToRealClose:
-                    return;
-
-                case MainWindowCloseAction.EndSession:
-                    // The system waits for this close to answer, so the quit's work runs here to its
-                    // bounds, and the window closes whatever it did. A quit the user started and that is
-                    // still running ends with it.
-                    _shutdownSaved = true;
-                    RunUntilDone(EndSessionAsync(vm));
-                    return;
-
-                case MainWindowCloseAction.Drop:
-                    e.Cancel = true;
-                    return;
-
-                case MainWindowCloseAction.PromptToConfirmQuit:
-                {
-                    // Quitting stops every running script, so confirm it first:
-                    // cancel this close, ask, and only close for real on a yes (mirrors the dialog
-                    // discard guard). A prompt the menu's Quit already put up decides instead.
-                    e.Cancel = true;
-                    if (_quitPromptOpen)
-                        return;
-                    var proceed = await ConfirmQuitAsync(vm);
-                    if (proceed)
-                    {
-                        _quitConfirmed = true;
-                        Close();
-                    }
-                    return;
-                }
-            }
-
-            // Closing does not itself wait for an async handler, so without this the window (and, as
-            // the last window, the app) would finish closing while the quit's work is still in flight.
-            // Cancel this attempt, do the work, then close again — mirroring the confirm branch above and
-            // DialogBase's own close guard.
-            e.Cancel = true;
-            _shutdownSaveInProgress = true;
-            if (!await SettingsSavedOrQuitAnywayAsync(vm))
-            {
-                if (_shutdownSaved)
-                    return; // the session ended while this quit asked, and closed the window itself
-
-                // Cancelled: the app stays open, and the next quit asks again from the start.
-                _shutdownSaveInProgress = false;
-                _quitConfirmed = false;
-                return;
-            }
-
-            if (_shutdownSaved)
-                return;
-            await (_quitWork ??= RunQuitWorkAsync(vm));
-            if (_shutdownSaved)
-                return; // the session ended while this quit ran, and closed the window itself
-            _shutdownSaved = true;
-            Close();
+            _quit = QuitAsync(vm, e.CloseReason);
+            if (await _quit)
+                Close();
         }
         catch (Exception ex)
         {
             Log.Error("ui: window close failed", ex);
-            // A bug in the quit's work must not wedge the window open forever; let the close proceed.
-            if (!e.Cancel || _shutdownSaved)
-                return;
-            _shutdownSaved = true;
-            Close();
+            // A bug in the quit must not wedge the window open forever; let the close proceed.
+            if (!_sessionEnding)
+            {
+                _quitWork = Task.CompletedTask;
+                Close();
+            }
         }
+        finally
+        {
+            _quit = null;
+        }
+    }
+
+    // A quit the user started: asks first while scripts run, then makes sure the user's settings change
+    // landed, then does the quit's work. False when the user stayed, or the session end took over.
+    private async Task<bool> QuitAsync(MainWindowViewModel vm, WindowCloseReason reason)
+    {
+        if (MainWindowCloseGuard.ShouldConfirmQuit(reason, vm.ShouldConfirmQuit()) && !await ConfirmQuitAsync(vm))
+            return false;
+        if (_sessionEnding || !await SettingsSavedOrQuitAnywayAsync(vm) || _sessionEnding)
+            return false;
+        await (_quitWork ??= RunQuitWorkAsync(vm));
+        return !_sessionEnding;
     }
 
     // A settings change of the user's that did not land stops a quit the user started: they retry it,
     // quit anyway, or cancel and keep the app open (unsaved-edits-conventions, Quitting). The running
-    // scripts are stopped only after this, so a cancelled quit leaves them running.
+    // scripts are stopped only after this, so a cancelled quit leaves them running. Each round starts the
+    // exit deadline afresh.
     private async Task<bool> SettingsSavedOrQuitAnywayAsync(MainWindowViewModel vm)
     {
         var retry = false;
-        while (!await vm.SettingsSavedForQuitAsync(retry))
+        while (true)
         {
-            if (_shutdownSaved)
-                return false; // the session ended meanwhile and took the quit over
+            vm.BeginQuit();
+            if (await vm.SettingsSavedForQuitAsync(retry))
+                return true;
+            if (_sessionEnding)
+                return false;
 
-            UnsavedQuitChoice choice;
+            var dialog = new UnsavedSettingsQuitDialog();
             try
             {
-                choice = await UnsavedSettingsQuitDialog.AskAsync(QuitQuestionOwner(), vm.SettingsStillSavingAtQuit);
+                await AskAsync(dialog);
             }
             catch (Exception ex)
             {
@@ -464,8 +441,10 @@ public partial class MainWindow : Window
                 Log.Error("quit: the unsaved-settings question could not be shown; staying open", ex);
                 return false;
             }
+            if (_sessionEnding)
+                return false;
 
-            switch (choice)
+            switch (dialog.Choice)
             {
                 case UnsavedQuitChoice.Retry:
                     retry = true;
@@ -477,23 +456,35 @@ public partial class MainWindow : Window
                     return false;
             }
         }
-
-        return true;
     }
 
-    // The system ending the session: the same waits as any quit, within their bounds, and never a
-    // question; a settings change that did not land is logged.
+    // A quit can come from the Dock or the app menu while this window is minimized: its questions attach
+    // to a window that is showing, or stand alone, and never bring this one back (window-conventions).
+    private async Task AskAsync(DialogBase question)
+    {
+        _quitQuestion = question;
+        try { await question.ShowOverAsync(DialogBase.ShowingOwner(this, Records?.Window)); }
+        finally { _quitQuestion = null; }
+    }
+
+    // The system ending the session: the same waits as any quit, within the exit deadline, and never a
+    // question; a settings change that did not land is logged. The backup history is best effort, so the
+    // exit does not wait for it.
     private async Task EndSessionAsync(MainWindowViewModel vm)
     {
-        // The backup history is best effort; the session ending does not wait for it.
-        BackupStore.Abandon();
-        if (!await vm.SettingsSavedForQuitAsync())
-            Log.Error("quit: the session ended with the settings change unsaved");
+        if (_quitWork is null)
+        {
+            vm.BeginQuit();
+            if (!await vm.SettingsSavedForQuitAsync())
+                Log.Error("quit: the session ended with the settings change unsaved");
+        }
+        if (vm.Exit is { } exit)
+            exit.SessionEnding = true;
         await (_quitWork ??= RunQuitWorkAsync(vm));
     }
 
     // The quit's work: the Records window closes, the view state is saved, and the running scripts are
-    // stopped, each step within its bound, so it never holds the quit past them.
+    // stopped, within the exit deadline, so it never holds the quit past it.
     private async Task RunQuitWorkAsync(MainWindowViewModel vm)
     {
         vm.BeginShutdown();
@@ -521,7 +512,7 @@ public partial class MainWindow : Window
     }
 
     // Keeps the dispatcher running, so the work's own continuations can run, until the work is done. The
-    // work carries its own bounds.
+    // work keeps to the exit deadline.
     private static void RunUntilDone(Task work)
     {
         if (work.IsCompleted)
@@ -539,43 +530,16 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// Whether the app's own Quit (the menu item and its Cmd+Q) may shut the app down: it asks first
-    /// while scripts run, exactly as the close button does.
-    /// </summary>
-    internal async Task<bool> ConfirmAppQuitAsync()
-    {
-        if (ViewModel is not { } vm)
-            return true;
-
-        switch (MainWindowCloseGuard.DecideAppQuit(_quitPromptOpen, _quitConfirmed, vm.ShouldConfirmQuit()))
-        {
-            case AppQuitAction.Drop:
-                return false;
-            case AppQuitAction.Quit:
-                return true;
-        }
-
-        if (!await ConfirmQuitAsync(vm))
-            return false;
-        _quitConfirmed = true;
-        return true;
-    }
-
-    // A quit can come from the Dock or the app menu while this window is minimized: its questions attach
-    // to a window that is showing, or stand alone, and never bring this one back (window-conventions).
-    private Window? QuitQuestionOwner() => DialogBase.ShowingOwner(this, Records?.Window);
-
     private async Task<bool> ConfirmQuitAsync(MainWindowViewModel vm)
     {
-        _quitPromptOpen = true;
+        var dialog = new ConfirmDialog(
+            Message.Of("quit.title"),
+            Message.Of("quit.message", ("count", vm.RunningCount)),
+            "quit.confirm");
         try
         {
-            return await ConfirmDialog.ConfirmDestructiveAsync(
-                QuitQuestionOwner(),
-                Message.Of("quit.title"),
-                Message.Of("quit.message", ("count", vm.RunningCount)),
-                "quit.confirm");
+            await AskAsync(dialog);
+            return dialog.ResultTag == "confirm";
         }
         catch (Exception ex)
         {
@@ -583,10 +547,6 @@ public partial class MainWindow : Window
             // (unsaved-edits-conventions, Quitting).
             Log.Error("quit: the stop-running-scripts question could not be shown; staying open", ex);
             return false;
-        }
-        finally
-        {
-            _quitPromptOpen = false;
         }
     }
 

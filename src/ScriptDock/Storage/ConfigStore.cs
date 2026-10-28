@@ -25,10 +25,7 @@ public sealed class ConfigStore : IConfigStore
     private readonly Dictionary<string, JsonElement> _kept = [];
 
     /// <summary>The keys the last <see cref="Load"/> could not apply, which saves keep unchanged.</summary>
-    public IReadOnlyList<string> KeptKeys { get { lock (_kept) return [.. _kept.Keys]; } }
-
-    private readonly object _saveGate = new();
-    private Task _saveTail = Task.CompletedTask;
+    public IReadOnlyList<string> KeptKeys => [.. _kept.Keys];
 
     /// <summary>The settings file.</summary>
     public static string FilePath => System.IO.Path.Combine(StorageRoot.Directory, AppPaths.ConfigFileName);
@@ -69,34 +66,22 @@ public sealed class ConfigStore : IConfigStore
     private static bool SameMembers(IEnumerable<string> a, IEnumerable<string> b) =>
         new HashSet<string>(a, StringComparer.OrdinalIgnoreCase).SetEquals(b);
 
-    public Task SaveAsync(AppConfig value, IReadOnlyCollection<string>? replaced = null)
+    /// <summary>
+    /// Saves <paramref name="value"/>, keeping each stored entry the app could not apply unless
+    /// <paramref name="replaced"/> names its set. The caller saves one change at a time, each after the one
+    /// before it settles, so a kept entry is retired only once the save that replaced it has landed.
+    /// </summary>
+    public async Task SaveAsync(AppConfig value, IReadOnlyCollection<string>? replaced = null)
     {
-        // Snapshot the caller's intent now, but merge preserved entries only after the previous
-        // write settles: a failed replacement must not retire them, and a successful one must not
-        // be resurrected by a save queued while it was still running.
         var document = ConfigSets.Changed(value);
         var chosen = new HashSet<string>(replaced ?? [], StringComparer.Ordinal);
-        lock (_saveGate)
-            return _saveTail = SaveAfterAsync(_saveTail, document, chosen);
-    }
-
-    private async Task SaveAfterAsync(Task previous, Dictionary<string, JsonElement> document, HashSet<string> chosen)
-    {
-        try { await previous.ConfigureAwait(false); }
-        catch { /* The earlier caller observes its own failure; later saves may still succeed. */ }
-
-        List<string> replaced;
-        lock (_kept)
-        {
-            // A set the user saved a value for replaces its kept entry, even when that value is the built-in.
-            replaced = _kept.Keys.Where(key => document.ContainsKey(key) || chosen.Contains(key)).ToList();
-            foreach (var (key, kept) in _kept)
-                if (!chosen.Contains(key))
-                    document.TryAdd(key, kept);
-        }
-        await _store.SaveAsync(document).ConfigureAwait(false);
-        lock (_kept)
-            foreach (var key in replaced)
-                _kept.Remove(key);
+        // A set the user saved a value for replaces its kept entry, even when that value is the built-in.
+        var retired = _kept.Keys.Where(key => document.ContainsKey(key) || chosen.Contains(key)).ToList();
+        foreach (var (key, kept) in _kept)
+            if (!chosen.Contains(key))
+                document.TryAdd(key, kept);
+        await _store.SaveAsync(document);
+        foreach (var key in retired)
+            _kept.Remove(key);
     }
 }

@@ -28,16 +28,14 @@ public sealed class UnsavedSettingsQuitDialog : DialogBase
     // Three footer buttons, which a narrower dialog cannot fit in every language (LabelFitTests).
     internal const double DialogWidth = 480;
 
-    /// <param name="stillSaving">The change's write was still running at the quit's bound, so it may yet
-    /// land: the question says so instead of calling it failed.</param>
-    internal UnsavedSettingsQuitDialog(bool stillSaving = false)
+    internal UnsavedSettingsQuitDialog()
     {
         Width = DialogWidth;
-        Title = Localizer.T(stillSaving ? "quit.savingTitle" : "quit.unsavedTitle");
+        Title = Localizer.T("quit.unsavedTitle");
 
         SetContent(new TextBlock
         {
-            Text = Localizer.T(stillSaving ? "quit.savingMessage" : "quit.unsavedMessage"),
+            Text = Localizer.T("quit.unsavedMessage"),
             TextWrapping = TextWrapping.Wrap,
             FontSize = 14,
         });
@@ -58,12 +56,4 @@ public sealed class UnsavedSettingsQuitDialog : DialogBase
         "quit" => UnsavedQuitChoice.QuitAnyway,
         _ => UnsavedQuitChoice.Stay,
     };
-
-    /// <summary>Asks over <paramref name="owner"/>; every way of dismissing it settles on staying open.</summary>
-    public static async Task<UnsavedQuitChoice> AskAsync(Window? owner, bool stillSaving = false)
-    {
-        var dialog = new UnsavedSettingsQuitDialog(stillSaving);
-        await dialog.ShowOverAsync(owner);
-        return dialog.Choice;
-    }
 }

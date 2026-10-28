@@ -124,7 +124,7 @@ public sealed class ConsoleViewTests : WindowTest, IDisposable
         var vm = NewVm();
         var entered = new TaskCompletionSource();
         var release = new TaskCompletionSource();
-        vm.ReadConsole = async feed =>
+        vm.ReadConsole = async (feed, _) =>
         {
             var update = feed.Read();
             entered.TrySetResult();

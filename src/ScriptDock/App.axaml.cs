@@ -26,6 +26,9 @@ public partial class App : Application
     internal static IRecordStore? Records { get; set; }
     internal static StartupStores? PreparedStores { get; set; }
 
+    /// <summary>The main window's view model, whose quit fixes the exit deadline the app's last steps draw on.</summary>
+    internal static MainWindowViewModel? QuitViewModel { get; private set; }
+
     // The main window, which the app menu's About and Settings items open through. Null while a
     // startup failure is shown instead, when those items are disabled.
     private MainWindow? _mainWindow;
@@ -54,7 +57,7 @@ public partial class App : Application
             MacMenuBar.Install(
                 showAbout: () => _mainWindow?.ShowAboutFromMenu(),
                 showSettings: () => _mainWindow?.ShowSettingsFromMenu(),
-                quit: () => _ = QuitFromMenuAsync(desktop),
+                quit: () => QuitFromMenu(desktop),
                 canShowAppDialogs: () => _mainWindow is { IsActive: true });
 
             // An emoji chosen in the macOS picker arrives while the window is in the background; macOS only.
@@ -121,24 +124,29 @@ public partial class App : Application
             RegisterOwnerActivation(mainWindow);
             RegisterReopen(mainWindow);
 
-            // Report material recovery once the main window can own the dialog.
+            // Report material recovery once the main window can own the dialog. Once a quit has begun,
+            // nothing more is shown.
+            QuitViewModel = viewModel;
             mainWindow.Opened += async (_, _) =>
             {
+                var quitting = viewModel.Quitting;
                 foreach (var quarantined in Storage.QuarantineJournal.Drain())
                 {
+                    if (quitting.IsCancellationRequested)
+                        return;
                     await Views.NoticeDialog.ShowAsync(
                         mainWindow,
                         I18n.Message.Of("startup.settingsResetTitle"),
                         FailurePresentation.RecoveredData(quarantined));
                 }
-                if (keptSettings.Count > 0)
+                if (keptSettings.Count > 0 && !quitting.IsCancellationRequested)
                 {
                     await Views.NoticeDialog.ShowAsync(
                         mainWindow,
                         I18n.Message.Of("startup.settingsKeptTitle"),
                         FailurePresentation.KeptSettings(ConfigStore.FilePath, keptSettings));
                 }
-                if (Records is RecordStore { DatabaseUnavailable: true } records)
+                if (Records is RecordStore { DatabaseUnavailable: true } records && !quitting.IsCancellationRequested)
                 {
                     await Views.NoticeDialog.ShowAsync(
                         mainWindow,
@@ -152,15 +160,17 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
-    // The app's own Quit (the menu item and its Cmd+Q) asks first while scripts run, as the main
-    // window's close button does; the shutdown it then starts never asks again. With no main window
-    // (a startup failure notice) nothing runs, so it quits at once.
-    private async System.Threading.Tasks.Task QuitFromMenuAsync(IClassicDesktopStyleApplicationLifetime desktop)
+    // The app's own Quit (the menu item and its Cmd+Q) closes the main window, whose quit asks first while
+    // scripts run, exactly as its close button does. With no main window (a startup failure notice) nothing
+    // runs, so it quits at once.
+    private void QuitFromMenu(IClassicDesktopStyleApplicationLifetime desktop)
     {
         try
         {
-            if (_mainWindow is null || await _mainWindow.ConfirmAppQuitAsync())
+            if (_mainWindow is null)
                 desktop.TryShutdown();
+            else
+                _mainWindow.Close();
         }
         catch (Exception ex)
         {

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.Concurrent;
 using System.Reflection;
 using System.IO;
 using System.Linq;
@@ -225,10 +224,10 @@ public sealed class ScanSettlementTests : IAsyncLifetime
 
     // Inspect the actual cache before projection. Resolving a miss from the UI would populate it
     // too, so inspecting only the finished list would not detect this regression.
-    private static ConcurrentDictionary<string, string> PreparedKeys(MainWindowViewModel vm)
+    private static Dictionary<string, string> PreparedKeys(MainWindowViewModel vm)
     {
         var cache = typeof(MainWindowViewModel).GetField("_keys", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(vm)!;
-        return (ConcurrentDictionary<string, string>)typeof(PathKeyCache)
+        return (Dictionary<string, string>)typeof(PathKeyCache)
             .GetField("_keys", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(cache)!;
     }
 

@@ -26,6 +26,7 @@ public sealed class SessionEndDeliveryTests : WindowTest, IDisposable
     private readonly FakeConfigStore _configStore = new();
     private readonly FakeJsonStore<AppState> _stateStore = new();
     private readonly FakeProcessRunner _runner = new();
+    private readonly FakeTimeProvider _clock = new();
     private TaskCompletionSource? _settingsWrite;
     private MainWindow? _window;
 
@@ -36,14 +37,16 @@ public sealed class SessionEndDeliveryTests : WindowTest, IDisposable
         if (_window is { IsVisible: true } window)
             DeliverClose(window, WindowCloseReason.OSShutdown);
         Dispose();
-        BackupStore.Close(); // a session end abandons the history for the process; reopen it for later tests
     }
 
     private (MainWindow Window, MainWindowViewModel Vm) ShowWithRunningScript()
     {
         var vm = new MainWindowViewModel(
             _configStore, _stateStore, new FakeJsonStore<KnownPaths>(), new FakeRecordStore(),
-            _configStore.Value, _stateStore.Value, new KnownPaths(), new ScriptScanner(), _runner);
+            _configStore.Value, _stateStore.Value, new KnownPaths(), new ScriptScanner(), _runner)
+        {
+            Time = _clock,
+        };
         _runner.AddRunning("/x/a.command");
         var window = _window = Show(new MainWindow { DataContext = vm });
         // The window's first load builds the Recent list, and with it the running count, after an
@@ -82,7 +85,7 @@ public sealed class SessionEndDeliveryTests : WindowTest, IDisposable
     }
 
     [AvaloniaFact]
-    public async Task A_settings_write_still_running_at_a_session_end_holds_it_only_to_its_bound()
+    public async Task A_settings_write_still_running_at_a_session_end_holds_it_only_to_the_exit_deadline()
     {
         var (window, vm) = ShowWithRunningScript();
         _settingsWrite = new TaskCompletionSource();
@@ -91,14 +94,13 @@ public sealed class SessionEndDeliveryTests : WindowTest, IDisposable
         var closed = false;
         window.Closed += (_, _) => closed = true;
 
-        var started = DateTime.UtcNow;
+        // Runs inside the close's wait, once the settings wait has started on the deadline.
+        Dispatcher.UIThread.Post(() => _clock.Advance(ExitDeadline.Length));
         DeliverClose(window, WindowCloseReason.OSShutdown);
-        var held = DateTime.UtcNow - started;
 
         Assert.True(closed);
         Assert.Empty(window.OwnedWindows); // not the Retry / Quit anyway question
         Assert.Equal(1, _runner.StopAllCalls);
-        Assert.InRange(held, MainWindowViewModel.QuitSettingsWriteBound, TimeSpan.FromSeconds(10));
 
         _settingsWrite.SetResult();
         await hide;

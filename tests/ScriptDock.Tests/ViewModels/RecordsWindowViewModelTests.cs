@@ -624,10 +624,11 @@ public sealed class RecordsWindowViewModelTests
         Advance(RecordsWindowViewModel.LiveInterval);
         vm.LoadMore();
         Pump();
-        Assert.Equal(2, _reader.PageQueries.Count);
+        // The records answer in the order asked, so the page after the loaded rows follows the live read.
+        Assert.Equal(3, _reader.PageQueries.Count);
+        Assert.Equal(CursorOf(Warning), _reader.LastQuery.After);
         live.SetResult(new RecordsPage([Newer, Failed, Warning], true));
         Pump();
-        Assert.Equal(CursorOf(Warning), _reader.LastQuery.After);
         Assert.True(vm.LoadingMore);
         more.SetResult(new RecordsPage([Scan], false));
         Pump();

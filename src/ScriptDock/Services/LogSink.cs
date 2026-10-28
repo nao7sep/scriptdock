@@ -75,5 +75,6 @@ public sealed class RecordLogSink : ILogSink
 
     public void Flush() => _records.Flush();
 
-    public void Dispose() => _records.Flush();
+    // The exit flushes the records once and then closes them, which writes what is still queued.
+    public void Dispose() { }
 }

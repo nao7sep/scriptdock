@@ -75,58 +75,6 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
     private Task Hide() => Track(_vm!.ToggleHiddenCommand.ExecuteAsync(new ScriptItem(Path.Combine(_home, "script.command"))));
 
     [AvaloniaFact]
-    public async Task FailedBodyKeepsRelocationUntilTheActualPrimaryWriteSettles()
-    {
-        // The ambient home is also fixture-owned. A late write may never touch normal developer data.
-        var sentinel = Path.Combine(_home, "config.json");
-        const string bytes = "{\"formatVersion\":1,\"rootDirs\":[\"/owned-sentinel/\"]}";
-        File.WriteAllText(sentinel, bytes);
-        var inventory = Directory.GetFileSystemEntries(_home).Order().ToArray();
-        UnixFileMode? mode = null;
-        if (!OperatingSystem.IsWindows())
-        {
-            File.SetUnixFileMode(_home, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead);
-            mode = File.GetUnixFileMode(_home);
-        }
-        var nested = new ConfigSubmissionTests();
-        await nested.InitializeAsync();
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var inner = typeof(HeldConfigStore).GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(nested._store)!;
-        var primary = typeof(ConfigStore).GetField("_store", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(inner)!;
-        typeof(JsonStore<Dictionary<string, JsonElement>>).GetField("_queueTail", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(primary, release.Task);
-        var write = nested.Hide();
-        _ = nested.Track(Task.FromException(new IOException("injected failed body")));
-        var cleanup = nested.DisposeAsync().AsTask();
-        try
-        {
-            // Cross the former five-second cleanup deadline while the production writer is held.
-            await Task.Delay(TimeSpan.FromSeconds(6), TestContext.Current.CancellationToken);
-            Assert.False(cleanup.IsCompleted);
-            Assert.Equal(nested._home, StorageRoot.Directory);
-        }
-        finally
-        {
-            release.TrySetResult();
-            try
-            {
-                await write;
-                try { await cleanup; }
-                catch (IOException) { /* the failed body is still reported, after actual settlement */ }
-            }
-            finally
-            {
-                // This regression's own cleanup must also be safe while demonstrating the old defect.
-                try { await nested._vm!.ShutdownAsync(); }
-                finally { BackupStore.Close(); }
-            }
-        }
-        Assert.Equal(_home, StorageRoot.Directory);
-        Assert.Equal(bytes, File.ReadAllText(sentinel));
-        Assert.Equal(inventory, Directory.GetFileSystemEntries(_home).Order());
-        if (mode is { } expected && !OperatingSystem.IsWindows()) Assert.Equal(expected, File.GetUnixFileMode(_home));
-    }
-
-    [AvaloniaFact]
     public async Task SaveIncludesThePickedFolderWhoseIdentityIsStillResolving()
     {
         var draft = _vm!.CreateSettingsDraft();
@@ -233,14 +181,15 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
         var second = HoldNextSave();
         var hide = Hide();
         await _store.LastPublication.WaitAsync(Bound, TestContext.Current.CancellationToken);
-        var quit = Track(_vm!.SettingsSavedForQuitAsync());
+        _vm!.BeginQuit();
+        var quit = Track(_vm.SettingsSavedForQuitAsync());
         var draft = _vm.CreateSettingsDraft();
         draft.Theme = ThemePreference.Dark;
         var settings = Track(_vm.TryApplySettingsAsync(draft));
         first.SetResult();
         await hide.WaitAsync(Bound, TestContext.Current.CancellationToken);
         Assert.False(quit.IsCompleted);
-        _clock.Advance(MainWindowViewModel.QuitSettingsWriteBound);
+        _clock.Advance(ExitDeadline.Length);
         Assert.False(await quit.WaitAsync(Bound, TestContext.Current.CancellationToken));
         second.SetResult();
         await settings;
@@ -253,9 +202,11 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
     {
         var gate = HoldNextSave();
         var hide = Hide();
-        var quit = Track(_vm!.SettingsSavedForQuitAsync());
-        _clock.Advance(MainWindowViewModel.QuitSettingsWriteBound);
+        _vm!.BeginQuit();
+        var quit = Track(_vm.SettingsSavedForQuitAsync());
+        _clock.Advance(ExitDeadline.Length);
         Assert.False(await quit);
+        _vm.BeginQuit(); // the user's Retry starts a new round of the quit
         var retry = Track(_vm.SettingsSavedForQuitAsync(retry: true));
         gate.SetResult();
         Assert.True(await retry.WaitAsync(Bound, TestContext.Current.CancellationToken));

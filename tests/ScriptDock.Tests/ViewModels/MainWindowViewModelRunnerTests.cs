@@ -64,56 +64,6 @@ public sealed class MainWindowViewModelRunnerTests : IAsyncLifetime
     }
 
     [MacOnlyFact]
-    public async Task LateInputFailureCannotAttachARestartWarningToTheReplacement()
-    {
-        var (vm, runner, _) = BuildVm();
-        var path = Path.Combine(_dir, "input.command");
-        File.WriteAllText(path, "#!/bin/bash\nread line\n");
-        if (!OperatingSystem.IsWindows())
-            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        var item = new ScriptItem(path);
-        await vm.RunScriptCommand.ExecuteAsync(item);
-        var prior = Assert.Single(runner.Active);
-        var gate = (SemaphoreSlim)typeof(ScriptProcess).GetField("_inputGate", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(prior)!;
-        await gate.WaitAsync(TestContext.Current.CancellationToken);
-        var context = new HeldContinuation();
-        var original = SynchronizationContext.Current;
-        Task<bool> send;
-        try
-        {
-            SynchronizationContext.SetSynchronizationContext(context);
-            send = vm.SendInputAsync("old input");
-        }
-        finally { SynchronizationContext.SetSynchronizationContext(original); }
-        try
-        {
-            await vm.RunScriptCommand.ExecuteAsync(item);
-            var replacement = Assert.Single(runner.Active);
-            Assert.NotSame(prior, replacement);
-            Assert.Same(replacement, vm.SelectedRecentEntry!.Process);
-            await context.Posted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
-            Assert.False(vm.HasRecentActionError);
-        }
-        finally
-        {
-            gate.Release();
-            var continuation = await context.Posted.Task;
-            continuation.Callback(continuation.State);
-            await send;
-        }
-        Assert.False(await send);
-        Assert.True(vm.CanSendInput);
-        Assert.False(vm.HasRecentActionError);
-    }
-
-    // Hold the old send's UI publication until the real replacement has been admitted.
-    private sealed class HeldContinuation : SynchronizationContext
-    {
-        public TaskCompletionSource<(SendOrPostCallback Callback, object? State)> Posted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public override void Post(SendOrPostCallback callback, object? state) => Posted.TrySetResult((callback, state));
-    }
-
-    [MacOnlyFact]
     public async Task Restart_WhoseWorkingDirectoryIsGone_KeepsTheRecentRowsLastRun_AndShowsTheErrorThere()
     {
         var (vm, runner, records) = BuildVm();

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 
@@ -14,18 +13,24 @@ namespace ScriptDock.Services;
 /// </summary>
 public sealed class PathKeyCache
 {
-    private readonly ConcurrentDictionary<string, string> _keys = new(StringComparer.Ordinal);
+    // Read and written on the interface thread only; Prepare resolves into a dictionary of its own.
+    private readonly Dictionary<string, string> _keys = new(StringComparer.Ordinal);
     private readonly Func<string, string> _resolve;
 
     public PathKeyCache() : this(PathIdentity.Key) { }
     internal PathKeyCache(Func<string, string> resolve) => _resolve = resolve;
 
-    public string Key(string path) => _keys.GetOrAdd(path, _resolve);
+    public string Key(string path)
+    {
+        if (!_keys.TryGetValue(path, out var key))
+            _keys[path] = key = _resolve(path);
+        return key;
+    }
 
     public bool Same(string left, string right) => PathIdentity.Comparer.Equals(Key(left), Key(right));
 
     // Preparing a superseded operation must not alter the live projection. Its caller adopts this
-    // snapshot only after checking currentness; decisions for that operation use the same prepared keys.
+    // snapshot only if it was not cancelled; decisions for that operation use the same prepared keys.
     public IReadOnlyDictionary<string, string> Prepare(IEnumerable<string> paths, CancellationToken cancellationToken = default)
     {
         var prepared = new Dictionary<string, string>(StringComparer.Ordinal);

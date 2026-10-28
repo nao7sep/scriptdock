@@ -85,10 +85,10 @@ sealed class Program
             Localizer.Use(App.PreparedStores.Config.Language, App.ComputerLanguages);
             LanguageBootstrap.AlignAppKit(Localizer.Language);
             // On macOS a logout or shutdown ends the process as soon as the lifetime exits, before the
-            // finally below runs, so what the quit logged is written here first, within the records' bound.
+            // finally below runs, so what the quit logged is written here first, within the exit deadline.
             return BuildAvaloniaApp().StartWithClassicDesktopLifetime(
                 args,
-                lifetime => lifetime.Exit += (_, _) => Log.Flush());
+                lifetime => lifetime.Exit += (_, _) => records.Flush(Exit().Remaining));
         }
         catch (Exception ex)
         {
@@ -100,17 +100,20 @@ sealed class Program
         }
         finally
         {
-            // An ordinary quit gives the backup history a short bound to record the last saves; when the
-            // system ends the session, pending history is skipped; an already-running write can still
-            // occupy this bounded join. These are app wait bounds, not a promise of OS exit time.
-            BackupStore.Shutdown(BackupDrainBound);
+            // The owners' shutdown draws on what remains of the quit's one exit deadline. When the system
+            // ends the session, the backup history is not waited for.
+            var exit = Exit();
+            BackupStore.Shutdown(exit.SessionEnding ? TimeSpan.Zero : exit.Remaining);
             Log.Info("shutdown", new { clean });
             Log.Shutdown();
-            records.Dispose();
+            records.Close(exit.Remaining);
         }
     }
 
-    private static readonly TimeSpan BackupDrainBound = TimeSpan.FromMilliseconds(500);
+    // The deadline the quit fixed, or, when the app ends without one (a startup failure), one fixed now.
+    private static ExitDeadline? _unquitExit;
+    private static ExitDeadline Exit() =>
+        App.QuitViewModel?.Exit ?? (_unquitExit ??= new ExitDeadline(TimeProvider.System));
 
     // Avalonia configuration, don't remove; also used by visual designer.
     public static AppBuilder BuildAvaloniaApp()

@@ -95,35 +95,6 @@ public sealed class BackupStoreTests : IDisposable
     }
 
     [Fact]
-    public void BoundedShutdownRejectsLateRecordsWhileItsOwnerIsStillDraining()
-    {
-        var path = Path.Combine(_root, "config.json");
-        BackupStore.Record(path, [1]);
-        BackupStore.Flush();
-        using var entered = new ManualResetEventSlim();
-        using var release = new ManualResetEventSlim();
-        Action hold = () => { entered.Set(); release.Wait(); };
-        Post(hold);
-        var owner = (Thread)typeof(BackupStore).GetField("_owner", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
-        try
-        {
-            Assert.True(entered.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
-            BackupStore.Record(path, [2]);
-            BackupStore.Shutdown(TimeSpan.Zero);
-            BackupStore.Record(path, [3]);
-            BackupStore.Flush(); // The original second owner must publish before the assertion.
-            Assert.Equal(new byte[] { 1 }, Assert.Single(RowsFor(path)).Content);
-        }
-        finally
-        {
-            release.Set();
-            owner.Join();
-            BackupStore.Close();
-        }
-        Assert.Equal(new byte[] { 2 }, Assert.Single(RowsFor(path)).Content);
-    }
-
-    [Fact]
     public void Record_StoresContentByteIdentical_IncludingCrLfAndNonUtf8()
     {
         var path = Path.Combine(_root, "doc.json");
@@ -243,17 +214,6 @@ public sealed class BackupStoreTests : IDisposable
 
         Assert.Single(RowsFor(a));
         Assert.Single(RowsFor(b));
-    }
-
-    [Fact]
-    public void Record_WhenTheSessionIsEnding_IsSkipped()
-    {
-        var path = Path.Combine(_root, "doc.json");
-        BackupStore.Abandon();
-        BackupStore.Record(path, [1]);
-        BackupStore.Close();
-
-        Assert.False(File.Exists(StoreFile));
     }
 
     public sealed class SampleDoc

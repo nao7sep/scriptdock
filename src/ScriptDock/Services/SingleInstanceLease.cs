@@ -3,62 +3,27 @@ using System.Threading;
 
 namespace ScriptDock.Services;
 
-internal sealed class ActivationRequestRouter
-{
-    private readonly object _gate = new();
-    private Action? _handler;
-    private bool _pending;
-
-    public void Register(Action handler)
-    {
-        var invoke = false;
-        lock (_gate)
-        {
-            _handler = handler;
-            invoke = _pending;
-            _pending = false;
-        }
-        if (invoke)
-            handler();
-    }
-
-    public void Request()
-    {
-        Action? handler;
-        lock (_gate)
-        {
-            handler = _handler;
-            if (handler is null)
-                _pending = true;
-        }
-        handler?.Invoke();
-    }
-}
-
 /// <summary>Process-wide ownership of ScriptDock's state, backup, and run-log namespace.</summary>
 public sealed class SingleInstanceLease : IDisposable
 {
     private const string MutexName = "ScriptDock-4b2f6f45-33e0-4780-a42a-df1a98321dc5";
     private const string ActivationEventName = "ScriptDock-activate-4b2f6f45-33e0-4780-a42a-df1a98321dc5";
-    private static readonly object CurrentGate = new();
+
+    // The process's one lease, which the window registers its activation with.
     private static SingleInstanceLease? _current;
 
     private Mutex? _mutex;
     private readonly EventWaitHandle? _activationEvent;
     private readonly EventWaitHandle? _stopEvent;
-    private readonly Thread? _activationThread;
-    private readonly ActivationRequestRouter _activationRouter = new();
+    private Thread? _activationThread;
+    private Action? _activate;
 
     private SingleInstanceLease(Mutex mutex, EventWaitHandle? activationEvent)
     {
         _mutex = mutex;
         _activationEvent = activationEvent;
-        if (activationEvent is null)
-            return;
-
-        _stopEvent = new EventWaitHandle(false, EventResetMode.ManualReset);
-        _activationThread = new Thread(ListenForActivation) { IsBackground = true, Name = "ScriptDock activation" };
-        _activationThread.Start();
+        if (activationEvent is not null)
+            _stopEvent = new EventWaitHandle(false, EventResetMode.ManualReset);
     }
 
     public static bool TryAcquire(out SingleInstanceLease? lease) =>
@@ -93,17 +58,21 @@ public sealed class SingleInstanceLease : IDisposable
         }
 
         lease = new SingleInstanceLease(mutex, activationEvent);
-        lock (CurrentGate)
-            _current = lease;
+        _current = lease;
         return true;
     }
 
+    /// <summary>
+    /// Gives the lease its window's activation and starts listening for second launches, once. The event
+    /// stays set for a second launch that arrived earlier, so the listener answers it as soon as it starts.
+    /// </summary>
     public static void RegisterOwnerActivationHandler(Action handler)
     {
-        SingleInstanceLease? current;
-        lock (CurrentGate)
-            current = _current;
-        current?._activationRouter.Register(handler);
+        if (_current is not { _activationEvent: not null, _activationThread: null } current)
+            return;
+        current._activate = handler;
+        current._activationThread = new Thread(current.ListenForActivation) { IsBackground = true, Name = "ScriptDock activation" };
+        current._activationThread.Start();
     }
 
     private void ListenForActivation()
@@ -111,19 +80,17 @@ public sealed class SingleInstanceLease : IDisposable
         var activationEvent = _activationEvent!;
         var stopEvent = _stopEvent!;
         while (WaitHandle.WaitAny([activationEvent, stopEvent]) == 0)
-            _activationRouter.Request();
+            _activate!();
     }
 
     public void Dispose()
     {
-        lock (CurrentGate)
-        {
-            if (ReferenceEquals(_current, this))
-                _current = null;
-        }
+        if (ReferenceEquals(_current, this))
+            _current = null;
 
+        // The listener only waits on the two events and posts to the window, so it ends as soon as it sees the stop.
         _stopEvent?.Set();
-        _activationThread?.Join(TimeSpan.FromSeconds(2));
+        _activationThread?.Join();
         _activationEvent?.Dispose();
         _stopEvent?.Dispose();
 

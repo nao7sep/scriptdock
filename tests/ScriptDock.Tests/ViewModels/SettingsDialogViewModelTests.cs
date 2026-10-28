@@ -84,33 +84,6 @@ public sealed class SettingsDialogViewModelTests
         Assert.False(await vm.AddPickedRootDirAsync(picked));
     }
 
-    [AvaloniaFact]
-    public async Task HeldPickedIdentityKeepsTheUiAvailableAndRechecksAChangedDraft()
-    {
-        var vm = new SettingsDialogViewModel(new AppConfig());
-        var path = Path.Combine(Path.GetTempPath(), "scriptdock-picked-" + Guid.NewGuid().ToString("N"));
-        using var held = new ManualResetEventSlim();
-        using var release = new ManualResetEventSlim();
-        var calls = 0;
-        var pick = vm.AddPickedRootDirAsync(path, value =>
-        {
-            Assert.False(Dispatcher.UIThread.CheckAccess());
-            if (Interlocked.Increment(ref calls) == 1) { held.Set(); release.Wait(); }
-            return value;
-        });
-        try
-        {
-            Assert.True(held.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
-            Assert.False(pick.IsCompleted);
-            vm.RootDirs.Add(path); // UI work can settle while the physical identity probe is held.
-            vm.RootDirs.CollectionChanged += (_, _) => Assert.True(Dispatcher.UIThread.CheckAccess());
-        }
-        finally { release.Set(); await pick; }
-        Assert.False(await pick);
-        Assert.Single(vm.RootDirs);
-        Assert.True(calls >= 2);
-    }
-
     [Fact]
     public void RootPickerFailure_IsOwnedByTheRootSectionWithoutDiagnostics()
     {

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using ScriptDock.Models;
 using ScriptDock.Storage;
@@ -44,25 +45,25 @@ public sealed class FakeRecordReader : IRecordReader
 
     public void NextFails() => _pages.Enqueue(_ => Task.FromException<RecordsPage>(new InvalidOperationException("busy (test)")));
 
-    public Task<RecordsPage> ReadRecordsPageAsync(RecordsQuery query)
+    public Task<RecordsPage> ReadRecordsPageAsync(RecordsQuery query, CancellationToken cancellationToken = default)
     {
         PageQueries.Add(query);
         return _pages.TryDequeue(out var answer) ? answer(query) : Task.FromResult(Page);
     }
 
-    public Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id, bool nonZeroExitIsError = false)
+    public Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id, bool nonZeroExitIsError = false,
+        CancellationToken cancellationToken = default)
     {
         DetailReads.Add((kind, id));
         return DetailWithPolicy is { } withPolicy ? withPolicy(kind, id, nonZeroExitIsError) : Detail(kind, id);
     }
 
-    public async Task<bool> ReadRunOutputAsync(long id, Action<System.IO.Stream> read)
+    public async Task<bool> ReadRunOutputAsync(long id, System.IO.Stream destination)
     {
         OutputReads.Add(id);
         if (await Output(id) is not { } output)
             return false;
-        using var stream = new System.IO.MemoryStream(output, writable: false);
-        read(stream);
+        destination.Write(output);
         return true;
     }
 

@@ -16,6 +16,10 @@ public sealed class FakeTimeProvider : TimeProvider
 
     public override DateTimeOffset GetUtcNow() => _now;
 
+    // Elapsed time follows the same clock, so a deadline measured from a timestamp moves with Advance.
+    public override long GetTimestamp() => _now.UtcTicks;
+    public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
     public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
     {
         var timer = new FakeTimer(this, callback, state);

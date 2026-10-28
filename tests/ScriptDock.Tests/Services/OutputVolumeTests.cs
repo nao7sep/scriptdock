@@ -351,7 +351,7 @@ public sealed class OutputVolumeTests : IDisposable
         await records.AddRunAsync(run);
         var big = Enumerable.Range(0, RecordStore.CopyBufferBytes * 3 + 7).Select(i => (byte)('a' + i % 26)).ToArray();
         await records.AddRunOutputAsync(run, big);
-        var id = (await records.ReadRecordsPageAsync(new RecordsQuery(null, RecordKind.Run, null, "", null))).Records.Single(summary => summary.Kind == RecordKind.Run).Id;
+        var id = (await records.ReadRecordsPageAsync(new RecordsQuery(null, RecordKind.Run, null, "", null), cancellationToken: TestContext.Current.CancellationToken)).Records.Single(summary => summary.Kind == RecordKind.Run).Id;
         Assert.Equal(big, await records.ReadRunOutputAsync(id));
 
         await Assert.ThrowsAnyAsync<Exception>(() => records.AddRunOutputAsync(run, new MemoryStream(new byte[10]), 20));
@@ -372,7 +372,7 @@ public sealed class OutputVolumeTests : IDisposable
         {
             session = records.Session;
             await records.AddRunAsync(new RunRecord(session, 1, DateTimeOffset.UtcNow, "/x/a.command", null, null, file));
-            id = (await records.ReadRecordsPageAsync(new RecordsQuery(null, RecordKind.Run, null, "", null))).Records.Single().Id;
+            id = (await records.ReadRecordsPageAsync(new RecordsQuery(null, RecordKind.Run, null, "", null), cancellationToken: TestContext.Current.CancellationToken)).Records.Single().Id;
         }
 
         using var connection = new SqliteConnection($"Data Source={Path.Combine(root, "records.sqlite3")}");
@@ -404,13 +404,13 @@ public sealed class OutputVolumeTests : IDisposable
         File.WriteAllText(file, "output");
         using var records = new RecordStore(root, DateTimeOffset.UtcNow);
         await records.AddRunAsync(new RunRecord(records.Session, 1, DateTimeOffset.UtcNow, "/x/a.command", null, null, file));
-        var id = (await records.ReadRecordsPageAsync(new RecordsQuery(null, RecordKind.Run, null, "", null))).Records.Single().Id;
+        var id = (await records.ReadRecordsPageAsync(new RecordsQuery(null, RecordKind.Run, null, "", null), cancellationToken: TestContext.Current.CancellationToken)).Records.Single().Id;
         var mode = File.GetUnixFileMode(file);
         try
         {
             File.SetUnixFileMode(file, UnixFileMode.UserWrite);
-            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => records.ReadRecordDetailAsync(RecordKind.Run, id));
-            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => records.ReadRunOutputAsync(id, _ => Assert.Fail("A denied file has no stream")));
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => records.ReadRecordDetailAsync(RecordKind.Run, id, cancellationToken: TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => records.ReadRunOutputAsync(id, Stream.Null));
         }
         finally { File.SetUnixFileMode(file, mode); }
     }

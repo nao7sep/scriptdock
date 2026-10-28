@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using ScriptDock.Models;
 
@@ -14,17 +15,18 @@ public interface IRecordReader
     /// <summary>This process launch, by its start time.</summary>
     string Session { get; }
 
-    /// <summary>A filtered page of summaries, newest first.</summary>
-    Task<RecordsPage> ReadRecordsPageAsync(RecordsQuery query);
+    /// <summary>A filtered page of summaries, newest first. Cancelling stops a read that is no longer wanted.</summary>
+    Task<RecordsPage> ReadRecordsPageAsync(RecordsQuery query, CancellationToken cancellationToken = default);
 
     /// <summary>One record whole, or null when there is no such record. A run's level follows
     /// <paramref name="nonZeroExitIsError"/> as a page's does (<see cref="RecordsQuery.NonZeroExitIsError"/>).</summary>
-    Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id, bool nonZeroExitIsError = false);
+    Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id, bool nonZeroExitIsError = false,
+        CancellationToken cancellationToken = default);
 
-    /// <summary>Hands <paramref name="read"/> a stream over a run's whole output, beyond what its detail shows:
-    /// the stored record, or the run's own file when the output was too large to store. Read in pieces; the
-    /// stream is valid only during the call. False when the run has neither.</summary>
-    Task<bool> ReadRunOutputAsync(long id, Action<System.IO.Stream> read);
+    /// <summary>Copies a run's whole output, beyond what its detail shows, into <paramref name="destination"/>,
+    /// in pieces: the stored record, or the run's own file when the output was too large to store. False when
+    /// the run has neither.</summary>
+    Task<bool> ReadRunOutputAsync(long id, System.IO.Stream destination);
 
     /// <summary>Every launch that has a record the window lists.</summary>
     Task<RecordSources> ReadRecordSourcesAsync();

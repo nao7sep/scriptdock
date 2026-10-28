@@ -29,19 +29,15 @@ public sealed class ProcessRunner : IProcessRunner
     // process the run left behind is still writing is not cut off.
     internal static readonly TimeSpan OutputQuietPeriod = TimeSpan.FromMinutes(1);
 
+    // Every command runs on the interface thread, where the run list lives; the operating system's exit
+    // callback is posted there too. Each run is its own: one script's slow stop never holds up another's.
     private readonly List<ScriptProcess> _processes = new();
-    private readonly object _gate = new();
+    private readonly SynchronizationContext? _owner = SynchronizationContext.Current;
     private readonly string _runsDirectory;
     private readonly TimeSpan _terminationGrace;
     private readonly Action<Process> _killProcess;
-    private int _nextId;
-    private bool _launchesSealed;
-    private readonly HashSet<string> _admissions = new(PathIdentity.Comparer);
-    private readonly List<Task<ScriptProcess>> _launches = new();
-    private readonly Dictionary<ScriptProcess, Task<bool>> _terminations = new();
-    private readonly Action<ScriptProcess> _startProcess;
-    private readonly Func<ScriptProcess, Task<bool>> _terminateProcess;
     private readonly Action<ProcessStartInfo>? _configureStartInfo;
+    private int _nextId;
 
     /// <param name="runsDirectory">Where per-run log files are written; defaults to
     /// <see cref="RunLog.DefaultDirectory"/>. Injected so tests stay isolated.</param>
@@ -49,97 +45,56 @@ public sealed class ProcessRunner : IProcessRunner
         : this(runsDirectory, DefaultTerminationGrace, process => process.Kill(entireProcessTree: true)) { }
 
     internal ProcessRunner(string? runsDirectory, TimeSpan terminationGrace, Action<Process> killProcess,
-        Action<ScriptProcess>? startProcess = null, Func<ScriptProcess, Task<bool>>? terminateProcess = null,
         Action<ProcessStartInfo>? configureStartInfo = null)
     {
         _runsDirectory = runsDirectory ?? RunLog.DefaultDirectory;
         _terminationGrace = terminationGrace;
         _killProcess = killProcess;
-        _startProcess = startProcess ?? LaunchProcess;
-        _terminateProcess = terminateProcess ?? TerminateProcessAsync;
         _configureStartInfo = configureStartInfo;
     }
 
     /// <summary>Raised when a process is started, restarted, or dismissed.</summary>
     public event EventHandler? ProcessesChanged;
 
-    /// <summary>Raised once when a run ends, on whichever thread observed the end.</summary>
+    /// <summary>Raised once when a run ends, on the runner's thread.</summary>
     public event EventHandler<ScriptProcess>? RunEnded;
 
-    public IReadOnlyList<ScriptProcess> Active
-    {
-        get { lock (_gate) return _processes.ToList(); }
-    }
-
-    public void SealLaunches()
-    {
-        lock (_gate)
-            _launchesSealed = true;
-    }
+    public IReadOnlyList<ScriptProcess> Active => _processes.ToList();
 
     public async Task<ScriptProcess?> StartAsync(string scriptPath)
     {
-        var key = await Task.Run(() => PathIdentity.Key(scriptPath)).ConfigureAwait(false);
-        lock (_gate)
-        {
-            if (_launchesSealed || _processes.Any(p => PathIdentity.Comparer.Equals(p.ScriptKey, key) && p.State == RunState.Running)
-                || !_admissions.Add(key))
-                return null;
-        }
+        var key = await Task.Run(() => PathIdentity.Key(scriptPath));
+        return Launch(scriptPath, key);
+    }
+
+    // Null when the script already runs: a second Run of it while the first is starting finds it running.
+    private ScriptProcess? Launch(string scriptPath, string key)
+    {
+        if (_processes.Any(p => PathIdentity.Comparer.Equals(p.ScriptKey, key) && p.State == RunState.Running))
+            return null;
+
+        var handle = new ScriptProcess(++_nextId, scriptPath, DateTimeOffset.UtcNow, key);
+        handle.StateChanged += (_, _) => RunEnded?.Invoke(this, handle);
         try
         {
-            return await LaunchAsync(scriptPath, key).ConfigureAwait(false);
+            LaunchProcess(handle);
         }
-        finally
+        catch
         {
-            lock (_gate)
-                _admissions.Remove(key);
+            handle.Dispose();
+            throw;
         }
-    }
 
-    private Task<ScriptProcess> LaunchAsync(string scriptPath, string key)
-    {
-        lock (_gate)
+        var stale = _processes.Where(p => p.State != RunState.Running &&
+            PathIdentity.Comparer.Equals(p.ScriptKey, handle.ScriptKey)).ToList();
+        foreach (var process in stale)
         {
-            if (_launchesSealed)
-                throw new InvalidOperationException("ScriptDock is stopping.");
-            var launch = Task.Run(() =>
-            {
-                var handle = new ScriptProcess(Interlocked.Increment(ref _nextId), scriptPath, DateTimeOffset.UtcNow, key);
-                WatchEnd(handle);
-                try
-                {
-                    _startProcess(handle);
-                }
-                catch
-                {
-                    handle.Dispose();
-                    throw;
-                }
-
-                List<ScriptProcess> stale;
-                lock (_gate)
-                {
-                    stale = _processes.Where(p => p.State != RunState.Running &&
-                        PathIdentity.Comparer.Equals(p.ScriptKey, handle.ScriptKey)).ToList();
-                    foreach (var process in stale)
-                        _processes.Remove(process);
-                    _processes.Add(handle);
-                }
-                foreach (var process in stale)
-                    process.Dispose();
-                ProcessesChanged?.Invoke(this, EventArgs.Empty);
-                return handle;
-            });
-            _launches.Add(launch);
-            return CompleteLaunchAsync(launch);
+            _processes.Remove(process);
+            process.Dispose();
         }
-    }
-
-    private async Task<ScriptProcess> CompleteLaunchAsync(Task<ScriptProcess> launch)
-    {
-        try { return await launch.ConfigureAwait(false); }
-        finally { lock (_gate) _launches.Remove(launch); }
+        _processes.Add(handle);
+        ProcessesChanged?.Invoke(this, EventArgs.Empty);
+        return handle;
     }
 
     private void LaunchProcess(ScriptProcess handle)
@@ -161,31 +116,20 @@ public sealed class ProcessRunner : IProcessRunner
             startInfo.ArgumentList.Add(arg);
         _configureStartInfo?.Invoke(startInfo);
         var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
-        process.Exited += (_, _) => handle.Complete();
+        // The operating system reports the end on a thread of its own; the run's state changes on the runner's.
+        process.Exited += (_, _) =>
+        {
+            if (_owner is null) handle.Complete();
+            else _owner.Post(_ => handle.Complete(), null);
+        };
         handle.Process = process;
         process.Start();
         Log.Info("run: started", new { id = handle.Id, script = scriptPath, log = logPath });
     }
 
-    public Task<bool> TerminateAsync(ScriptProcess handle)
-    {
-        lock (_gate)
-        {
-            if (_terminations.TryGetValue(handle, out var pending))
-                return pending;
-            var termination = Task.Run(() => _terminateProcess(handle));
-            _terminations.Add(handle, termination);
-            return CompleteTerminationAsync(handle, termination);
-        }
-    }
-
-    private async Task<bool> CompleteTerminationAsync(ScriptProcess handle, Task<bool> termination)
-    {
-        try { return await termination.ConfigureAwait(false); }
-        finally { lock (_gate) _terminations.Remove(handle); }
-    }
-
-    private async Task<bool> TerminateProcessAsync(ScriptProcess handle)
+    /// <summary>Kills the run's process tree at once and waits up to the termination grace for it to end.
+    /// False when it could not be killed or outlived the grace, and the run stays Running and owned.</summary>
+    public async Task<bool> TerminateAsync(ScriptProcess handle)
     {
         var process = handle.Process;
         if (process is null)
@@ -205,64 +149,42 @@ public sealed class ProcessRunner : IProcessRunner
             return false;
         }
 
-        if (!handle.BeginTerminationAttempt())
-            return handle.State != RunState.Running;
+        handle.StopRequested = true;
         try
         {
             _killProcess(process);
         }
         catch (Exception ex)
         {
-            handle.CancelTerminationAttempt();
+            handle.StopRequested = false;
             Log.Warn("run: terminate failed", ex, new { id = handle.Id });
             return false;
         }
 
-        var exited = await handle.WaitForExitAsync(_terminationGrace).ConfigureAwait(false);
-        if (!exited)
+        if (!await handle.WaitForExitAsync(_terminationGrace))
         {
-            // The process is still owned and usable. A failed attempt must not poison its stdin
-            // channel or make a later natural exit look like a confirmed ScriptDock termination.
-            handle.CancelTerminationAttempt();
+            // The process is still owned and usable; a later natural exit is not a ScriptDock termination.
+            handle.StopRequested = false;
             Log.Warn("run: termination grace elapsed; retaining ownership", new { id = handle.Id, script = handle.ScriptPath });
             return false;
         }
 
-        handle.ConfirmTerminationAttempt();
         Log.Info("run: terminated", new { id = handle.Id, script = handle.ScriptPath });
         return true;
     }
 
     /// <summary>Stops the process and launches the same script afresh — the restart primitive. The
-    /// old handle is terminated and dismissed; the new one is returned. The wait for the old tree to
-    /// die is asynchronous, so a restart never blocks the UI thread even when a child is slow to exit.</summary>
+    /// old handle is terminated and dismissed; the new one is returned. Null when the old run did not
+    /// stop, or when it stopped but the script already runs again or the run was dismissed meanwhile.</summary>
     public async Task<ScriptProcess?> RestartAsync(ScriptProcess handle)
     {
-        lock (_gate)
-        {
-            if (_launchesSealed || !_processes.Contains(handle) || !_admissions.Add(handle.ScriptKey))
-                return null;
-        }
-        try
-        {
-            if (!await TerminateAsync(handle).ConfigureAwait(false))
-                return null;
-            lock (_gate)
-            {
-                if (_launchesSealed)
-                    return null;
-            }
-            Dismiss(handle);
-            // LaunchAsync repeats the seal check under the gate that captures pending launches.
-            var started = await LaunchAsync(handle.ScriptPath, handle.ScriptKey).ConfigureAwait(false);
+        if (!_processes.Contains(handle) || !await TerminateAsync(handle) || !_processes.Contains(handle))
+            return null;
+        Dismiss(handle);
+        var started = Launch(handle.ScriptPath, handle.ScriptKey);
+        if (started is not null)
             Log.Info("run: restarted", new { oldId = handle.Id, newId = started.Id, script = handle.ScriptPath });
-            return started;
-        }
-        finally
-        {
-            lock (_gate)
-                _admissions.Remove(handle.ScriptKey);
-        }
+        return started;
     }
 
     /// <summary>Removes a (typically finished) process from the active list and releases its OS
@@ -270,64 +192,27 @@ public sealed class ProcessRunner : IProcessRunner
     /// is still being shown elsewhere reads correctly.</summary>
     public void Dismiss(ScriptProcess handle)
     {
-        bool removed;
-        lock (_gate)
-            removed = _processes.Remove(handle);
-
-        if (removed)
-        {
-            handle.Dispose();
-            ProcessesChanged?.Invoke(this, EventArgs.Empty);
-        }
+        if (!_processes.Remove(handle))
+            return;
+        handle.Dispose();
+        ProcessesChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>On quit: terminates every running script's process tree and waits for each to end, all
-    /// concurrently and off the calling thread (the tree kill is synchronous), each within the
-    /// termination grace. A tree still alive after it is logged and the quit proceeds.</summary>
+    /// <summary>On quit: kills every running script's process tree in turn, then waits for them to end,
+    /// each within the termination grace. A tree still alive after it is logged and the quit proceeds.</summary>
     public async Task StopAllAsync()
     {
-        Task<ScriptProcess>[] launches;
-        ScriptProcess[] running;
-        lock (_gate)
-        {
-            _launchesSealed = true;
-            launches = _launches.ToArray();
-            running = _processes.Where(p => p.State == RunState.Running).ToArray();
-        }
-        // Stop published runs immediately; a stalled native launch must not hold up their kills.
-        var work = running.Select(StopOwnedAsync).Concat(launches.Select(StopLaunchAsync));
-        var results = await Task.WhenAll(work).ConfigureAwait(false);
-        var alive = results.Where(result => !result.Stopped).Select(result => result.Id).Distinct().ToList();
+        var running = _processes.Where(p => p.State == RunState.Running).ToList();
+        if (running.Count == 0)
+            return;
+        // Each call kills its tree before it first waits, so every tree is killed before any wait.
+        var stops = running.Select(handle => (handle.Id, Stopped: TerminateAsync(handle))).ToList();
+        await Task.WhenAll(stops.Select(stop => stop.Stopped));
+        var alive = stops.Where(stop => !stop.Stopped.Result).Select(stop => stop.Id).ToList();
         if (alive.Count > 0)
-            Log.Warn("run: process trees still alive after the quit bound; quitting anyway", new { ids = alive });
-        else if (results.Any(result => result.Id != 0))
-            Log.Info("run: stopped every running script on quit", new { count = results.Where(result => result.Id != 0).Select(result => result.Id).Distinct().Count() });
-    }
-
-    private async Task<(int Id, bool Stopped)> StopOwnedAsync(ScriptProcess handle) =>
-        (handle.Id, await TerminateAsync(handle).ConfigureAwait(false));
-
-    private async Task<(int Id, bool Stopped)> StopLaunchAsync(Task<ScriptProcess> launch)
-    {
-        ScriptProcess handle;
-        try { handle = await launch.ConfigureAwait(false); }
-        catch { return (0, true); } // the launch's caller owns its failure presentation
-        return await StopOwnedAsync(handle).ConfigureAwait(false);
-    }
-
-    /// <summary>Backstop for a missed <c>Exited</c> event: finalise any process the OS has ended
-    /// whose state still reads Running. Read-only on the handles; cheap to call on a timer.</summary>
-    public void ReconcileExited()
-    {
-        foreach (var handle in Active)
-        {
-            try
-            {
-                if (handle.State == RunState.Running && handle.Process is { HasExited: true })
-                    handle.Complete();
-            }
-            catch { /* handle unavailable; nothing to reconcile */ }
-        }
+            Log.Warn("run: process trees still alive after the termination grace; quitting anyway", new { ids = alive });
+        else
+            Log.Info("run: stopped every running script on quit", new { count = stops.Count });
     }
 
     /// <summary>
@@ -398,10 +283,6 @@ public sealed class ProcessRunner : IProcessRunner
         if (imported > 0)
             Log.Info("run output: imported", new { imported, candidates = candidates.Count });
     }
-
-    // A handle's state changes once, when it reaches its terminal state.
-    private void WatchEnd(ScriptProcess handle) =>
-        handle.StateChanged += (_, _) => RunEnded?.Invoke(this, handle);
 
     private List<string> FindQuietOutput(HashSet<string> held, DateTime quietSince)
     {

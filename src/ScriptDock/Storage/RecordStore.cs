@@ -19,19 +19,16 @@ namespace ScriptDock.Storage;
 /// <c>records.sqlite3</c> under the storage root: log lines, runs, run ends, run output, dismissals from the
 /// Recent list and scan reports, each carrying
 /// the session it came from, per the data-lifecycle-conventions' Records section and the logging-conventions.
-/// One thread serializes writes and Recent reads; the Records window has its own reader thread, so its
-/// reads never block the writer. A write that fails is appended to this session's plain text file under <c>logs/</c>,
+/// One thread serializes the writes and every read, the Records window's included, so each read sees the
+/// writes queued before it. A write that fails is appended to this session's plain text file under <c>logs/</c>,
 /// then to the console. The Records window's reads are <see cref="RecordQueries"/>.
 /// </summary>
 public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
 {
     public const string FileName = "records.sqlite3";
 
+    // How long a crash hook waits for the lines queued before it; the exit passes what remains of its deadline.
     private static readonly TimeSpan FlushWait = TimeSpan.FromSeconds(2);
-    // The close runs after the window is gone while the single-instance lock is still held, so it stays
-    // short: a quick relaunch should not find ScriptDock "already running". What it cuts off is diagnostics.
-    private static readonly TimeSpan CloseWait = TimeSpan.FromSeconds(1);
-    private static readonly TimeSpan WindowReadCloseWait = TimeSpan.FromMilliseconds(250);
 
     // Every table carries the session (one process launch, by its start time) and the time of its record.
     // A run is named by its session and in-session run id; its output and the log lines about it carry the
@@ -109,12 +106,6 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
     private readonly Thread _owner;
     private readonly SqliteConnection? _connection;
     private readonly object _fallbackGate = new();
-
-    // The Records window's reader, started on its first read.
-    private readonly object _windowGate = new();
-    private BlockingCollection<Action>? _windowQueue;
-    private Thread? _windowReader;
-    private SqliteConnection? _windowConnection;
     private int _disposed;
 
     /// <summary>Opens (or creates) the database in <paramref name="directory"/> for the session that started
@@ -257,20 +248,21 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
             return found;
         });
 
-    // The Records window's reads run on their own thread over a read-only connection, so a long search
-    // never holds up the writes, the Recent list or the quit's flush queued behind it; WAL lets a reader
-    // and the writer work side by side.
-    public Task<RecordsPage> ReadRecordsPageAsync(RecordsQuery query) =>
-        WindowRead(connection => RecordQueries.ReadPage(connection, query));
+    // The Records window's reads take their turn with the writes. No measurement has shown a search a user
+    // would notice behind them; one that does would earn a reader of its own. A read its caller cancels is
+    // skipped when its turn comes, or interrupted inside the database while it runs.
+    public Task<RecordsPage> ReadRecordsPageAsync(RecordsQuery query, CancellationToken cancellationToken = default) =>
+        Read(connection => RecordQueries.ReadPage(connection, query), cancellationToken);
 
-    public Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id, bool nonZeroExitIsError = false) =>
-        WindowRead(connection => RecordQueries.ReadDetail(connection, kind, id, nonZeroExitIsError));
+    public Task<RecordDetail?> ReadRecordDetailAsync(RecordKind kind, long id, bool nonZeroExitIsError = false,
+        CancellationToken cancellationToken = default) =>
+        Read(connection => RecordQueries.ReadDetail(connection, kind, id, nonZeroExitIsError), cancellationToken);
 
-    public Task<bool> ReadRunOutputAsync(long id, Action<Stream> read) =>
-        WindowRead(connection => RecordQueries.ReadRunOutput(connection, id, read));
+    public Task<bool> ReadRunOutputAsync(long id, Stream destination) =>
+        Read(connection => RecordQueries.ReadRunOutput(connection, id, output => output.CopyTo(destination, CopyBufferBytes)));
 
     public Task<RecordSources> ReadRecordSourcesAsync() =>
-        WindowRead(connection => new RecordSources(Session,
+        Read(connection => new RecordSources(Session,
             RecordQueries.ReadSessions(connection).Append(Session).Distinct().OrderDescending(StringComparer.Ordinal).ToList()));
 
     /// <summary>The largest output one record can hold, as the database engine allows it.</summary>
@@ -328,7 +320,10 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
     internal const int CopyBufferBytes = 1024 * 1024;
 
     /// <summary>Waits, within a bound, until everything queued so far is written.</summary>
-    public void Flush()
+    public void Flush() => Flush(FlushWait);
+
+    /// <summary>Waits up to <paramref name="bound"/> until everything queued so far is written.</summary>
+    public void Flush(TimeSpan bound)
     {
         if (Thread.CurrentThread == _owner)
             return;
@@ -336,89 +331,23 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
         // Not disposed: if the wait times out, the owner still sets it later.
         var drained = new ManualResetEventSlim();
         if (TryQueue(drained.Set))
-            drained.Wait(FlushWait);
+            drained.Wait(bound);
     }
 
-    /// <summary>Writes what is queued, within a bound, and closes the database. Later entries go to the
-    /// fallback file.</summary>
-    public void Dispose()
+    /// <summary>Writes what is queued, waiting up to <paramref name="bound"/>, what remains of the exit
+    /// deadline, and closes the database. Later entries go to the fallback file.</summary>
+    public void Close(TimeSpan bound)
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 1)
             return;
 
         _queue.CompleteAdding();
-        if (_owner.Join(CloseWait))
+        if (_owner.Join(bound))
             _connection?.Dispose();
-
-        lock (_windowGate)
-        {
-            _windowQueue?.CompleteAdding();
-            if (_windowReader?.Join(WindowReadCloseWait) == true)
-                _windowConnection?.Dispose();
-        }
     }
 
-    private Task<T> WindowRead<T>(Func<SqliteConnection, T> read)
-    {
-        var done = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        // A read still sees every write queued before it; the writer never waits for a read.
-        var writesBefore = new ManualResetEventSlim();
-        if (!TryQueue(writesBefore.Set))
-            writesBefore.Set();
-
-        void Run()
-        {
-            try
-            {
-                writesBefore.Wait();
-                writesBefore.Dispose();
-                _windowConnection ??= OpenWindowConnection();
-                done.SetResult(read(_windowConnection));
-            }
-            catch (Exception ex)
-            {
-                done.SetException(ex);
-            }
-        }
-
-        lock (_windowGate)
-        {
-            if (Volatile.Read(ref _disposed) == 1)
-            {
-                done.SetException(new ObjectDisposedException(nameof(RecordStore)));
-                return done.Task;
-            }
-            if (_windowQueue is null)
-            {
-                var queue = new BlockingCollection<Action>();
-                _windowQueue = queue;
-                _windowReader = new Thread(() =>
-                {
-                    foreach (var operation in queue.GetConsumingEnumerable())
-                        operation();
-                }) { IsBackground = true, Name = "records window" };
-                _windowReader.Start();
-            }
-            _windowQueue.Add(Run);
-        }
-        return done.Task;
-    }
-
-    private SqliteConnection OpenWindowConnection()
-    {
-        if (_connection is null)
-            throw new InvalidOperationException("The records database is not open.");
-
-        var connection = new SqliteConnection(new SqliteConnectionStringBuilder
-        {
-            DataSource = FilePath,
-            Mode = SqliteOpenMode.ReadOnly,
-        }.ToString());
-        connection.Open();
-        Execute(connection, "PRAGMA busy_timeout = 1000;");
-        return connection;
-    }
+    /// <summary>Writes everything queued and closes the database.</summary>
+    public void Dispose() => Close(Timeout.InfiniteTimeSpan);
 
     private void Own()
     {
@@ -457,7 +386,8 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
         }, fallbackLine, stores: true);
 
     // A read writes nothing, so it keeps no fallback line and signals nothing.
-    private Task<T> Read<T>(Func<SqliteConnection, T> read) => Enqueue(read, fallbackLine: null, stores: false);
+    private Task<T> Read<T>(Func<SqliteConnection, T> read, CancellationToken cancellationToken = default) =>
+        Enqueue(read, fallbackLine: null, stores: false, cancellationToken);
 
     private void SignalStored()
     {
@@ -472,16 +402,33 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
         }
     }
 
-    private Task<T> Enqueue<T>(Func<SqliteConnection, T> work, Func<string>? fallbackLine, bool stores)
+    private Task<T> Enqueue<T>(Func<SqliteConnection, T> work, Func<string>? fallbackLine, bool stores,
+        CancellationToken cancellationToken = default)
     {
         var done = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         void Run()
         {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                done.SetCanceled(cancellationToken);
+                return;
+            }
+
             T result;
             try
             {
-                result = work(_connection ?? throw new InvalidOperationException("The records database is not open."));
+                var connection = _connection ?? throw new InvalidOperationException("The records database is not open.");
+                // Disposed before the next operation runs, and waits for an interrupt already under way.
+                using var interrupt = cancellationToken.CanBeCanceled
+                    ? cancellationToken.Register(() => SQLitePCL.raw.sqlite3_interrupt(connection.Handle))
+                    : default;
+                result = work(connection);
+            }
+            catch (SqliteException) when (cancellationToken.IsCancellationRequested)
+            {
+                done.SetCanceled(cancellationToken);
+                return;
             }
             catch (Exception ex)
             {

@@ -47,15 +47,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // Path identities for the interface thread; scans refresh them off it.
     private readonly PathKeyCache _keys = new();
 
-    // The "new" flags Run ended while the latest scan was saving its known paths; that scan's flags
-    // leave them ended.
-    private HashSet<string> _flagsEndedDuringScan = new(PathIdentity.Comparer);
-
     // The Recent list as read from the run and dismissal records, kept current in memory as each run or
-    // dismissal is recorded. The version moves with every such change, so a read that a change overtook
-    // is read again.
+    // dismissal is recorded. A run or dismissal changes it only after the startup read has applied, so the
+    // read never replaces a change made while it ran.
     private List<RecentRun> _recent = [];
-    private int _recentVersion;
+    private Task _recentLoad = Task.CompletedTask;
 
     private readonly List<ScriptProcess> _subscribed = [];
     private DispatcherTimer? _outputTimer;
@@ -66,19 +62,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly CancellationTokenSource _outputImportCts = new();
     private Task _outputImport = Task.CompletedTask;
 
-    // Cancels the in-flight scan when a newer scan supersedes it or the window closes, so a scan over
-    // a slow/unresponsive root can never strand IsScanning (and thus the Rescan command) forever.
+    // The scan in flight, cancelled when a newer scan supersedes it, the scanned scope changes or the quit
+    // begins. Whoever cancels it also ends IsScanning, so a cancelled scan never touches it.
     private CancellationTokenSource? _scanCts;
 
     /// <summary>How long the Scripts pane waits after the main window comes back to the front before it
     /// rescans, so a burst of activations makes one scan.</summary>
     public static readonly TimeSpan ActivationRescanDelay = TimeSpan.FromMilliseconds(500);
 
-    // Activation rescans start once the first scan has run and stop when the window shuts down. The
-    // version moves with each activation, so only the latest one's wait ends in a scan.
+    // Activation rescans start once the first scan has run and stop when the quit begins. Each activation
+    // restarts the one timer, so a burst of activations ends in one scan.
     private bool _activationRescans;
     private ITimer? _activationRescanTimer;
-    private int _activationRescanVersion;
 
     /// <summary>The latest activation rescan, for tests to await.</summary>
     internal Task ActivationScan { get; private set; } = Task.CompletedTask;
@@ -145,8 +140,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly Dictionary<string, List<ProcessActionErrorEntry>> _processActionErrors =
         new(PathIdentity.Comparer);
     private DispatcherTimer? _catalogResultTimer;
-    private readonly HashSet<string> _scriptActions = new(PathIdentity.Comparer);
-    private bool _quitting;
+    // Cancelled when the quit is committed (BeginShutdown).
+    private readonly CancellationTokenSource _quit = new();
+    private bool IsQuitting => _quit.IsCancellationRequested;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ToggleHiddenLabel))]
@@ -282,7 +278,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         await LoadRecentAsync();
         RebuildRecent();
         await ScanAsync(background: false);
-        _activationRescans = !_quitting;
+        _activationRescans = !IsQuitting;
     }
 
     /// <summary>
@@ -292,22 +288,19 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// </summary>
     public void OnWindowActivated()
     {
-        if (!_activationRescans)
+        if (!_activationRescans || IsQuitting)
             return;
 
-        var version = ++_activationRescanVersion;
-        _activationRescanTimer?.Dispose();
-        _activationRescanTimer = Time.CreateTimer(
-            _ => Dispatcher.UIThread.Post(() => RescanAfterActivation(version)),
-            null, ActivationRescanDelay, Timeout.InfiniteTimeSpan);
+        _activationRescanTimer ??= Time.CreateTimer(
+            _ => Dispatcher.UIThread.Post(RescanAfterActivation),
+            null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        _activationRescanTimer.Change(ActivationRescanDelay, Timeout.InfiniteTimeSpan);
     }
 
-    private void RescanAfterActivation(int version)
+    private void RescanAfterActivation()
     {
-        if (version != _activationRescanVersion || !_activationRescans)
+        if (!_activationRescans || IsQuitting)
             return;
-        _activationRescanTimer?.Dispose();
-        _activationRescanTimer = null;
 
         // Run beside the Rescan command rather than through it, so Rescan and Cmd+R stay available and a
         // press supersedes this scan with a full one.
@@ -315,20 +308,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             ActivationScan = ScanAsync(background: true);
     }
 
-    internal async Task LoadRecentAsync()
+    internal Task LoadRecentAsync() => _recentLoad = ReadRecentAsync();
+
+    private async Task ReadRecentAsync()
     {
         try
         {
-            int version;
-            IReadOnlyList<RecentRun> recent;
-            IReadOnlyDictionary<string, string> prepared;
-            do
-            {
-                version = _recentVersion;
-                recent = await _records.ReadRecentAsync();
-                prepared = await Task.Run(() => _keys.Prepare(recent.Select(run => run.Path)));
-            }
-            while (version != _recentVersion);
+            var recent = await _records.ReadRecentAsync();
+            var prepared = await Task.Run(() => _keys.Prepare(recent.Select(run => run.Path)));
 
             _keys.Seed(prepared);
             _recent = recent.ToList();
@@ -340,13 +327,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             ReportOperationalError("recent", Message.Of("guard.refresh"));
         }
     }
-
-    // Best-effort app wait budget. Native delivery and the OS's actual deadline are qualification
-    // boundaries; these waits never promise completion or cancellation of physical work at expiry.
-    internal static readonly TimeSpan QuitSettingsWriteBound = TimeSpan.FromSeconds(1);
-    internal static readonly TimeSpan QuitStateSaveBound = TimeSpan.FromMilliseconds(500);
-    internal static readonly TimeSpan QuitStopScriptsBound = TimeSpan.FromSeconds(1);
-    internal static readonly TimeSpan QuitOutputImportBound = TimeSpan.FromMilliseconds(250);
 
     // One logical settings owner: each captured intent builds on the preceding successful adoption.
     // The tail includes publication and live adoption, not only the store's file write.
@@ -377,38 +357,39 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         while (!ReferenceEquals(write, _configWrite));
     }
 
+    /// <summary>The quit under way: its one exit deadline, fixed when the quit began. Null before any quit.</summary>
+    internal ExitDeadline? Exit { get; private set; }
+
+    private TimeSpan QuitTimeLeft => Exit?.Remaining ?? ExitDeadline.Length;
+
+    /// <summary>A quit, or a new round of one after Retry, begins: its exit deadline starts now.</summary>
+    public void BeginQuit() => Exit = new ExitDeadline(Time);
+
     /// <summary>
     /// Whether the user's own settings are safe for a quit. A settings or hidden-list change is adopted
     /// only once it is saved, and a failure is shown where it was made, so the one thing a quit can cut
-    /// off is such a write still running; this waits for it within its bound. With
-    /// <paramref name="retry"/> it saves that change again first. False when the change did not land: its
-    /// write failed, or was still running at the bound.
+    /// off is such a write still running; this waits for the settings owner's current change within the
+    /// exit deadline. With <paramref name="retry"/> it saves that change again first. False when the change
+    /// did not land: its write failed, or had not ended by the deadline.
     /// </summary>
-    /// <summary>True when the last <see cref="SettingsSavedForQuitAsync"/> returned false because the write
-    /// was still running at its bound: its outcome is unknown, not failed.</summary>
-    public bool SettingsStillSavingAtQuit { get; private set; }
-
     public async Task<bool> SettingsSavedForQuitAsync(bool retry = false)
     {
-        SettingsStillSavingAtQuit = false;
         var write = _configWrite;
         if (!retry && write.IsCompleted)
             return true; // landed, or failed before the quit and was reported where the change was made
 
         try
         {
-            // A timed-out write still owns its intent. Retry waits for it instead of duplicating it;
-            // only a settled failure submits the same intent again.
+            // A write still running owns its intent. Retry waits for it instead of duplicating it; only a
+            // settled failure submits the same intent again.
             if (retry && write.IsFaulted && _retryConfigChange is { } change)
                 _ = ChangeConfigAsync(change);
-            await WaitForConfigChangesAsync().WaitAsync(QuitSettingsWriteBound, Time);
+            await WaitForConfigChangesAsync().WaitAsync(QuitTimeLeft, Time);
             return true;
         }
         catch (TimeoutException)
         {
-            Log.Warn("quit: the settings change was still being saved at its bound",
-                new { boundMs = QuitSettingsWriteBound.TotalMilliseconds });
-            SettingsStillSavingAtQuit = true;
+            Log.Warn("quit: the settings change had not been saved by the exit deadline");
             return false;
         }
         catch (Exception ex)
@@ -420,13 +401,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     /// <summary>
     /// The quit's view-state save: the pane sizes with the window placement and the rest of the view
-    /// state, within its bound. View state never holds a quit, so a failure is logged only.
+    /// state, within the exit deadline. View state never holds a quit, so a failure is logged only.
     /// </summary>
     public Task PersistPaneSizesAsync(double recentWidth, double consoleHeight)
     {
         _state.RecentPaneWidth = recentWidth;
         _state.ConsoleHeight = consoleHeight;
-        return QuitStepAsync("view state save", QuitStateSaveBound, () => _stateStore.SaveAsync(_state));
+        return QuitStepAsync("view state save", () => _stateStore.SaveAsync(_state));
     }
 
     public void CaptureWindowPlacement(int x, int y, double width, double height, bool maximized)
@@ -438,17 +419,30 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _state.WindowMaximized = maximized;
     }
 
+    /// <summary>Cancelled once the quit is committed: from then on nothing new starts or is shown.</summary>
+    public CancellationToken Quitting => _quit.Token;
+
     public void BeginShutdown()
     {
-        _quitting = true;
+        if (_quit.IsCancellationRequested)
+            return;
+        _quit.Cancel();
         RefreshActionAvailability();
-        _runner.SealLaunches();
-        _scanCts?.Cancel();
+        CancelScan();
+    }
+
+    private void CancelScan()
+    {
+        if (_scanCts is null)
+            return;
+        _scanCts.Cancel();
+        _scanCts = null;
+        IsScanning = false;
     }
 
     /// <summary>
-    /// Stops timers and scanning, stops every running script's process tree, and waits, each within its
-    /// bound, for those trees and for the output import in flight — the window only finishes closing,
+    /// Stops timers and scanning, stops every running script's process tree, and waits, within the exit
+    /// deadline, for those trees and for the output import in flight — the window only finishes closing,
     /// and the app only exits, once this completes. The run output files stay for the next launch's import.
     /// </summary>
     public Task ShutdownAsync() => GuardAsync("shutdown", Message.Of("guard.shutdown"), async () =>
@@ -460,26 +454,23 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _outputTimer?.Stop();
         _outputImportTimer?.Stop();
         _catalogResultTimer?.Stop();
-        _activationRescans = false;
         _activationRescanTimer?.Dispose();
-        _scanCts?.Cancel(); // don't let a slow scan keep the closing window's work alive
         _outputImportCts.Cancel();
-        await QuitStepAsync("stop running scripts", QuitStopScriptsBound, _runner.StopAllAsync);
-        await QuitStepAsync("output import", QuitOutputImportBound, () => _outputImport);
+        await QuitStepAsync("stop running scripts", _runner.StopAllAsync);
+        await QuitStepAsync("output import", () => _outputImport);
     });
 
-    // One step of a quit, within its bound. A failure, or a step still running at the bound, is logged and
-    // the quit goes on; a step still running carries on and settles on its own, its outcome unknown.
-    private async Task QuitStepAsync(string step, TimeSpan bound, Func<Task> work)
+    // One step of a quit, within what remains of the exit deadline. A failure, or a step still running at
+    // the deadline, is logged and the quit goes on; a step still running settles on its own.
+    private async Task QuitStepAsync(string step, Func<Task> work)
     {
         try
         {
-            await work().WaitAsync(bound, Time);
+            await work().WaitAsync(QuitTimeLeft, Time);
         }
         catch (TimeoutException)
         {
-            Log.Warn("quit: a step was still running at its bound; quitting without it",
-                new { step, boundMs = bound.TotalMilliseconds });
+            Log.Warn("quit: a step was still running at the exit deadline; quitting without it", new { step });
         }
         catch (Exception ex)
         {
@@ -536,14 +527,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public async Task<bool> TryApplySettingsAsync(SettingsDialogViewModel draft)
     {
-        if (_quitting)
+        if (IsQuitting)
             return false;
         try
         {
             // A folder already returned by the picker is part of this submission, even if its
             // physical identity is still resolving. The dialog's commit owns the pending additions.
             await draft.WaitForPickedRootsAsync();
-            if (_quitting) return false;
+            if (IsQuitting) return false;
             var candidate = draft.ToConfig(); // Capture editable sets before waiting on earlier saves.
             var chosen = draft.ChosenSets.ToList();
             await ChangeConfigAsync(async () =>
@@ -588,7 +579,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         if (fontChanged)
             UiFontChanged?.Invoke(this, EventArgs.Empty);
         if (scanChanged)
-            _scanCts?.Cancel();
+            CancelScan();
         if (scanChanged && _newPaths.Count > 0)
         {
             // Changing what is scanned ends every "new" flag; the next scan flags against the new scope.
@@ -636,15 +627,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // background scan (the window came back to the front) adds to the flags and says only what changed.
     private async Task ScanAsync(bool background)
     {
-        if (_quitting)
+        if (IsQuitting)
             return;
         // Supersede any in-flight scan rather than refusing to start: a previous scan stuck on a
-        // slow/unresponsive root must not disable Rescan forever. The latest scan owns IsScanning.
-        _scanCts?.Cancel();
+        // slow/unresponsive root must not disable Rescan forever.
+        CancelScan();
         var cts = new CancellationTokenSource();
         _scanCts = cts;
-        var flagsEnded = new HashSet<string>(PathIdentity.Comparer);
-        _flagsEndedDuringScan = flagsEnded;
+        var token = cts.Token;
+        var started = DateTimeOffset.UtcNow;
 
         IsScanning = true;
         if (!background)
@@ -662,19 +653,19 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             // diff against the known paths and the path identities the window's lists read.
             var (report, catalog, diff, prepared) = await Task.Run(() =>
             {
-                var found = _scanner.Scan(roots, extensions, patterns, cts.Token);
-                var identities = _keys.Prepare(found.Found.Concat(otherPaths).Concat(known ?? []).Concat(previouslyShown).Concat(found.Inaccessible), cts.Token);
+                var found = _scanner.Scan(roots, extensions, patterns, token);
+                var identities = _keys.Prepare(found.Found.Concat(otherPaths).Concat(known ?? []).Concat(previouslyShown).Concat(found.Inaccessible), token);
                 string Key(string path) => identities[path];
                 var paths = ScanCatalog.Paths(found, (known ?? []).Concat(previouslyShown), Key)
                     .DistinctBy(Key, PathIdentity.Comparer).ToList();
                 return (found, paths, ScanDiff.Compute(paths, known, Key), identities);
-            }, cts.Token);
-            cts.Token.ThrowIfCancellationRequested(); // a newer scan superseded us between completion and here
+            }, token);
+            token.ThrowIfCancellationRequested(); // a newer scan superseded us between completion and here
             ScanReportLog.Write(_records, report);
 
             var candidate = new KnownPaths { Paths = catalog.ToList() };
             await _knownPathsStore.SaveAsync(candidate);
-            cts.Token.ThrowIfCancellationRequested();
+            token.ThrowIfCancellationRequested();
 
             // From the flags as they are now the save has settled, not as they were before it.
             var shownNew = _newPaths.ToList();
@@ -682,8 +673,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             var flags = await Task.Run(() => background
                 ? ScanFlags.Background(diff, catalog, shownNew, shownRemoved, path => prepared[path])
                 : ScanFlags.Full(diff, path => prepared[path]));
-            cts.Token.ThrowIfCancellationRequested();
-            flags.NewKeys.ExceptWith(flagsEnded);
+            token.ThrowIfCancellationRequested();
+            // A script run since this scan began has already ended its "new" flag.
+            flags.NewKeys.ExceptWith(_recent.Where(run => run.RanAt >= started).Select(run => _keys.Key(run.Path)));
 
             _keys.Adopt(prepared);
             _lastFound = catalog;
@@ -709,7 +701,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             Log.Error("ui: rescan failed", ex);
-            if (cts.IsCancellationRequested || !ReferenceEquals(_scanCts, cts))
+            if (token.IsCancellationRequested)
                 return;
             if (!background)
                 ClearCatalogResult(); // the "Scanning…" line
@@ -717,9 +709,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
         finally
         {
-            // Only the most recent scan clears IsScanning, so a superseded scan completing late can't
-            // flip the flag out from under the one now running.
-            if (ReferenceEquals(_scanCts, cts))
+            // A cancelled scan leaves IsScanning to whoever cancelled it.
+            if (!token.IsCancellationRequested)
             {
                 IsScanning = false;
                 _scanCts = null;
@@ -728,8 +719,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    private bool CanActOnScript(ScriptItem? item) => item is not null && !_quitting;
-    private bool CanActOnEntry(RecentEntry? entry) => entry is not null && !_quitting;
+    private bool CanActOnScript(ScriptItem? item) => item is not null && !IsQuitting;
+    private bool CanActOnEntry(RecentEntry? entry) => entry is not null && !IsQuitting;
     private bool CanStopEntry(RecentEntry? entry) => CanActOnEntry(entry) && entry?.Process?.State == RunState.Running;
 
     private void RefreshActionAvailability()
@@ -760,10 +751,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanStopEntry))]
     private async Task StopEntry(RecentEntry? entry)
     {
-        if (entry?.Process is not { State: RunState.Running } || _quitting)
-            return;
-        var key = entry.Process.ScriptKey;
-        if (!_scriptActions.Add(key))
+        if (entry?.Process is not { State: RunState.Running } || IsQuitting)
             return;
 
         try
@@ -785,17 +773,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             Log.Error("ui: stop failed", ex, new { script = entry.Path });
             ReportProcessActionError(entry.Path, "stop", Message.Of("process.stopFailed"));
         }
-        finally { _scriptActions.Remove(key); }
     }
 
     [RelayCommand(CanExecute = nameof(CanActOnEntry))]
     private async Task DismissEntry(RecentEntry? entry)
     {
-        if (entry is null || _quitting)
+        if (entry is null || IsQuitting)
             return;
         var key = entry.Process?.ScriptKey ?? _keys.Key(entry.Path);
-        if (!_scriptActions.Add(key))
-            return;
 
         try
         {
@@ -832,8 +817,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             {
                 // Kept in the fallback file; the dismissal holds for this session, as the startup notice said.
             }
+            await _recentLoad;
             _recent.RemoveAll(r => dismissedPaths.Contains(r.Path));
-            _recentVersion++;
 
             _processActionErrors.Remove(key);
             Log.Info("ui: dismiss", new { script = entry.Path });
@@ -848,13 +833,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             Log.Error("ui: dismiss failed", ex, new { script = entry.Path });
             ReportProcessActionError(entry.Path, "dismiss", Message.Of("process.dismissFailed"));
         }
-        finally { _scriptActions.Remove(key); }
     }
 
     [RelayCommand(CanExecute = nameof(CanActOnScript))]
     private async Task ToggleHidden(ScriptItem? item)
     {
-        if (item is null || _quitting)
+        if (item is null || IsQuitting)
             return;
 
         // Capture an idempotent hide/unhide intent; replaying a toggle after a failed save is wrong.
@@ -902,6 +886,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     partial void OnSelectedRecentEntryChanged(RecentEntry? value)
     {
+        // Another run's read in flight no longer applies.
+        if (!ReferenceEquals(value?.Process, _consoleProcess))
+            _consoleRead.Cancel();
         RefreshActionAvailability();
         OnPropertyChanged(nameof(CanSendInput));
         OnPropertyChanged(nameof(HasSelection));
@@ -911,17 +898,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private async Task RunByPath(string path, string displayName)
     {
-        if (_quitting)
+        if (IsQuitting)
             return;
         var key = ScriptKeyFor(path);
-        if (!_scriptActions.Add(key))
-            return;
-        try { await RunAdmittedAsync(path, displayName, key); }
-        finally { _scriptActions.Remove(key); }
-    }
 
-    private async Task RunAdmittedAsync(string path, string displayName, string key)
-    {
         ScriptProcess? started;
         try
         {
@@ -936,14 +916,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                     Message.Of("restart.message", ("name", displayName)),
                     "restart.confirm"))
                     return;
-                if (_quitting)
+                if (IsQuitting)
                     return;
                 started = await _runner.RestartAsync(running);
-                if (_quitting && started is null)
+                if (IsQuitting && started is null)
                     return;
                 if (started is null)
                 {
-                    ReportProcessActionError(path, "restart", Message.Of("process.restartFailed"));
+                    // A run that stopped was replaced or dismissed by another command meanwhile; one that
+                    // still runs outlived its termination grace.
+                    if (running.State == RunState.Running)
+                        ReportProcessActionError(path, "restart", Message.Of("process.restartFailed"));
                     RebuildRecent();
                     SelectRecentPath(path);
                     return;
@@ -962,7 +945,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             // No run started, so nothing enters Recent: the failure shows on the script's existing
             // Recent row, or in the operational error bar when it has none.
             Log.Error("ui: run failed", ex, new { script = path });
-            if (_quitting)
+            if (IsQuitting)
                 return;
             RebuildRecent();
             if (Recent.Any(entry => _keys.Same(entry.Path, path)))
@@ -980,13 +963,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         ResolveOperationalError(RunFailedKey(path));
 
         // Running a script ends its "new" flag at once; otherwise the flag lasts until the next full scan.
-        var flagKey = started.ScriptKey;
-        _flagsEndedDuringScan.Add(flagKey);
-        if (_newPaths.Remove(flagKey))
+        if (_newPaths.Remove(started.ScriptKey))
             RebuildScripts();
 
+        await _recentLoad;
         _recent = RecentRuns.Add(_recent, path, started.StartedAt, key: _keys.Key, scriptKey: started.ScriptKey);
-        _recentVersion++;
         try
         {
             await _records.AddRunAsync(RunRecord.For(_records.Session, started));
@@ -1155,11 +1136,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    private void OnOutputTick()
-    {
-        _runner.ReconcileExited(); // backstop for a missed Exited event
-        RefreshOutput();
-    }
+    private void OnOutputTick() => RefreshOutput();
 
     // The run the console shows and its feed, the line still arriving (drawn last, replaced on each read),
     // and about how much the console holds, which keeps it to the feed's shown amount.
@@ -1172,11 +1149,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private long _consoleChars;
 
     // The selected run's output is read off the interface thread, one read at a time; a refresh asked for
-    // while one runs is folded into one more pass, and a read whose run is no longer selected is dropped.
+    // while one runs is folded into one more pass, and selecting another run cancels the read in flight.
     private bool _outputReading;
     private bool _outputRefreshAgain;
+    private CancellationTokenSource _consoleRead = new();
 
-    internal Func<ConsoleFeed, Task<ConsoleUpdate?>> ReadConsole { get; set; } = feed => Task.Run(() => ReadFeed(feed));
+    internal Func<ConsoleFeed, CancellationToken, Task<ConsoleUpdate?>> ReadConsole { get; set; } =
+        (feed, token) => Task.Run(() => ReadFeed(feed), token);
 
     private void RefreshOutput() => _ = RefreshOutputAsync();
 
@@ -1196,6 +1175,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 _outputRefreshAgain = false;
                 var selected = SelectedRecentEntry;
                 var process = selected?.Process;
+                if (_consoleRead.IsCancellationRequested)
+                    _consoleRead = new CancellationTokenSource();
                 if (!ReferenceEquals(process, _consoleProcess))
                 {
                     _consoleProcess = process;
@@ -1210,26 +1191,27 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                     OnPropertyChanged(nameof(CanOpenRunOutput));
                 }
 
+                var token = _consoleRead.Token;
                 try
                 {
                     var feed = _consoleFeed;
-                    var update = feed is null ? null : await ReadConsole(feed);
-                    if (!ReferenceEquals(SelectedRecentEntry?.Process, process))
+                    var update = feed is null ? null : await ReadConsole(feed, token);
+                    if (token.IsCancellationRequested)
                     {
-                        _outputRefreshAgain = true;
+                        Superseded();
                         continue;
                     }
                     _consoleReadFailing = false;
                     if (selected is not null)
                         ResolveProcessActionError(selected.Path, "read-output");
-                    if (update is not null && ReferenceEquals(feed, _consoleFeed))
+                    if (update is not null)
                         ApplyConsoleUpdate(update);
                 }
                 catch (Exception ex)
                 {
-                    if (!ReferenceEquals(SelectedRecentEntry?.Process, process))
+                    if (token.IsCancellationRequested)
                     {
-                        _outputRefreshAgain = true;
+                        Superseded();
                         continue;
                     }
                     if (!_consoleReadFailing)
@@ -1246,6 +1228,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         finally
         {
             _outputReading = false;
+        }
+
+        // The cancelled read may have moved its feed on, so the console starts afresh from the log.
+        void Superseded()
+        {
+            _consoleProcess = null;
+            _consoleFeed = null;
+            ClearConsole();
+            _outputRefreshAgain = true;
         }
     }
 

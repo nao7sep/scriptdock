@@ -19,13 +19,7 @@ internal static class RecordStoreExtensions
 
     public static async Task<byte[]?> ReadRunOutputAsync(this IRecordReader reader, long id)
     {
-        byte[]? bytes = null;
-        var found = await reader.ReadRunOutputAsync(id, stream =>
-        {
-            using var copy = new MemoryStream();
-            stream.CopyTo(copy);
-            bytes = copy.ToArray();
-        });
-        return found ? bytes : null;
+        using var copy = new MemoryStream();
+        return await reader.ReadRunOutputAsync(id, copy) ? copy.ToArray() : null;
     }
 }

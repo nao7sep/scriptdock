@@ -36,7 +36,6 @@ internal sealed class ProcessFixture : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        foreach (var runner in _runners) runner.SealLaunches();
         List<Exception> failures = [];
         foreach (var runner in _runners)
         {

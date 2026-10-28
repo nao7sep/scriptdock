@@ -22,8 +22,8 @@ namespace ScriptDock.Storage;
 /// cannot be opened stays off for the session.</para>
 /// <para>Within a session each path keeps one row, replaced by later saves. A session's first save whose
 /// content equals the path's latest row writes nothing. Rows of earlier sessions are never changed.</para>
-/// <para>An ordinary quit gives pending recordings a short bound (<see cref="Shutdown"/>); when the operating
-/// system ends the session they are skipped (<see cref="Abandon"/>).</para>
+/// <para>The exit gives pending recordings what remains of its deadline (<see cref="Shutdown"/>); when the
+/// operating system ends the session the exit does not wait for them.</para>
 /// </remarks>
 public static class BackupStore
 {
@@ -53,16 +53,12 @@ public static class BackupStore
     // The table Schema creates; v0.1.0 wrote it without a version and without session_id.
     private static readonly HashSet<string> Tables = ["backups"];
 
-    private static readonly object Gate = new();
+    // One owner for the process: its thread applies the recordings in the order they arrived. A background
+    // thread, so a recording never holds the process at exit.
+    private static readonly BlockingCollection<Action<Connection>> Queue = new();
+    private static readonly Thread Owner = StartOwner();
 
-    // Keep the draining owner after a bounded shutdown. A late primary write must not reopen a second
-    // history owner and race the session's last version; only test Close resets after actual settlement.
-    private static BlockingCollection<Action<Connection>>? _queue;
-    private static Thread? _owner;
-    private static bool _abandoned;
-    private static bool _closed;
-
-    // One owner's connection, opened on its first recording. Null after that open means the store is off
+    // The owner's connection, opened on its first recording. Null after that open means the store is off
     // for the session; one warning was logged.
     private sealed class Connection
     {
@@ -70,8 +66,8 @@ public static class BackupStore
         public SqliteConnection? Value;
     }
 
-    /// <summary>This session's id. The app sets it to the records' session, so a history row and the run
-    /// records of the same launch share it.</summary>
+    /// <summary>This session's id. The app sets it to the records' session at startup, which also starts the
+    /// owner, so a history row and the run records of the same launch share it.</summary>
     public static string Session { get; set; } = TimestampConventions.IsoMillis(DateTimeOffset.UtcNow);
 
     /// <summary>The store file under the resolved storage root.</summary>
@@ -98,85 +94,58 @@ public static class BackupStore
     }
 
     /// <summary>
-    /// At an ordinary quit: stops taking recordings and gives the pending ones up to <paramref name="bound"/>
-    /// to land. Recordings still pending then are lost with the process; the files they came from are saved.
+    /// At exit: stops taking recordings and gives the pending ones up to <paramref name="bound"/>, what remains
+    /// of the exit deadline, to land. Recordings still pending then are lost with the process; the files they
+    /// came from are saved.
     /// </summary>
     public static void Shutdown(TimeSpan bound)
     {
-        Thread? owner;
-        lock (Gate)
-        {
-            _closed = true;
-            owner = _owner;
-            _queue?.CompleteAdding();
-        }
-
-        if (owner is not null && !owner.Join(bound))
-            Log.Warn("backup store: recordings still pending at the quit's bound", new { boundMs = bound.TotalMilliseconds });
+        Queue.CompleteAdding();
+        if (!Owner.Join(bound))
+            Log.Warn("backup store: recordings still pending at the exit deadline", new { boundMs = bound.TotalMilliseconds });
     }
 
-    /// <summary>When the operating system ends the session: pending and later recordings are skipped.</summary>
-    public static void Abandon()
-    {
-        lock (Gate)
-            _abandoned = true;
-    }
-
-    /// <summary>Applies everything pending and closes the store, so the next recording reopens it against the
-    /// current storage root with a fresh state. For tests.</summary>
+    /// <summary>Applies everything pending and closes the connection, so the next recording reopens the store
+    /// against the current storage root. For tests.</summary>
     internal static void Close()
     {
-        Shutdown(Timeout.InfiniteTimeSpan);
-        lock (Gate)
-        {
-            _queue?.Dispose();
-            _queue = null;
-            _owner = null;
-            _abandoned = false;
-            _closed = false;
-        }
+        using var done = new ManualResetEventSlim();
+        if (Post(connection =>
+            {
+                try { connection.Value?.Dispose(); }
+                catch { /* closing between tests; nothing to report */ }
+                connection.Value = null;
+                connection.Opened = false;
+                done.Set();
+            }))
+            done.Wait();
     }
 
-    // False when the session is ending and the work was skipped.
+    // False once the exit has closed the queue.
     private static bool Post(Action<Connection> work)
     {
-        lock (Gate)
+        try
         {
-            if (_abandoned || _closed)
-                return false;
-            if (_queue is null)
-            {
-                var queue = new BlockingCollection<Action<Connection>>();
-                _queue = queue;
-                // A background thread, so a recording never holds the process at exit.
-                _owner = new Thread(() => Own(queue)) { IsBackground = true, Name = "backups" };
-                _owner.Start();
-            }
-            _queue.Add(work);
-            return true;
+            return Queue.TryAdd(work);
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
         }
     }
 
-    private static void Own(BlockingCollection<Action<Connection>> queue)
+    private static Thread StartOwner()
     {
-        var connection = new Connection();
-        foreach (var work in queue.GetConsumingEnumerable())
+        var owner = new Thread(() =>
         {
-            bool abandoned;
-            lock (Gate)
-                abandoned = _abandoned;
-            if (!abandoned)
+            var connection = new Connection();
+            foreach (var work in Queue.GetConsumingEnumerable())
                 work(connection);
-        }
-
-        try
-        {
-            connection.Value?.Dispose();
-        }
-        catch
-        {
-            // Closing at exit or between tests; nothing to report.
-        }
+            try { connection.Value?.Dispose(); }
+            catch { /* closing at exit; nothing to report */ }
+        }) { IsBackground = true, Name = "backups" };
+        owner.Start();
+        return owner;
     }
 
     private static void Write(Connection owner, string absolutePath, byte[] bytes, string session, DateTimeOffset writtenAtUtc)

@@ -12,15 +12,14 @@ using Xunit;
 namespace ScriptDock.Tests.ViewModels;
 
 /// <summary>
-/// The quit's own steps, each within its bound on a controlled clock (unsaved-edits-conventions,
-/// Quitting): view state never holds a quit, a step that stalls ends at its bound, and a settings change
+/// The quit's own steps, within its one exit deadline on a controlled clock (unsaved-edits-conventions,
+/// Quitting): view state never holds a quit, a step that stalls ends at the deadline, and a settings change
 /// the user made is waited for and reported when it did not land. Every gate a test opens is released,
 /// the work it started awaited, and each view model shut down at the end, so nothing stays pending after it.
 /// </summary>
 public sealed class MainWindowViewModelQuitTests : IAsyncLifetime
 {
     private static readonly TimeSpan Tick = TimeSpan.FromMilliseconds(1);
-    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(5);
 
     private readonly FakeTimeProvider _clock = new();
     private readonly FakeConfigStore _configStore = new();
@@ -72,13 +71,14 @@ public sealed class MainWindowViewModelQuitTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_stalled_view_state_save_ends_at_its_bound_and_shows_nothing()
+    public async Task A_stalled_view_state_save_ends_at_the_exit_deadline_and_shows_nothing()
     {
         _stateStore.SaveGate = Gate();
         var vm = NewVm();
+        vm.BeginQuit();
 
         var save = Track(vm.PersistPaneSizesAsync(420, 240));
-        _clock.Advance(MainWindowViewModel.QuitStateSaveBound - Tick);
+        _clock.Advance(ExitDeadline.Length - Tick);
         Assert.False(save.IsCompleted);
 
         _clock.Advance(Tick);
@@ -98,13 +98,15 @@ public sealed class MainWindowViewModelQuitTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Scripts_still_dying_hold_the_quit_only_until_their_bound()
+    public async Task Scripts_still_dying_hold_the_quit_only_until_what_remains_of_the_deadline()
     {
         _runner.StopAllGate = Gate();
         var vm = NewVm();
+        vm.BeginQuit();
+        _clock.Advance(TimeSpan.FromSeconds(2)); // spent on the quit's earlier steps
 
         var shutdown = Track(vm.ShutdownAsync());
-        _clock.Advance(MainWindowViewModel.QuitStopScriptsBound - Tick);
+        _clock.Advance(ExitDeadline.Length - TimeSpan.FromSeconds(2) - Tick);
         Assert.False(shutdown.IsCompleted);
 
         _clock.Advance(Tick);
@@ -168,7 +170,6 @@ public sealed class MainWindowViewModelQuitTests : IAsyncLifetime
         gate.SetException(new IOException("disk full (test)"));
 
         Assert.False(await saved);
-        Assert.False(vm.SettingsStillSavingAtQuit); // failed, not still running
         Assert.False(await apply);
     }
 
@@ -189,18 +190,18 @@ public sealed class MainWindowViewModelQuitTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_stalled_settings_write_stops_the_quit_at_its_bound()
+    public async Task A_stalled_settings_write_stops_the_quit_at_the_exit_deadline()
     {
         var vm = NewVm();
         ApplyWithSaveRunning(vm, out _);
+        vm.BeginQuit();
 
         var saved = Track(vm.SettingsSavedForQuitAsync());
-        _clock.Advance(MainWindowViewModel.QuitSettingsWriteBound - Tick);
+        _clock.Advance(ExitDeadline.Length - Tick);
         Assert.False(saved.IsCompleted);
 
         _clock.Advance(Tick);
-        Assert.False(await saved);
-        Assert.True(vm.SettingsStillSavingAtQuit); // its outcome is unknown, so the question says it is still saving
+        Assert.False(await saved); // the existing Retry / Quit anyway question follows
     }
 
     [Fact]
@@ -217,18 +218,5 @@ public sealed class MainWindowViewModelQuitTests : IAsyncLifetime
         Assert.True(await vm.SettingsSavedForQuitAsync(retry: true));
 
         Assert.Equal("Helvetica", _configStore.LastSaved!.UiFontFamily);
-    }
-
-    [Fact]
-    public void The_quits_steps_fit_the_apps_best_effort_wait_budget()
-    {
-        // Keep our sequential wait caps below five seconds, including the records' two-second
-        // flush. This asserts an internal budget, not an OS deadline or end-to-end logout behavior.
-        var total = MainWindowViewModel.QuitSettingsWriteBound
-            + MainWindowViewModel.QuitStateSaveBound
-            + MainWindowViewModel.QuitStopScriptsBound
-            + MainWindowViewModel.QuitOutputImportBound;
-
-        Assert.True(total + TimeSpan.FromSeconds(2) < TimeSpan.FromSeconds(5), $"the quit may take {total}");
     }
 }

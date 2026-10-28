@@ -18,7 +18,6 @@ public sealed class FakeProcessRunner : IProcessRunner
 {
     private readonly List<ScriptProcess> _active = new();
     private int _nextId = 1;
-    private bool _sealed;
 
     public List<string> StartCalls { get; } = new();
     public List<ScriptProcess> TerminateCalls { get; } = new();
@@ -58,9 +57,7 @@ public sealed class FakeProcessRunner : IProcessRunner
     }
 
     public Task<ScriptProcess?> StartAsync(string scriptPath) =>
-        Task.FromResult(_sealed ? null : Start(scriptPath));
-
-    public void SealLaunches() => _sealed = true;
+        Task.FromResult<ScriptProcess?>(Start(scriptPath));
 
     public Task<bool> TerminateAsync(ScriptProcess handle)
     {
@@ -73,7 +70,7 @@ public sealed class FakeProcessRunner : IProcessRunner
         RestartCalls.Add(handle);
         if (RestartGate is not null)
             await RestartGate.Task;
-        if (!RestartResult || _sealed)
+        if (!RestartResult)
             return null;
         _active.Remove(handle);
         return AddRunning(handle.ScriptPath);
@@ -92,12 +89,9 @@ public sealed class FakeProcessRunner : IProcessRunner
 
     public Task StopAllAsync()
     {
-        SealLaunches();
         StopAllCalls++;
         return StopAllGate?.Task ?? Task.CompletedTask;
     }
-
-    public void ReconcileExited() { }
 
     // As the real runner does, a handle's end raises RunEnded.
     private void Add(ScriptProcess process)

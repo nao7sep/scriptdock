@@ -226,36 +226,6 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task QueuedReset_DoesNotResurrectTheSetReplacedByThePreviousSave()
-    {
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[null,".sh"]}""");
-        var store = new ConfigStore();
-        var config = store.Load();
-        // Hold the actual primary-write queue so both snapshots precede publication. Without this
-        // gate the first write could finish before the reset, hiding a premature merge of kept keys.
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var primary = typeof(ConfigStore).GetField("_store", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(store)!;
-        typeof(JsonStore<Dictionary<string, JsonElement>>)
-            .GetField("_queueTail", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(primary, release.Task);
-        config.Extensions = [".py"];
-        var replacement = store.SaveAsync(config);
-        config.Extensions = [ConfigDefaults.DefaultExtension];
-        var reset = store.SaveAsync(config);
-        try
-        {
-            Assert.False(replacement.IsCompleted);
-            Assert.False(reset.IsCompleted);
-        }
-        finally
-        {
-            release.TrySetResult();
-            await Task.WhenAll(replacement, reset);
-        }
-        Assert.Empty(store.KeptKeys);
-        Assert.Empty(ReadKeys());
-    }
-
-    [Fact]
     public void InvalidSet_UsesBuiltInWithoutQuarantiningOrChangingOtherSets()
     {
         const string json = """{"formatVersion":1,"extensions":[null,".sh"],"theme":"future","language":"unknown","hidden":["/ok"]}""";

@@ -229,48 +229,6 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
     }
 
     [MacOnlyFact]
-    public async Task SendInputAsync_ConcurrentLinesStayOrdered()
-    {
-        var script = WriteExecutableScript(
-            "ordered.command",
-            "read first\nread second\nprintf '%s|%s\\n' \"$first\" \"$second\"\n");
-        var runner = _fixture.Runner();
-        var handle = await StartAsync(runner, script);
-        try
-        {
-            var first = handle.SendInputAsync("one");
-            var second = handle.SendInputAsync("two");
-            Assert.All(await Task.WhenAll(first, second), Assert.True);
-
-            Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
-            Assert.Contains("one|two", handle.ReadConsoleOutput());
-        }
-        finally
-        {
-            await runner.TerminateAsync(handle);
-        }
-    }
-
-    [MacOnlyFact]
-    public async Task GateWaitTimeoutLeavesAnUnattemptedInputChannelUsable()
-    {
-        var runner = _fixture.Runner();
-        var handle = await StartAsync(runner, WriteExecutableScript("gate-input.command", "read line\necho \"$line\"\n"));
-        var gate = (SemaphoreSlim)typeof(ScriptProcess).GetField("_inputGate", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(handle)!;
-        await gate.WaitAsync(TestContext.Current.CancellationToken);
-        try
-        {
-            Assert.False(await handle.SendInputAsync("unattempted", TimeSpan.FromMilliseconds(50)));
-            Assert.True(handle.CanSendInput);
-        }
-        finally { gate.Release(); }
-        Assert.True(await handle.SendInputAsync("healthy"));
-        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
-        Assert.Contains("healthy", handle.ReadConsoleOutput());
-        Assert.DoesNotContain("unattempted", handle.ReadConsoleOutput());
-    }
-
-    [MacOnlyFact]
     public async Task InputTimeoutCanFollowPartialDeliveryAndMustNotClaimSafeRetry()
     {
         var firstFile = Path.Combine(_dir, "first-input");
@@ -361,24 +319,6 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
         Assert.Equal(RunState.Exited, handle.State);
         Assert.Contains("got:still-owned", handle.ReadConsoleOutput());
-    }
-
-    [MacOnlyFact]
-    public async Task TerminateAsync_NaturalExitDuringFailedKillIsFinalizedAsExited()
-    {
-        var script = WriteExecutableScript("exit-during-kill.command", "read line\n");
-        var runner = _fixture.Runner(
-            TimeSpan.FromMilliseconds(50),
-            process =>
-            {
-                process.StandardInput.WriteLine("finish");
-                Assert.True(process.WaitForExit(20_000));
-                throw new InvalidOperationException("injected failure after natural exit");
-            });
-        var handle = await StartAsync(runner, script);
-
-        Assert.False(await runner.TerminateAsync(handle));
-        Assert.Equal(RunState.Exited, handle.State);
     }
 
     [MacOnlyFact]

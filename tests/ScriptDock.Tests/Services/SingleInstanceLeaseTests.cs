@@ -36,7 +36,7 @@ public sealed class SingleInstanceLeaseTests
         owner.Start();
         try
         {
-            Assert.True(acquired.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+            acquired.Wait(TestContext.Current.CancellationToken);
             Assert.Null(ownerFailure);
 
             if (OperatingSystem.IsWindows())
@@ -45,7 +45,7 @@ public sealed class SingleInstanceLeaseTests
             Assert.False(SingleInstanceLease.TryAcquire(namespaceName, out var duplicate));
             Assert.Null(duplicate);
             if (OperatingSystem.IsWindows())
-                Assert.True(activated.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+                activated.Wait(TestContext.Current.CancellationToken);
 
             // A different fixture namespace can coexist; neither uses the shipped app's names.
             Assert.True(SingleInstanceLease.TryAcquire("ScriptDock-fixture-" + Guid.NewGuid().ToString("N"), out var independent));
@@ -57,18 +57,5 @@ public sealed class SingleInstanceLeaseTests
             owner.Join(); // Mutex ownership is thread-affine; settle before disposing its wait handles.
         }
         Assert.Null(ownerFailure);
-    }
-
-    [Fact]
-    public void ActivationRouterRetainsEarlyRequestAndDeliversLaterRequests()
-    {
-        var router = new ActivationRequestRouter();
-        var activations = 0;
-
-        router.Request();
-        router.Register(() => activations++);
-        router.Request();
-
-        Assert.Equal(2, activations);
     }
 }

@@ -22,7 +22,8 @@ namespace ScriptDock.ViewModels;
 public sealed partial class SettingsDialogViewModel : ObservableObject
 {
     private readonly AppConfig _opened;
-    private readonly List<Task<bool>> _pickedRoots = [];
+    // Picked folders resolve one batch at a time, in pick order; the commit awaits the last.
+    private Task<bool> _picks = Task.FromResult(false);
 
     public ObservableCollection<string> RootDirs { get; }
     public ObservableCollection<EditableItem> Extensions { get; }
@@ -270,30 +271,16 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
 
     internal Task<bool> AddPickedRootDirAsync(string value, Func<string, string> key) => AddPickedRootDirsAsync([value], key);
 
-    private Task<bool> AddPickedRootDirsAsync(IEnumerable<string> values, Func<string, string> key)
-    {
-        var work = AddPickedRootsCoreAsync(values.ToList(), key);
-        _pickedRoots.Add(work);
-        return SettleAsync();
-        async Task<bool> SettleAsync()
-        {
-            try { return await work; }
-            finally { _pickedRoots.Remove(work); }
-        }
-    }
+    private Task<bool> AddPickedRootDirsAsync(IEnumerable<string> values, Func<string, string> key) =>
+        _picks = AddPickedRootsAfterAsync(_picks, values.ToList(), key);
 
-    internal async Task WaitForPickedRootsAsync()
-    {
-        while (_pickedRoots.Count > 0)
-        {
-            var pending = _pickedRoots.ToArray();
-            try { await Task.WhenAll(pending); }
-            finally { foreach (var work in pending) _pickedRoots.Remove(work); }
-        }
-    }
+    /// <summary>Waits for the folders already picked to be added; a failed last pick fails the commit.</summary>
+    internal Task WaitForPickedRootsAsync() => _picks;
 
-    private async Task<bool> AddPickedRootsCoreAsync(IReadOnlyList<string> values, Func<string, string> key)
+    private async Task<bool> AddPickedRootsAfterAsync(Task previous, IReadOnlyList<string> values, Func<string, string> key)
     {
+        try { await previous; }
+        catch { /* the earlier pick's caller reports its own failure */ }
         var added = false;
         foreach (var value in values) added |= await AddPickedRootCoreAsync(value, key);
         return added;
@@ -305,20 +292,15 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
             return false;
 
         var resolved = ResolveRoot(value);
-        while (true)
+        var roots = RootDirs.ToList();
+        var duplicate = await Task.Run(() =>
         {
-            var roots = RootDirs.ToList();
-            var duplicate = await Task.Run(() =>
-            {
-                var pickedKey = key(resolved);
-                return roots.Any(root => PathIdentity.Comparer.Equals(key(root), pickedKey));
-            });
-            // A second picker result may arrive while identities resolve. Adopt only a current draft.
-            if (!roots.SequenceEqual(RootDirs, StringComparer.Ordinal)) continue;
-            if (duplicate) return false;
-            RootDirs.Add(resolved);
-            return true;
-        }
+            var pickedKey = key(resolved);
+            return roots.Any(root => PathIdentity.Comparer.Equals(key(root), pickedKey));
+        });
+        if (duplicate) return false;
+        RootDirs.Add(resolved);
+        return true;
     }
 
     // Expand a leading ~ / ~/ and make the value absolute against the home directory (never the

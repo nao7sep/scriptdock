@@ -11,19 +11,15 @@ namespace ScriptDock.Services;
 /// One launched script as ScriptDock owns it: its state, exit code, and the path to the
 /// run-log file the child writes (read on demand for the console — ScriptDock holds no output pipe
 /// to the child). Created and driven by <see cref="ProcessRunner"/>; exposed to the UI as a
-/// bindable handle. Exit is finalised exactly once, whether via the process's Exited event,
-/// or an explicit <see cref="WaitForExitAsync"/>.
+/// bindable handle. Every change happens on the runner's thread. Exit is finalised exactly once, whether
+/// via the process's Exited event, posted to that thread, or an explicit <see cref="WaitForExitAsync"/>.
 /// </summary>
 public sealed class ScriptProcess : IDisposable
 {
     private int _finalized;
-    private int _disposed;
-    private readonly object _lifecycleGate = new();
-    private TerminationDisposition _terminationDisposition;
-    private bool _exitObserved;
-    private readonly SemaphoreSlim _inputGate = new(1, 1);
+    private bool _disposed;
     private readonly CancellationTokenSource _inputLifetime = new();
-    private int _inputDeliveryUncertain;
+    private bool _inputDeliveryUncertain;
     private static readonly TimeSpan InputTimeout = TimeSpan.FromSeconds(2);
 
     public ScriptProcess(int id, string scriptPath, DateTimeOffset startedAt)
@@ -43,7 +39,10 @@ public sealed class ScriptProcess : IDisposable
     public DateTimeOffset StartedAt { get; }
     public RunState State { get; private set; } = RunState.Running;
     public int? ExitCode { get; private set; }
-    public bool CanSendInput => State == RunState.Running && Volatile.Read(ref _inputDeliveryUncertain) == 0;
+    public bool CanSendInput => State == RunState.Running && !_inputDeliveryUncertain;
+
+    /// <summary>The runner has killed this run's tree and waits for it to end, so its end is a termination.</summary>
+    internal bool StopRequested { get; set; }
 
     /// <summary>Path of the file the child shell writes stdout+stderr to; null if the run never started.</summary>
     public string? LogFilePath { get; internal set; }
@@ -72,8 +71,7 @@ public sealed class ScriptProcess : IDisposable
         }
     }
 
-    /// <summary>Raised when <see cref="State"/> changes. May fire on a background thread;
-    /// the UI marshals to its dispatcher.</summary>
+    /// <summary>Raised once, on the runner's thread, when <see cref="State"/> reaches its terminal value.</summary>
     public event EventHandler? StateChanged;
 
     internal Process? Process { get; set; }
@@ -85,41 +83,29 @@ public sealed class ScriptProcess : IDisposable
     internal async Task<bool> SendInputAsync(string line, TimeSpan timeout)
     {
         var process = Process;
-        if (process is null)
+        if (process is null || process.HasExited || !CanSendInput)
             return false;
 
+        // One submission at a time: the console input sends the next line only after this one settles.
         using var timeoutCts = new CancellationTokenSource(timeout);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, _inputLifetime.Token);
-        var entered = false;
-        var attempted = false;
         try
         {
-            await _inputGate.WaitAsync(cts.Token).ConfigureAwait(false);
-            entered = true;
-            if (!process.HasExited && CanSendInput)
-            {
-                attempted = true;
-                await process.StandardInput.WriteLineAsync(line.AsMemory(), cts.Token).ConfigureAwait(false);
-                await process.StandardInput.FlushAsync(cts.Token).ConfigureAwait(false);
-                return true;
-            }
+            await process.StandardInput.WriteLineAsync(line.AsMemory(), cts.Token);
+            await process.StandardInput.FlushAsync(cts.Token);
+            return true;
         }
         catch (OperationCanceledException)
         {
             // Cancellation can follow partial delivery and leave the next line joined to its tail.
             // Keep the pipe open, but refuse reuse until the user explicitly restarts this run.
-            if (attempted) Interlocked.Exchange(ref _inputDeliveryUncertain, 1);
+            _inputDeliveryUncertain = true;
             Log.Warn("run: send input timed out or was cancelled", new { id = Id });
         }
         catch (Exception ex)
         {
-            if (attempted) Interlocked.Exchange(ref _inputDeliveryUncertain, 1);
+            _inputDeliveryUncertain = true;
             Log.Warn("run: send input failed", ex, new { id = Id });
-        }
-        finally
-        {
-            if (entered)
-                _inputGate.Release();
         }
 
         return false;
@@ -127,7 +113,7 @@ public sealed class ScriptProcess : IDisposable
 
     /// <summary>Asynchronously waits until the process exits or the timeout elapses; returns whether
     /// it exited. On exit, the state is finalised. Never blocks the calling thread, so the restart
-    /// path stays off the UI thread even when a process tree is slow to die.</summary>
+    /// path keeps the interface responsive even when a process tree is slow to die.</summary>
     public async Task<bool> WaitForExitAsync(TimeSpan timeout)
     {
         var process = Process;
@@ -137,7 +123,7 @@ public sealed class ScriptProcess : IDisposable
         using var cts = new CancellationTokenSource(timeout);
         try
         {
-            await process.WaitForExitAsync(cts.Token).ConfigureAwait(false);
+            await process.WaitForExitAsync(cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -148,83 +134,14 @@ public sealed class ScriptProcess : IDisposable
         return true;
     }
 
-    internal bool BeginTerminationAttempt()
-    {
-        lock (_lifecycleGate)
-        {
-            if (_finalized == 1)
-                return false;
-            _terminationDisposition = TerminationDisposition.Pending;
-            return true;
-        }
-    }
-
-    internal void ConfirmTerminationAttempt()
-    {
-        lock (_lifecycleGate)
-        {
-            if (_finalized == 1)
-                return;
-            _terminationDisposition = TerminationDisposition.Confirmed;
-            if (!_exitObserved)
-                return;
-            Finish(RunState.Terminated);
-        }
-
-        AnnounceEnd();
-    }
-
-    internal void CancelTerminationAttempt()
-    {
-        lock (_lifecycleGate)
-        {
-            if (_finalized == 1)
-                return;
-            _terminationDisposition = TerminationDisposition.None;
-            if (!_exitObserved)
-                return;
-            Finish(RunState.Exited);
-        }
-
-        AnnounceEnd();
-    }
-
+    // The end, whichever of the Exited event and a wait sees it first: Terminated when the runner killed it.
     internal void Complete()
     {
-        lock (_lifecycleGate)
-        {
-            if (_finalized == 1)
-                return;
-            if (_terminationDisposition == TerminationDisposition.Pending)
-            {
-                // The process exited while a kill call or bounded wait was unresolved. Defer the
-                // public terminal state until the caller confirms whether that attempt succeeded.
-                _exitObserved = true;
-                return;
-            }
-            Finish(_terminationDisposition == TerminationDisposition.Confirmed
-                ? RunState.Terminated
-                : RunState.Exited);
-        }
-
-        AnnounceEnd();
-    }
-
-    // Takes the once-only latch and publishes the terminal state together under the lifecycle gate,
-    // so a caller that finds the latch already taken (a lost race with the Exited event) returns only
-    // once State and ExitCode are final.
-    private void Finish(RunState state)
-    {
-        _finalized = 1;
+        if (Interlocked.Exchange(ref _finalized, 1) == 1)
+            return;
         try { ExitCode = Process?.ExitCode; }
         catch { /* process state unavailable; leave ExitCode null */ }
-        State = state;
-    }
-
-    // Outside the gate: cancelling the input lifetime runs its callbacks inline, and StateChanged
-    // runs subscriber code.
-    private void AnnounceEnd()
-    {
+        State = StopRequested ? RunState.Terminated : RunState.Exited;
         _inputLifetime.Cancel();
         StateChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -235,17 +152,11 @@ public sealed class ScriptProcess : IDisposable
     /// is still shown reads correctly; disposing does not terminate the OS process.</summary>
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+        if (_disposed)
             return;
+        _disposed = true;
 
         _inputLifetime.Cancel();
         Process?.Dispose();
-    }
-
-    private enum TerminationDisposition
-    {
-        None,
-        Pending,
-        Confirmed,
     }
 }
