@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ScriptDock.Models;
 using ScriptDock.Services;
+using ScriptDock.Tests.Fakes;
 using Xunit;
 
 namespace ScriptDock.Tests.Services;
@@ -19,7 +20,6 @@ namespace ScriptDock.Tests.Services;
 /// </summary>
 public sealed class ProcessPlatformTests : IAsyncLifetime
 {
-    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(20);
     private readonly ProcessFixture _fixture = new();
 
     public ValueTask InitializeAsync() => ValueTask.CompletedTask;
@@ -48,16 +48,13 @@ public sealed class ProcessPlatformTests : IAsyncLifetime
     private static async Task<IReadOnlyList<string>> RunToEndAsync(ProcessRunner runner, string path)
     {
         var handle = await StartAsync(runner, path);
-        Assert.True(await handle.WaitForExitAsync(Bound));
+        Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
         return handle.ReadConsoleOutput();
     }
 
     private static void WaitForLine(ScriptProcess handle, string line)
     {
-        var deadline = DateTime.UtcNow + Bound;
-        while (!handle.ReadConsoleOutput().Contains(line) && DateTime.UtcNow < deadline)
-            Thread.Sleep(50);
-        Assert.Contains(line, handle.ReadConsoleOutput());
+        Wait.Until(() => handle.ReadConsoleOutput().Contains(line));
     }
 
     // ── Both platforms ──────────────────────────────────────────────────────────────────────────
@@ -108,7 +105,7 @@ public sealed class ProcessPlatformTests : IAsyncLifetime
         var script = Script("exits-" + code, $"exit {code}\n", $"exit {code}\n");
         var handle = await StartAsync(_fixture.Runner(), script);
 
-        Assert.True(await handle.WaitForExitAsync(Bound));
+        Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
         Assert.Equal(RunState.Exited, handle.State);
         Assert.Equal(code, handle.ExitCode);
     }
@@ -126,7 +123,7 @@ public sealed class ProcessPlatformTests : IAsyncLifetime
             Assert.True(await handle.SendInputAsync("one"));
             Assert.True(await handle.SendInputAsync("二"));
             Assert.True(await handle.SendInputAsync("three"));
-            Assert.True(await handle.WaitForExitAsync(Bound));
+            Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
             Assert.Contains("got:one,二,three", handle.ReadConsoleOutput());
         }
         finally { await runner.TerminateAsync(handle); }
@@ -181,9 +178,7 @@ public sealed class ProcessPlatformTests : IAsyncLifetime
 
         Assert.Equal(RunState.Terminated, a.State);
         Assert.Equal(RunState.Terminated, b.State);
-        var deadline = DateTime.UtcNow + Bound;
-        while (DateTime.UtcNow < deadline && ended.Count < 2)
-            Thread.Sleep(50);
+        Wait.Until(() => { lock (ended) return ended.Count >= 2; });
         lock (ended)
             Assert.Equal(new[] { a.Id, b.Id }.Order(), ended.Select(process => process.Id).Order());
     }
@@ -228,7 +223,7 @@ public sealed class ProcessPlatformTests : IAsyncLifetime
         File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite);
         var handle = await StartAsync(_fixture.Runner(), script);
 
-        Assert.True(await handle.WaitForExitAsync(Bound));
+        Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
         Assert.Equal(126, handle.ExitCode);
         Assert.Contains(handle.ReadConsoleOutput(), line => line.Contains("permission denied", StringComparison.OrdinalIgnoreCase));
     }
@@ -254,7 +249,7 @@ public sealed class ProcessPlatformTests : IAsyncLifetime
         var script = Script("killed", "kill -9 $$\n", "");
         var handle = await StartAsync(_fixture.Runner(), script);
 
-        Assert.True(await handle.WaitForExitAsync(Bound));
+        Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
         Assert.Equal(128 + 9, handle.ExitCode);
     }
 
@@ -267,7 +262,7 @@ public sealed class ProcessPlatformTests : IAsyncLifetime
         File.WriteAllText(script, "@echo off\r\necho cmd-ran\r\nexit /b 4\r\n");
         var handle = await StartAsync(_fixture.Runner(), script);
 
-        Assert.True(await handle.WaitForExitAsync(Bound));
+        Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
         Assert.Equal(4, handle.ExitCode);
         Assert.Contains("cmd-ran", handle.ReadConsoleOutput());
     }

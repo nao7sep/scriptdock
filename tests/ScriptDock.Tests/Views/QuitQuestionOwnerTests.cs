@@ -18,8 +18,8 @@ namespace ScriptDock.Tests.Views;
 /// </summary>
 public sealed class QuitQuestionOwnerTests : WindowTest
 {
-    private static bool SettleUntil(Func<bool> done) =>
-        System.Threading.SpinWait.SpinUntil(() => { Dispatcher.UIThread.RunJobs(); return done(); }, TimeSpan.FromSeconds(5));
+    private static void SettleUntil(Func<bool> done) =>
+        Wait.UntilOnUi(() => done());
 
     [AvaloniaFact]
     public void The_owner_is_the_first_window_showing()
@@ -46,7 +46,7 @@ public sealed class QuitQuestionOwnerTests : WindowTest
             new FakeConfigStore { Value = config }, new FakeJsonStore<AppState> { Value = state }, new FakeJsonStore<KnownPaths>(),
             new FakeRecordStore(), config, state, new KnownPaths(), new ScriptScanner(), runner);
         var main = Show(new MainWindow { DataContext = vm });
-        Assert.True(SettleUntil(vm.ShouldConfirmQuit));
+        SettleUntil(vm.ShouldConfirmQuit);
         main.WindowState = WindowState.Minimized;
         Dispatcher.UIThread.RunJobs();
         s_lastConfirm = null;

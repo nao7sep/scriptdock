@@ -109,7 +109,7 @@ public sealed class RecordsWindowTests : WindowTest
         Dispatcher.UIThread.RunJobs();
 
         // The fake store saves on a pool thread, as the real one does.
-        Assert.True(System.Threading.SpinWait.SpinUntil(() => _stateStore.SaveCount > 0, TimeSpan.FromSeconds(5)));
+        Wait.Until(() => _stateStore.SaveCount > 0);
         Assert.Equal(470, _stateStore.Value.RecordsListWidth);
         Assert.Equal(470, window.ListWidthIntent);
     }
@@ -129,7 +129,7 @@ public sealed class RecordsWindowTests : WindowTest
         splitter.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = Key.Right });
         Dispatcher.UIThread.RunJobs();
         // The fake store saves on a pool thread, as the real one does.
-        Assert.True(System.Threading.SpinWait.SpinUntil(() => _stateStore.SaveCount > 0, TimeSpan.FromSeconds(5)));
+        Wait.Until(() => _stateStore.SaveCount > 0);
         Assert.Equal(1, _stateStore.SaveCount);
         Assert.Equal(RecordsLayout.ListDefaultWidth + 32, _stateStore.Value.RecordsListWidth);
 
@@ -221,7 +221,7 @@ public sealed class RecordsWindowTests : WindowTest
 
         main.Close();
         // The main window's close saves first, then closes for real; the bound only stops a hang.
-        await closed.Task.WaitAsync(System.TimeSpan.FromSeconds(30));
+        await closed.Task.WaitAsync(TestContext.Current.CancellationToken);
 
         Assert.False(records.IsVisible);
         Assert.Null(host.Window);
@@ -284,7 +284,7 @@ public sealed class RecordsWindowTests : WindowTest
         Assert.True(button.IsFocused);
 
         Press(window, Key.Enter);
-        Assert.True(System.Threading.SpinWait.SpinUntil(() => { Dispatcher.UIThread.RunJobs(); return opened == 1; }, TimeSpan.FromSeconds(5)));
+        Wait.UntilOnUi(() => opened == 1);
         Assert.Equal([4L], _reader.OutputReads);
     }
 

@@ -20,7 +20,6 @@ namespace ScriptDock.Tests.ViewModels;
 [Collection(StorageRootEnvironment.CollectionName)]
 public sealed class ConfigSubmissionTests : IAsyncLifetime
 {
-    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(5);
     private readonly string _home = Path.Combine(Path.GetTempPath(), "scriptdock-config-" + NanoId.New());
     private readonly string? _previousHome = Environment.GetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable);
     private readonly List<Task> _work = [];
@@ -89,7 +88,7 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
         Task<bool>? saved = null;
         try
         {
-            Assert.True(entered.Wait(Bound, TestContext.Current.CancellationToken));
+            entered.Wait(TestContext.Current.CancellationToken);
             saved = Track(_vm.TryApplySettingsAsync(draft));
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => { });
             Assert.False(saved.IsCompleted);
@@ -119,7 +118,7 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
         Task<bool>? save = null;
         try
         {
-            Assert.True(entered.Wait(Bound, TestContext.Current.CancellationToken));
+            entered.Wait(TestContext.Current.CancellationToken);
             save = Track(_vm.TryApplySettingsAsync(draft));
             Assert.False(save.IsCompleted);
             _vm.BeginShutdown();
@@ -145,7 +144,7 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
         var settings = Track(_vm.TryApplySettingsAsync(draft));
         draft.UiFontFamily = "later edit";
         gate.SetResult();
-        await Task.WhenAll(hide, settings).WaitAsync(Bound, TestContext.Current.CancellationToken);
+        await Task.WhenAll(hide, settings).WaitAsync(TestContext.Current.CancellationToken);
 
         Assert.True(await settings);
         var loaded = new ConfigStore().Load();
@@ -165,7 +164,7 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
         draft.Theme = ThemePreference.Dark;
         var settings = Track(_vm.TryApplySettingsAsync(draft));
         gate.SetResult();
-        await Task.WhenAll(hide, settings).WaitAsync(Bound, TestContext.Current.CancellationToken);
+        await Task.WhenAll(hide, settings).WaitAsync(TestContext.Current.CancellationToken);
         Assert.True(await settings);
         Assert.Empty(_config.Hidden);
         var loaded = new ConfigStore().Load();
@@ -180,17 +179,17 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
         var first = HoldNextSave();
         var second = HoldNextSave();
         var hide = Hide();
-        await _store.LastPublication.WaitAsync(Bound, TestContext.Current.CancellationToken);
+        await _store.LastPublication.WaitAsync(TestContext.Current.CancellationToken);
         _vm!.BeginQuit();
         var quit = Track(_vm.SettingsSavedForQuitAsync());
         var draft = _vm.CreateSettingsDraft();
         draft.Theme = ThemePreference.Dark;
         var settings = Track(_vm.TryApplySettingsAsync(draft));
         first.SetResult();
-        await hide.WaitAsync(Bound, TestContext.Current.CancellationToken);
+        await hide.WaitAsync(TestContext.Current.CancellationToken);
         Assert.False(quit.IsCompleted);
         _clock.Advance(ExitDeadline.Length);
-        Assert.False(await quit.WaitAsync(Bound, TestContext.Current.CancellationToken));
+        Assert.False(await quit.WaitAsync(TestContext.Current.CancellationToken));
         second.SetResult();
         await settings;
         Assert.True(await _vm.SettingsSavedForQuitAsync());
@@ -209,7 +208,7 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
         _vm.BeginQuit(); // the user's Retry starts a new round of the quit
         var retry = Track(_vm.SettingsSavedForQuitAsync(retry: true));
         gate.SetResult();
-        Assert.True(await retry.WaitAsync(Bound, TestContext.Current.CancellationToken));
+        Assert.True(await retry.WaitAsync(TestContext.Current.CancellationToken));
         await hide;
         Assert.Equal(1, _store.Submissions);
         Assert.Equal(_config.Hidden, new ConfigStore().Load().Hidden);

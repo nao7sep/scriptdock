@@ -30,7 +30,6 @@ namespace ScriptDock.Tests.ViewModels;
 [Collection(StorageRootEnvironment.CollectionName)]
 public sealed class MainWindowViewModelScriptsTests : IAsyncLifetime
 {
-    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(5);
 
     private readonly string _root;          // scanned for scripts
     private readonly string _home;          // SCRIPTDOCK_DATA_DIR

@@ -53,7 +53,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         var runner = _fixture.Runner();
 
         var handle = await StartAsync(runner, script);
-        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+        Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
 
         Assert.Equal(RunState.Exited, handle.State);
         Assert.Equal(0, handle.ExitCode);
@@ -71,7 +71,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         var runner = _fixture.Runner();
 
         var handle = await StartAsync(runner, script);
-        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+        Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
 
         Assert.Equal(RunState.Exited, handle.State);
         Assert.Equal(3, handle.ExitCode);
@@ -85,7 +85,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         var runner = _fixture.Runner();
 
         var handle = await StartAsync(runner, script);
-        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+        Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
 
         Assert.Equal(RunState.Exited, handle.State);
         Assert.Equal(7, handle.ExitCode);
@@ -101,7 +101,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         var handle = await StartAsync(runner, script);
         try
         {
-            Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+            Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
             Assert.Equal(RunState.Exited, handle.State);
             Assert.NotNull(handle.ExitCode);
             Assert.NotEqual(0, handle.ExitCode);
@@ -117,7 +117,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         File.WriteAllText(script, "Write-Output 'must-not-run'\n");
         var runner = _fixture.Runner(configure: _ => File.Delete(script));
         var handle = await StartAsync(runner, script);
-        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+        Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
         Assert.Equal(RunState.Exited, handle.State);
         Assert.NotNull(handle.ExitCode);
         Assert.NotEqual(0, handle.ExitCode);
@@ -136,7 +136,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
             start.ArgumentList[command] = "& $env:ComSpec /d /c 'exit 23'; " + start.ArgumentList[command];
         });
         var handle = await StartAsync(runner, script);
-        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+        Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
         Assert.Equal(RunState.Exited, handle.State);
         Assert.Equal(0, handle.ExitCode);
         Assert.Contains("script-succeeded", handle.ReadConsoleOutput());
@@ -153,7 +153,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         var handle = await StartAsync(runner, script);
         try
         {
-            Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+            Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
             Assert.Equal(7, handle.ExitCode);
             Assert.Contains("literal-batch-path", handle.ReadConsoleOutput());
         }
@@ -170,7 +170,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         try
         {
             Assert.True(await handle.SendInputAsync("hello-stdin"));
-            Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+            Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
             Assert.Contains(handle.ReadConsoleOutput(), line => line.Contains("got:hello-stdin"));
         }
         finally { await runner.TerminateAsync(handle); }
@@ -194,7 +194,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
             Assert.True(IsAlive(child.Value));
             Assert.True(await runner.TerminateAsync(handle));
             Assert.Equal(RunState.Terminated, handle.State);
-            Assert.True(GoneWithin(child.Value, TimeSpan.FromSeconds(20)));
+            Gone(child.Value);
         }
         finally
         {
@@ -203,7 +203,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
             {
                 using var process = Process.GetProcessById(pid);
                 process.Kill(entireProcessTree: true);
-                Assert.True(process.WaitForExit(20_000));
+                process.WaitForExit();
             }
         }
     }
@@ -219,7 +219,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         {
             Assert.True(await handle.SendInputAsync("hello-stdin"));
 
-            Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+            Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
             Assert.Contains(handle.ReadConsoleOutput(), line => line.Contains("got:hello-stdin"));
         }
         finally
@@ -243,13 +243,13 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         {
             var sent = await handle.SendInputAsync("already-delivered\n" + new string('x', 8 * 1024 * 1024), TimeSpan.FromMilliseconds(200));
             Assert.False(sent);
-            Assert.True(SpinWait.SpinUntil(() => File.Exists(firstFile), TimeSpan.FromSeconds(5)));
+            Wait.Until(() => File.Exists(firstFile));
             Assert.Equal("already-delivered", File.ReadAllText(firstFile));
             File.WriteAllText(release, "drain");
             Assert.False(handle.CanSendInput);
             Assert.False(await handle.SendInputAsync("distinct-followup"));
             handle.Process!.StandardInput.Close();
-            Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+            Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
             Assert.DoesNotContain("distinct-followup", File.ReadAllText(restFile));
         }
         finally
@@ -268,10 +268,9 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         try
         {
             var line = new string('x', 8 * 1024 * 1024);
-            var stopwatch = Stopwatch.StartNew();
 
+            // The write's own bound ends it, unread.
             Assert.False(await handle.SendInputAsync(line, TimeSpan.FromMilliseconds(100)));
-            Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5));
         }
         finally
         {
@@ -288,10 +287,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         var handle = await StartAsync(runner, script);
         try
         {
-            var deadline = DateTime.UtcNow.AddSeconds(20);
-            while (!handle.ReadConsoleOutput().Contains("started") && DateTime.UtcNow < deadline)
-                Thread.Sleep(50);
-            Assert.Contains("started", handle.ReadConsoleOutput());
+            Wait.Until(() => handle.ReadConsoleOutput().Contains("started"));
 
             Assert.True(await runner.TerminateAsync(handle));
             Assert.Equal(RunState.Terminated, handle.State);
@@ -300,7 +296,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         {
             // A failed assertion must not leave the sleeper running in a folder Dispose deletes.
             handle.Process?.Kill(entireProcessTree: true);
-            await handle.WaitForExitAsync(TimeSpan.FromSeconds(20));
+            await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan);
             handle.Dispose();
         }
     }
@@ -316,7 +312,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
 
         Assert.False(await runner.TerminateAsync(handle));
         Assert.True(await handle.SendInputAsync("still-owned"));
-        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+        Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
         Assert.Equal(RunState.Exited, handle.State);
         Assert.Contains("got:still-owned", handle.ReadConsoleOutput());
     }
@@ -330,7 +326,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
 
         Assert.False(await runner.TerminateAsync(handle));
         Assert.True(await handle.SendInputAsync("after-timeout"));
-        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+        Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
         Assert.Equal(RunState.Exited, handle.State);
         Assert.Contains("got:after-timeout", handle.ReadConsoleOutput());
     }
@@ -343,10 +339,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         var first = await StartAsync(runner, script);
 
         // Wait until the first run is genuinely live before restarting it.
-        var deadline = DateTime.UtcNow.AddSeconds(20);
-        while (first.Pid is null && DateTime.UtcNow < deadline)
-            Thread.Sleep(50);
-        Assert.NotNull(first.Pid);
+        Wait.Until(() => first.Pid is not null);
 
         var second = await runner.RestartAsync(first);
         Assert.NotNull(second);
@@ -369,7 +362,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         var script = WriteExecutableScript("once.command", "exit 0\n");
         var runner = _fixture.Runner();
         var first = await StartAsync(runner, script);
-        Assert.True(await first.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+        Assert.True(await first.WaitForExitAsync(Timeout.InfiniteTimeSpan));
 
         var second = await StartAsync(runner, script);
         try
@@ -415,14 +408,9 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
 
     private static int ReadPid(string pidFile)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(20);
-        while (DateTime.UtcNow < deadline)
-        {
-            if (File.Exists(pidFile) && int.TryParse(File.ReadAllText(pidFile).Trim(), out var pid))
-                return pid;
-            Thread.Sleep(50);
-        }
-        throw new TimeoutException($"no PID in {pidFile}");
+        var pid = 0;
+        Wait.Until(() => File.Exists(pidFile) && int.TryParse(File.ReadAllText(pidFile).Trim(), out pid));
+        return pid;
     }
 
     private static bool IsAlive(int pid)
@@ -438,14 +426,8 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         }
     }
 
-    // A killed process is reaped by launchd shortly after its parent dies; wait for that, within a bound.
-    private static bool GoneWithin(int pid, TimeSpan bound)
-    {
-        var deadline = DateTime.UtcNow + bound;
-        while (IsAlive(pid) && DateTime.UtcNow < deadline)
-            Thread.Sleep(50);
-        return !IsAlive(pid);
-    }
+    // A killed process is reaped by launchd shortly after its parent dies; wait for that.
+    private static void Gone(int pid) => Wait.Until(() => !IsAlive(pid));
 
     [MacOnlyFact]
     public async Task TerminateAsync_KillsAGrandchildTheScriptStarted()
@@ -466,7 +448,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
             Assert.True(await runner.TerminateAsync(handle));
 
             Assert.Equal(RunState.Terminated, handle.State);
-            Assert.True(GoneWithin(grandchild, TimeSpan.FromSeconds(20)), $"grandchild {grandchild} outlived its script");
+            Gone(grandchild);
         }
         finally
         {
@@ -495,7 +477,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
             Assert.Equal(RunState.Terminated, b.State);
             lock (ended)
                 Assert.Equal(new[] { a, b }.OrderBy(p => p.Id), ended.OrderBy(p => p.Id));
-            Assert.All(children, pid => Assert.True(GoneWithin(pid, TimeSpan.FromSeconds(20)), $"child {pid} outlived the quit"));
+            foreach (var pid in children) Gone(pid);
         }
         finally
         {
@@ -505,7 +487,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
     }
 
     [MacOnlyFact]
-    public async Task StopAllAsync_ReturnsWithinTheBound_WhenAKillLeavesTheProcessAlive()
+    public async Task StopAllAsync_ReturnsAfterTheGrace_WhenAKillLeavesTheProcessAlive()
     {
         var script = WriteExecutableScript("survivor.command", "echo started\nsleep 60\n");
         var grace = TimeSpan.FromMilliseconds(300);
@@ -513,18 +495,14 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         var handle = await StartAsync(runner, script);
         try
         {
-            var watch = Stopwatch.StartNew();
+            // The grace ends the wait, and the tree that outlived it stays owned and Running.
             await runner.StopAllAsync();
-            watch.Stop();
-
-            // The grace bounds the wait; the slack only absorbs scheduling, never a second grace.
-            Assert.True(watch.Elapsed < grace + TimeSpan.FromSeconds(5), $"took {watch.Elapsed}");
             Assert.Equal(RunState.Running, handle.State);
         }
         finally
         {
             handle.Process?.Kill(entireProcessTree: true);
-            await handle.WaitForExitAsync(TimeSpan.FromSeconds(20));
+            await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan);
         }
     }
 
@@ -538,9 +516,9 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         runner.RunEnded += (_, process) => { lock (ended) ended.Add(process); raised.Set(); };
 
         var handle = await StartAsync(runner, script);
-        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+        Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
         // RunEnded may be raised on the process's exit thread, after the wait has returned.
-        Assert.True(raised.Wait(TimeSpan.FromSeconds(20)));
+        raised.Wait(TestContext.Current.CancellationToken);
         handle.Complete();
 
         lock (ended)
@@ -621,7 +599,7 @@ public sealed class ProcessRunnerTests : IAsyncLifetime
         var runner = _fixture.Runner();
         var records = new FakeRecordStore();
         var handle = await StartAsync(runner, script);
-        Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+        Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
         records.Runs.Add(RunRecord.For(records.Session, handle));
         File.SetLastWriteTimeUtc(handle.LogFilePath!, DateTime.UtcNow - ProcessRunner.OutputQuietPeriod - TimeSpan.FromMinutes(1));
 

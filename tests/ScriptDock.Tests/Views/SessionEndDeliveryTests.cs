@@ -51,8 +51,7 @@ public sealed class SessionEndDeliveryTests : WindowTest, IDisposable
         var window = _window = Show(new MainWindow { DataContext = vm });
         // The window's first load builds the Recent list, and with it the running count, after an
         // off-thread read.
-        Assert.True(System.Threading.SpinWait.SpinUntil(
-            () => { Dispatcher.UIThread.RunJobs(); return vm.ShouldConfirmQuit(); }, TimeSpan.FromSeconds(5)));
+        Wait.UntilOnUi(() => vm.ShouldConfirmQuit());
         return (window, vm);
     }
 

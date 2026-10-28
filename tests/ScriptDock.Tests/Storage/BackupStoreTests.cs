@@ -10,6 +10,7 @@ using Microsoft.Data.Sqlite;
 using ScriptDock;
 using ScriptDock.Models;
 using ScriptDock.Storage;
+using ScriptDock.Tests.Fakes;
 using Xunit;
 
 namespace ScriptDock.Tests.Storage;
@@ -155,14 +156,13 @@ public sealed class BackupStoreTests : IDisposable
         DateTimeOffset after;
         try
         {
-            Assert.True(entered.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+            entered.Wait(TestContext.Current.CancellationToken);
             before = DateTimeOffset.UtcNow;
             BackupStore.Record(path, [1]);
             BackupStore.Record(path, [2]);
             after = DateTimeOffset.UtcNow;
             // Advance beyond the serialized millisecond before allowing the worker to dequeue.
-            Assert.True(SpinWait.SpinUntil(() => DateTimeOffset.UtcNow > after.AddMilliseconds(2),
-                TimeSpan.FromSeconds(5)));
+            Wait.Until(() => DateTimeOffset.UtcNow > after.AddMilliseconds(2));
         }
         finally
         {
@@ -294,10 +294,9 @@ public sealed class BackupStoreTests : IDisposable
                 lockIt.ExecuteNonQuery();
             }
 
-            // The deadline is only a deadlock watchdog: completion is observed while the separate
-            // connection still owns its write lock, rather than asserting save performance.
+            // Completion is observed while the separate connection still owns its write lock.
             saving = Task.Run(() => store.SaveAsync(new SampleDoc { Name = "two" }), TestContext.Current.CancellationToken);
-            await saving.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            await saving.WaitAsync(TestContext.Current.CancellationToken);
             using var query = holder.CreateCommand();
             query.CommandText = "SELECT content FROM backups WHERE path = $path";
             query.Parameters.AddWithValue("$path", docPath);

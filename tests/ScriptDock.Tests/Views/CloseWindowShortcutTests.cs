@@ -31,8 +31,8 @@ public sealed class CloseWindowShortcutTests : WindowTest
         Dispatcher.UIThread.RunJobs();
     }
 
-    private static bool SettleUntil(Func<bool> done) =>
-        System.Threading.SpinWait.SpinUntil(() => { Dispatcher.UIThread.RunJobs(); return done(); }, TimeSpan.FromSeconds(5));
+    private static void SettleUntil(Func<bool> done) =>
+        Wait.UntilOnUi(() => done());
 
     private static MainWindowViewModel NewMainVm(FakeProcessRunner runner)
     {
@@ -85,7 +85,7 @@ public sealed class CloseWindowShortcutTests : WindowTest
         var main = Show(new MainWindow { DataContext = vm });
         try
         {
-            Assert.True(SettleUntil(vm.ShouldConfirmQuit));
+            SettleUntil(vm.ShouldConfirmQuit);
 
             PressClose(main);
 
@@ -103,7 +103,7 @@ public sealed class CloseWindowShortcutTests : WindowTest
             await vm.ShutdownAsync();
             main.DataContext = null;
             main.Close();
-            Assert.True(SettleUntil(() => !main.IsVisible));
+            SettleUntil(() => !main.IsVisible);
             Assert.Empty(main.OwnedWindows);
         }
     }
@@ -116,7 +116,7 @@ public sealed class CloseWindowShortcutTests : WindowTest
 
         PressClose(main);
 
-        Assert.True(SettleUntil(() => !main.IsVisible));
+        SettleUntil(() => !main.IsVisible);
         Assert.Equal(1, runner.StopAllCalls);
     }
 

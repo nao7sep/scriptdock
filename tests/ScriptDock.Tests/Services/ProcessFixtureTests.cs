@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
@@ -57,7 +58,7 @@ public sealed class ProcessFixtureTests
             Environment.SetEnvironmentVariable("BASH_ENV", bashEnv);
             var runner = fixture.Runner();
             var handle = Assert.IsType<ScriptDock.Services.ScriptProcess>(await runner.StartAsync(Script(fixture, "echo \"$HOME\"\n")));
-            Assert.True(await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)));
+            Assert.True(await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan));
             Assert.Equal(RunState.Exited, handle.State);
             Assert.False(File.Exists(marker));
             Assert.Contains(fixture.ShellHome, handle.ReadConsoleOutput());

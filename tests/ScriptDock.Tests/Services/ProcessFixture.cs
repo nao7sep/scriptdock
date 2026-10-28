@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -50,7 +51,7 @@ internal sealed class ProcessFixture : IAsyncDisposable
                     }
                     if (handle.Process is { } process && !process.HasExited)
                         process.Kill(entireProcessTree: true);
-                    if (!await handle.WaitForExitAsync(TimeSpan.FromSeconds(20)))
+                    if (!await handle.WaitForExitAsync(Timeout.InfiniteTimeSpan))
                         throw new InvalidOperationException("Fixture process did not stop.");
                     handle.Dispose();
                 }

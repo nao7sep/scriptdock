@@ -22,7 +22,7 @@ public sealed class ComputerLanguagesTests
             UseShellExecute = false,
         })!;
         var output = defaults.StandardOutput.ReadToEnd();
-        Assert.True(defaults.WaitForExit(TimeSpan.FromSeconds(20)));
+        defaults.WaitForExit();
         return output.Split(['(', ')', ',', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .Select(item => item.Trim().Trim('"'))
             .Where(item => item.Length > 0)

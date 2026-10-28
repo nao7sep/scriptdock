@@ -410,12 +410,12 @@ public sealed class RecordQueriesTests : IDisposable
         Task<RecordsPage>? page = null;
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            await entered.Task.WaitAsync(TestContext.Current.CancellationToken);
             write = records.AddRunEndAsync(new RunEnd(Session, 6, SessionStart.AddHours(1), "exited", 2));
             Log(records, At(8), "info", "written while path resolution is held");
             page = Page(records, RecordsQuery.All);
-            await write.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
-            var rows = await page.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            await write.WaitAsync(TestContext.Current.CancellationToken);
+            var rows = await page.WaitAsync(TestContext.Current.CancellationToken);
             Assert.Contains(rows.Records, row => row.Title == "written while path resolution is held");
             Assert.False(recent.IsCompleted);
         }

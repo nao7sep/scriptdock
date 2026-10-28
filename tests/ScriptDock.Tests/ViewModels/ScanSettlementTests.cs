@@ -19,7 +19,6 @@ namespace ScriptDock.Tests.ViewModels;
 
 public sealed class ScanSettlementTests : IAsyncLifetime
 {
-    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(5);
     private readonly string _root = Path.Combine(Path.GetTempPath(), "scriptdock-scan-" + Guid.NewGuid());
     private readonly HeldStore _store = new();
     private readonly KnownPaths _known = new() { Paths = [] };
@@ -81,13 +80,13 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         Task? manual = null;
         try
         {
-            await recentEntered.Task.WaitAsync(Bound, TestContext.Current.CancellationToken);
+            await recentEntered.Task.WaitAsync(TestContext.Current.CancellationToken);
             manual = Track(vm.RescanCommand.ExecuteAsync(null));
             (await _store.NextAsync()).Settled.SetResult();
             await manual;
             Assert.Equal(path + "-current-target", keys.Key(path));
             releaseRecent.Set();
-            await followingScanEntered.Task.WaitAsync(Bound, TestContext.Current.CancellationToken);
+            await followingScanEntered.Task.WaitAsync(TestContext.Current.CancellationToken);
             Assert.Equal(path + "-current-target", keys.Key(path));
         }
         finally
@@ -124,10 +123,10 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         Task? current = null;
         try
         {
-            await entered.Task.WaitAsync(Bound, TestContext.Current.CancellationToken);
+            await entered.Task.WaitAsync(TestContext.Current.CancellationToken);
             current = Track(vm.RescanCommand.ExecuteAsync(null));
             (await _store.NextAsync()).Settled.SetResult();
-            await current.WaitAsync(Bound, TestContext.Current.CancellationToken);
+            await current.WaitAsync(TestContext.Current.CancellationToken);
             Assert.Equal(path + "-current-target", keys.Key(path));
         }
         finally
@@ -218,7 +217,7 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         Assert.Empty(vm.Scripts);
         Assert.False(PreparedKeys(vm).ContainsKey(path)); // Unaccepted preparation is still local.
         held.Settled.SetResult();
-        await scan.WaitAsync(Bound, TestContext.Current.CancellationToken);
+        await scan.WaitAsync(TestContext.Current.CancellationToken);
         Assert.Equal(ScriptFlag.Removed, FlagOf(vm, "gone.command"));
     }
 
@@ -242,7 +241,7 @@ public sealed class ScanSettlementTests : IAsyncLifetime
 
         await vm.RunScriptCommand.ExecuteAsync(new ScriptItem(path));
         held.Settled.SetResult();
-        await scan.WaitAsync(Bound, TestContext.Current.CancellationToken);
+        await scan.WaitAsync(TestContext.Current.CancellationToken);
 
         Assert.NotEqual(ScriptFlag.New, FlagOf(vm, "a.command"));
     }
@@ -256,7 +255,7 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         var vm = Build(clock);
         var initial = Track(vm.InitializeAsync());
         (await _store.NextAsync()).Settled.SetResult();
-        await initial.WaitAsync(Bound, TestContext.Current.CancellationToken);
+        await initial.WaitAsync(TestContext.Current.CancellationToken);
         Assert.Equal(ScriptFlag.New, FlagOf(vm, "a.command"));
 
         File.WriteAllText(Path.Combine(_root, "b.command"), "# fixture");
@@ -266,7 +265,7 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         var held = await _store.NextAsync();
         await vm.RunScriptCommand.ExecuteAsync(new ScriptItem(a));
         held.Settled.SetResult();
-        await vm.ActivationScan.WaitAsync(Bound, TestContext.Current.CancellationToken);
+        await vm.ActivationScan.WaitAsync(TestContext.Current.CancellationToken);
 
         Assert.NotEqual(ScriptFlag.New, FlagOf(vm, "a.command"));
         Assert.Equal(ScriptFlag.New, FlagOf(vm, "b.command"));
@@ -293,14 +292,14 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         Assert.Equal(2, currentSave.Value.Paths!.Count);
         if (oldSaveFails) oldSave.Settled.SetException(new IOException("old save failed"));
         else oldSave.Settled.SetResult();
-        await initial.WaitAsync(Bound, TestContext.Current.CancellationToken);
+        await initial.WaitAsync(TestContext.Current.CancellationToken);
         Assert.True(vm.IsScanning);
         Assert.Equal("scan.running", vm.CatalogResultMessage?.Key);
         Assert.False(vm.HasOperationalError);
         Assert.Empty(vm.Scripts);
         Assert.Empty(_known.Paths!);
         currentSave.Settled.SetResult();
-        await newer.WaitAsync(Bound, TestContext.Current.CancellationToken);
+        await newer.WaitAsync(TestContext.Current.CancellationToken);
         Assert.False(vm.IsScanning);
         Assert.Equal(2, vm.Scripts.Count);
         Assert.Equal(2, _known.Paths!.Count);
@@ -314,14 +313,14 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         var first = Track(vm.RescanCommand.ExecuteAsync(null));
         var failed = await _store.NextAsync();
         failed.Settled.SetException(new IOException("save failed"));
-        await first.WaitAsync(Bound, TestContext.Current.CancellationToken);
+        await first.WaitAsync(TestContext.Current.CancellationToken);
         Assert.Empty(_known.Paths!);
         Assert.Empty(vm.Scripts);
         Assert.Equal("scan.failed", vm.OperationalErrorMessage?.Key);
         var retry = Track(vm.RescanCommand.ExecuteAsync(null));
         var saved = await _store.NextAsync();
         saved.Settled.SetResult();
-        await retry.WaitAsync(Bound, TestContext.Current.CancellationToken);
+        await retry.WaitAsync(TestContext.Current.CancellationToken);
         Assert.Equal(ScriptFlag.New, Assert.Single(vm.Scripts).Flag);
         Assert.Single(_known.Paths!);
         Assert.False(vm.HasOperationalError);
@@ -340,7 +339,7 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         draft.Extensions.Add(new EditableItem(".ps1"));
         Assert.True(await vm.TryApplySettingsAsync(draft));
         held.Settled.SetResult();
-        await scan.WaitAsync(Bound, TestContext.Current.CancellationToken);
+        await scan.WaitAsync(TestContext.Current.CancellationToken);
         Assert.Empty(vm.Scripts);
         Assert.Empty(_known.Paths!);
         Assert.Equal("scan.configChanged", vm.CatalogResultMessage?.Key);
@@ -362,7 +361,7 @@ public sealed class ScanSettlementTests : IAsyncLifetime
             if (_released) save.Settled.TrySetResult();
             return save.Settled.Task;
         }
-        public Task<Save> NextAsync() => _submitted.Reader.ReadAsync().AsTask().WaitAsync(Bound, TestContext.Current.CancellationToken);
+        public Task<Save> NextAsync() => _submitted.Reader.ReadAsync().AsTask().WaitAsync(TestContext.Current.CancellationToken);
         public void ReleaseAll()
         {
             _released = true;

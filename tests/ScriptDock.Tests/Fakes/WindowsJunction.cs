@@ -18,8 +18,7 @@ internal static class WindowsJunction
         using var process = Process.Start(info) ?? throw new InvalidOperationException("Could not start mklink.");
         try
         {
-            if (!process.WaitForExit(20_000))
-                throw new TimeoutException("mklink did not finish.");
+            process.WaitForExit();
             if (process.ExitCode != 0 || !Directory.Exists(alias))
                 throw new IOException($"mklink failed with exit code {process.ExitCode}.");
         }

@@ -55,8 +55,7 @@ public sealed class ListKeyCommandTests : WindowTest, IDisposable
         window.KeyPress(key, RawInputModifiers.None, PhysicalKey.None, null);
         window.KeyRelease(key, RawInputModifiers.None, PhysicalKey.None, null);
 
-        Assert.True(System.Threading.SpinWait.SpinUntil(
-            () => { Dispatcher.UIThread.RunJobs(); return runner.StartCalls.Count > 0; }, TimeSpan.FromSeconds(5)));
+        Wait.UntilOnUi(() => runner.StartCalls.Count > 0);
         Assert.Equal(script, runner.StartCalls.Single());
     }
 
@@ -75,8 +74,7 @@ public sealed class ListKeyCommandTests : WindowTest, IDisposable
             new FakeConfigStore { Value = config }, new FakeJsonStore<AppState> { Value = state }, new FakeJsonStore<KnownPaths>(),
             records, config, state, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
         var window = Show(new MainWindow { DataContext = vm });
-        Assert.True(System.Threading.SpinWait.SpinUntil(
-            () => { Dispatcher.UIThread.RunJobs(); return vm.Recent.Count == 1 && !vm.IsScanning; }, TimeSpan.FromSeconds(5)));
+        Wait.UntilOnUi(() => vm.Recent.Count == 1 && !vm.IsScanning);
         var list = window.FindControl<ListBox>("RecentList")!;
         list.SelectedIndex = 0;
         list.ContainerFromIndex(0)!.Focus(NavigationMethod.Tab);
@@ -84,8 +82,7 @@ public sealed class ListKeyCommandTests : WindowTest, IDisposable
         window.KeyPress(key, RawInputModifiers.None, PhysicalKey.None, null);
         window.KeyRelease(key, RawInputModifiers.None, PhysicalKey.None, null);
 
-        Assert.True(System.Threading.SpinWait.SpinUntil(
-            () => { Dispatcher.UIThread.RunJobs(); return vm.Recent.Count == 0; }, TimeSpan.FromSeconds(5)));
+        Wait.UntilOnUi(() => vm.Recent.Count == 0);
         Assert.Equal(["/x/old.command"], records.Dismissals);
     }
 }

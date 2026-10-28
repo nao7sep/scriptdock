@@ -78,8 +78,7 @@ public sealed class TextFitTests : WindowTest
         records.Runs.Add(new RunRecord(records.Session, 1, DateTimeOffset.UtcNow, "/x/" + LongName, null, null, null));
         var vm = NewMainVm(records);
         var window = Show(new MainWindow { DataContext = vm, Width = 1100, Height = 760 });
-        Assert.True(System.Threading.SpinWait.SpinUntil(
-            () => { Dispatcher.UIThread.RunJobs(); return vm.Recent.Count == 1 && !vm.IsScanning; }, TimeSpan.FromSeconds(5)));
+        Wait.UntilOnUi(() => vm.Recent.Count == 1 && !vm.IsScanning);
         Settle();
         var list = window.FindControl<ListBox>("RecentList")!;
         var row = (Control)list.ContainerFromIndex(0)!;
@@ -150,7 +149,7 @@ public sealed class TextFitTests : WindowTest
         Assert.NotNull(TextIn(scanRow, vm.Rows[2].MoreRootsText));
 
         list.SelectedIndex = 1;
-        Assert.True(System.Threading.SpinWait.SpinUntil(() => { Dispatcher.UIThread.RunJobs(); return vm.HasDetail; }, TimeSpan.FromSeconds(5)));
+        Wait.UntilOnUi(() => vm.HasDetail);
         Settle();
         var header = window.GetVisualDescendants().OfType<SelectableTextBlock>().First(b => b.Text == LongMessage);
         Assert.Single(header.TextLayout.TextLines);
