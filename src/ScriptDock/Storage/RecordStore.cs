@@ -27,9 +27,6 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
 {
     public const string FileName = "records.sqlite3";
 
-    // How long a crash hook waits for the lines queued before it; the exit passes what remains of its deadline.
-    private static readonly TimeSpan FlushWait = TimeSpan.FromSeconds(2);
-
     // Every table carries the session (one process launch, by its start time) and the time of its record.
     // A run is named by its session and in-session run id; its output and the log lines about it carry the
     // same pair, and its end names it by that pair while carrying the session that saw it end.
@@ -125,8 +122,8 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
                 DataSource = FilePath,
                 Mode = SqliteOpenMode.ReadWriteCreate,
             }.ToString());
+            // No busy timeout: this is the database's one connection in the app.
             connection.Open();
-            Execute(connection, "PRAGMA busy_timeout = 1000;");
             // Before anything writes, the journal mode included.
             SqliteFormatVersion.Check(connection, FilePath, FormatVersions.Records);
             Execute(connection, "PRAGMA journal_mode = WAL;");
@@ -316,8 +313,9 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
     // One piece of a copy into or out of a record: a working buffer, not a limit on the output.
     internal const int CopyBufferBytes = 1024 * 1024;
 
-    /// <summary>Waits, within a bound, until everything queued so far is written.</summary>
-    public void Flush() => Flush(FlushWait);
+    /// <summary>Waits until everything queued so far is written, as a crash hook does; the exit passes what
+    /// remains of its deadline to <see cref="Flush(TimeSpan)"/>.</summary>
+    public void Flush() => Flush(Timeout.InfiniteTimeSpan);
 
     /// <summary>Waits up to <paramref name="bound"/> until everything queued so far is written.</summary>
     public void Flush(TimeSpan bound)

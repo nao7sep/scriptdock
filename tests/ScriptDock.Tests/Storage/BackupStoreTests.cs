@@ -275,8 +275,8 @@ public sealed class BackupStoreTests : IDisposable
     [Fact]
     public async Task JsonStoreSave_DoesNotWaitForTheHistory()
     {
-        // Another connection holds the history locked, so recording waits out its busy timeout; the save
-        // still completes while the lock is held, and the row lands once the lock is gone.
+        // Another connection holds the history locked, so recording waits on the provider's retry of a
+        // busy command; the save still completes while the lock is held, and the row lands once it is gone.
         var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
         var docPath = Path.Combine(_root, "doc.json");
         await store.SaveAsync(new SampleDoc { Name = "one" });

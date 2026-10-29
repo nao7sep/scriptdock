@@ -66,7 +66,7 @@ public static class Log
         }
     }
 
-    /// <summary>Waits, within a bound, until the pending lines are written.</summary>
+    /// <summary>Waits until the pending lines are written.</summary>
     public static void Flush() => _logger.Flush();
 
     public static void Debug(string message, object? fields = null) => _logger.Debug(message, fields);

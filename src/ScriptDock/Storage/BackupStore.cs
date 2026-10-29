@@ -208,8 +208,8 @@ public static class BackupStore
                 DataSource = file,
                 Mode = SqliteOpenMode.ReadWriteCreate,
             }.ToString());
+            // No busy timeout: this is the store's one connection in the app.
             connection.Open();
-            Execute(connection, "PRAGMA busy_timeout = 1000;");
 
             // Before anything writes, the journal mode included.
             SqliteFormatVersion.Check(connection, file, FormatVersions.Backups);
