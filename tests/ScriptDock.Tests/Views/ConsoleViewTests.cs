@@ -160,6 +160,8 @@ public sealed class ConsoleViewTests : WindowTest, IDisposable
         string? opened = null;
         vm.OpenFile = path => { opened = path; return true; };
         var window = Show(new MainWindow { DataContext = vm });
+        // The window's first scan rebuilds Recent when it ends, so the entry joins after it.
+        await Wait.UntilAsync(() => vm.HasCatalogResult && !vm.IsScanning, vm);
         vm.Recent.Add(new RecentEntry("/x/serve.command", "serve.command", DateTimeOffset.UtcNow, process));
         vm.SelectedRecentEntry = vm.Recent.Last();
         await Wait.UntilAsync(() => vm.CanOpenRunOutput && vm.ConsoleLines.Count > 0, vm, vm.ConsoleLines);

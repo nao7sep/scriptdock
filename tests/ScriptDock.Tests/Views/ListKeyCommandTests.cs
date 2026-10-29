@@ -76,7 +76,9 @@ public sealed class ListKeyCommandTests : WindowTest, IDisposable
             new FakeConfigStore { Value = config }, new FakeJsonStore<AppState> { Value = state }, new FakeJsonStore<KnownPaths>(),
             records, config, state, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
         var window = Show(new MainWindow { DataContext = vm });
-        await Wait.UntilAsync(() => vm.Recent.Count == 1 && !vm.IsScanning, vm, vm.Recent);
+        // The window reads Recent before its first scan starts, and that scan rebuilds Recent when it ends,
+        // so wait for the scan's own result: an entry focused before then is replaced under the key press.
+        await Wait.UntilAsync(() => vm.Recent.Count == 1 && vm.HasCatalogResult && !vm.IsScanning, vm, vm.Recent);
         var list = window.FindControl<ListBox>("RecentList")!;
         list.SelectedIndex = 0;
         list.ContainerFromIndex(0)!.Focus(NavigationMethod.Tab);

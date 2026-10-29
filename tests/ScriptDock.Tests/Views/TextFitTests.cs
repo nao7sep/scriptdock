@@ -78,7 +78,8 @@ public sealed class TextFitTests : WindowTest
         records.Runs.Add(new RunRecord(records.Session, 1, DateTimeOffset.UtcNow, "/x/" + LongName, null, null, null));
         var vm = NewMainVm(records);
         var window = Show(new MainWindow { DataContext = vm, Width = 1100, Height = 760 });
-        await Wait.UntilAsync(() => vm.Recent.Count == 1 && !vm.IsScanning, vm, vm.Recent);
+        // Recent is read before the first scan starts and rebuilt when it ends: wait for the scan's result.
+        await Wait.UntilAsync(() => vm.Recent.Count == 1 && vm.HasCatalogResult && !vm.IsScanning, vm, vm.Recent);
         Settle();
         var list = window.FindControl<ListBox>("RecentList")!;
         var row = (Control)list.ContainerFromIndex(0)!;
