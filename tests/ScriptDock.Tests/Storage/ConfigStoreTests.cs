@@ -392,6 +392,40 @@ public sealed class ConfigStoreTests : IAsyncLifetime
         Assert.Equal("""["/a.command"]""", ReadRaw("hidden"));
     }
 
+    // After a failed move, hidden.json takes the user's next choice and the old list leaves config.json,
+    // so a script shown in that session stays shown at the next launch.
+    [Fact]
+    public async Task A_script_shown_after_a_failed_move_stays_shown_at_the_next_launch()
+    {
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"hidden":["/a.command","/b.command"]}""");
+        var hiddenStore = new FailsOnce(AppStores.Hidden());
+        var first = new StartupStores(new ConfigStore(), hiddenStore, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>());
+        first.ThrowIfFailed();
+        Assert.False(File.Exists(Path.Combine(_root, "hidden.json"))); // the move failed
+        var vm = new MainWindowViewModel(first.ConfigStore, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), hiddenStore,
+            new FakeRecordStore(), first.Config, new AppState(), new KnownPaths(), first.Hidden, new ScriptScanner(), new FakeProcessRunner());
+        _vms.Add(vm);
+
+        await vm.ToggleHiddenCommand.ExecuteAsync(new ScriptItem("/a.command"));
+        Assert.Empty(ReadKeys());
+
+        var next = new StartupStores(new ConfigStore(), AppStores.Hidden(), new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>());
+        Assert.Equal(["/b.command"], next.Hidden.Paths);
+    }
+
+    private sealed class FailsOnce(IJsonStore<HiddenScripts> inner) : IJsonStore<HiddenScripts>
+    {
+        private bool _failed;
+        public HiddenScripts Load() => inner.Load();
+        public Task SaveAsync(HiddenScripts value)
+        {
+            if (_failed)
+                return inner.SaveAsync(value);
+            _failed = true;
+            return Task.FromException(new IOException("save failed (test)"));
+        }
+    }
+
     private MainWindowViewModel NewViewModel(ConfigStore store, AppConfig config)
     {
         var hiddenStore = AppStores.Hidden();

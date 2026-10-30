@@ -857,6 +857,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 if (nowHidden) hidden.Add(item.Path);
                 await _hiddenStore.SaveAsync(new HiddenScripts { Paths = hidden });
                 _hidden.Paths = hidden;
+                await RetireMovedHiddenAsync();
                 ResolveOperationalError("toggle hidden");
                 Log.Info("ui: toggle hidden", new { script = item.Path, hidden = nowHidden });
                 RebuildScripts(selectNeighbourIfGone: true);
@@ -866,6 +867,24 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             Log.Error("ui: toggle hidden failed", ex);
             ReportOperationalError("toggle hidden", Message.Of("guard.toggleHidden"));
+        }
+    }
+
+    // A launch whose move of the hidden list out of config.json failed left the old list there, and the
+    // next launch would join it in again, bringing back a script shown since. Once hidden.json holds the
+    // user's latest choice it is the only source, so the old list leaves config.json now. The hide itself
+    // has landed; a failure here leaves the old list for the next launch's move, as before.
+    private async Task RetireMovedHiddenAsync()
+    {
+        if (_configStore.MovedHidden is null)
+            return;
+        try
+        {
+            await _configStore.SaveAsync(_config, [ConfigStore.MovedHiddenKey]);
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            Log.Warn("ui: the old hidden list could not leave config.json", ex);
         }
     }
 
