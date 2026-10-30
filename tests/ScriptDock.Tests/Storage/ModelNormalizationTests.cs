@@ -31,7 +31,7 @@ public sealed class ModelNormalizationTests : IDisposable
     public void Load_NormalizesNestedNullCollectionsAndReferences()
     {
         File.WriteAllText(Path.Combine(_root, "config.json"),
-            """{"formatVersion":1,"uiFontFamily":null,"rootDirs":[null,"/ok"],"extensions":null,"ignorePatterns":null,"hidden":null}""");
+            """{"formatVersion":1,"uiFontFamily":null,"rootDirs":[null,"/ok"],"extensions":null,"ignorePatterns":null}""");
 
         var config = new ConfigStore().Load();
 
@@ -39,7 +39,6 @@ public sealed class ModelNormalizationTests : IDisposable
         Assert.Empty(config.RootDirs);
         Assert.NotNull(config.Extensions);
         Assert.NotNull(config.IgnorePatterns);
-        Assert.NotNull(config.Hidden);
     }
 
     [Fact]

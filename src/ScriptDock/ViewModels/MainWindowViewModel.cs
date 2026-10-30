@@ -30,10 +30,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly IConfigStore _configStore;
     private readonly IJsonStore<AppState> _stateStore;
     private readonly IJsonStore<KnownPaths> _knownPathsStore;
+    private readonly IJsonStore<HiddenScripts> _hiddenStore;
     private readonly IRecordStore _records;
     private readonly AppConfig _config;
     private readonly AppState _state;
     private readonly KnownPaths _knownPaths;
+    private readonly HiddenScripts _hidden;
     private readonly ScriptScanner _scanner;
     private readonly IProcessRunner _runner;
 
@@ -152,20 +154,24 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         IConfigStore configStore,
         IJsonStore<AppState> stateStore,
         IJsonStore<KnownPaths> knownPathsStore,
+        IJsonStore<HiddenScripts> hiddenStore,
         IRecordStore records,
         AppConfig config,
         AppState state,
         KnownPaths knownPaths,
+        HiddenScripts hidden,
         ScriptScanner scanner,
         IProcessRunner runner)
     {
         _configStore = configStore;
         _stateStore = stateStore;
         _knownPathsStore = knownPathsStore;
+        _hiddenStore = hiddenStore;
         _records = records;
         _config = config;
         _state = state;
         _knownPaths = knownPaths;
+        _hidden = hidden;
         _scanner = scanner;
         _runner = runner;
         _showHidden = state.ShowHidden; // field, not property: no save/rebuild during construction
@@ -328,8 +334,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    // One logical settings owner: each captured intent builds on the preceding successful adoption.
-    // The tail includes publication and live adoption, not only the store's file write.
+    // One owner of the user's own choices, the settings and the hidden list, though each has its own file:
+    // each captured intent builds on the preceding successful adoption, and a quit waits for, or retries,
+    // whichever change is last. The tail includes publication and live adoption, not only the file write.
     private Func<Task>? _retryConfigChange;
     private Task _configWrite = Task.CompletedTask;
 
@@ -539,7 +546,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             var chosen = draft.ChosenSets.ToList();
             await ChangeConfigAsync(async () =>
             {
-                candidate.Hidden = _config.Hidden.ToList();
                 await _configStore.SaveAsync(candidate, chosen);
                 ApplySavedSettings(candidate);
             });
@@ -647,7 +653,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             var patterns = _config.IgnorePatterns.ToList();
             var known = _knownPaths.Paths?.ToList();
             var previouslyShown = _lastFound;
-            var otherPaths = _config.Hidden.Concat(_recent.Select(run => run.Path)).Concat(_removed).ToList();
+            var otherPaths = _hidden.Paths.Concat(_recent.Select(run => run.Path)).Concat(_removed).ToList();
 
             // Everything that asks the filesystem runs here, off the interface thread: the scan, its
             // diff against the known paths and the path identities the window's lists read.
@@ -842,27 +848,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
 
         // Capture an idempotent hide/unhide intent; replaying a toggle after a failed save is wrong.
-        var nowHidden = !_config.Hidden.Any(path => _keys.Same(path, item.Path));
+        var nowHidden = !_hidden.Paths.Any(path => _keys.Same(path, item.Path));
         try
         {
             await ChangeConfigAsync(async () =>
             {
-                var hidden = _config.Hidden.Where(path => !_keys.Same(path, item.Path)).ToList();
+                var hidden = _hidden.Paths.Where(path => !_keys.Same(path, item.Path)).ToList();
                 if (nowHidden) hidden.Add(item.Path);
-                var candidate = new AppConfig
-                {
-                    UiFontFamily = _config.UiFontFamily,
-                    Language = _config.Language,
-                    TimeZone = _config.TimeZone,
-                    NonZeroExitIsError = _config.NonZeroExitIsError,
-                    Theme = _config.Theme,
-                    RootDirs = _config.RootDirs,
-                    Extensions = _config.Extensions,
-                    IgnorePatterns = _config.IgnorePatterns,
-                    Hidden = hidden,
-                };
-                await _configStore.SaveAsync(candidate, ["hidden"]);
-                _config.Hidden = hidden;
+                await _hiddenStore.SaveAsync(new HiddenScripts { Paths = hidden });
+                _hidden.Paths = hidden;
                 ResolveOperationalError("toggle hidden");
                 Log.Info("ui: toggle hidden", new { script = item.Path, hidden = nowHidden });
                 RebuildScripts(selectNeighbourIfGone: true);
@@ -1065,7 +1059,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private void RebuildScripts(bool selectNeighbourIfGone = false)
     {
-        var hidden = new HashSet<string>(_config.Hidden.Select(_keys.Key), PathIdentity.Comparer);
+        var hidden = new HashSet<string>(_hidden.Paths.Select(_keys.Key), PathIdentity.Comparer);
         var running = new HashSet<string>(
             _runner.Active.Where(p => p.State == RunState.Running).Select(p => p.ScriptKey),
             PathIdentity.Comparer);

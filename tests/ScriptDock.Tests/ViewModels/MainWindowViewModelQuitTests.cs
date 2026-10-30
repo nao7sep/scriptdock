@@ -24,6 +24,7 @@ public sealed class MainWindowViewModelQuitTests : IAsyncLifetime
     private readonly FakeTimeProvider _clock = new();
     private readonly FakeConfigStore _configStore = new();
     private readonly FakeJsonStore<AppState> _stateStore = new();
+    private readonly FakeJsonStore<HiddenScripts> _hiddenStore = new();
     private readonly FakeProcessRunner _runner = new();
     private readonly List<TaskCompletionSource> _gates = [];
     private readonly List<Task> _work = [];
@@ -61,8 +62,8 @@ public sealed class MainWindowViewModelQuitTests : IAsyncLifetime
     private MainWindowViewModel NewVm()
     {
         var vm = new MainWindowViewModel(
-            _configStore, _stateStore, new FakeJsonStore<KnownPaths>(), new FakeRecordStore(),
-            _configStore.Value, _stateStore.Value, new KnownPaths(), new ScriptScanner(), _runner)
+            _configStore, _stateStore, new FakeJsonStore<KnownPaths>(), _hiddenStore, new FakeRecordStore(),
+            _configStore.Value, _stateStore.Value, new KnownPaths(), _hiddenStore.Value, new ScriptScanner(), _runner)
         {
             Time = _clock,
         };
@@ -177,7 +178,7 @@ public sealed class MainWindowViewModelQuitTests : IAsyncLifetime
     public async Task A_hide_whose_write_fails_during_the_quit_stops_it()
     {
         var gate = Gate();
-        _configStore.SaveGate = gate;
+        _hiddenStore.SaveGate = gate;
         var vm = NewVm();
         var hide = Track(vm.ToggleHiddenCommand.ExecuteAsync(new ScriptItem("/x/a.command") { DisplayName = "a" }));
 
@@ -186,7 +187,7 @@ public sealed class MainWindowViewModelQuitTests : IAsyncLifetime
         await hide;
 
         Assert.False(await saved);
-        Assert.Empty(_configStore.Value.Hidden);
+        Assert.Empty(_hiddenStore.Value.Paths);
     }
 
     [Fact]

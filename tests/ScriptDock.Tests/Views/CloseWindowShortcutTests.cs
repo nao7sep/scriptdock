@@ -37,7 +37,8 @@ public sealed class CloseWindowShortcutTests : WindowTest
         var state = new AppState();
         return new MainWindowViewModel(
             new FakeConfigStore { Value = config }, new FakeJsonStore<AppState> { Value = state }, new FakeJsonStore<KnownPaths>(),
-            new FakeRecordStore(), config, state, new KnownPaths(), new ScriptScanner(), runner);
+            new FakeJsonStore<HiddenScripts>(),
+            new FakeRecordStore(), config, state, new KnownPaths(), new HiddenScripts(), new ScriptScanner(), runner);
     }
 
     [AvaloniaFact]

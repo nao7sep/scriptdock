@@ -202,7 +202,7 @@ public partial class App : Application
 
     /// <summary>
     /// Composition root: builds persistence and the view models by hand (no DI
-    /// container). Durable preferences live in <c>config.json</c>, view state in
+    /// container). Durable preferences live in <c>config.json</c>, the hidden scripts in <c>hidden.json</c>, view state in
     /// <c>state.json</c>, the last scan's paths in <c>known-paths.json</c>, what
     /// happened in <c>records.sqlite3</c>. Absent config sets use live built-ins without writing.
     /// </summary>
@@ -213,6 +213,7 @@ public partial class App : Application
         var configStore = stores.ConfigStore;
         var stateStore = stores.StateStore;
         var knownPathsStore = stores.KnownPathsStore;
+        var hiddenStore = stores.HiddenStore;
         var config = stores.Config;
         var state = stores.State;
         var knownPaths = stores.KnownPaths;
@@ -229,7 +230,7 @@ public partial class App : Application
         var runner = new ProcessRunner();
 
         var records = Records ?? throw new InvalidOperationException("The records are not open.");
-        var main = new MainWindowViewModel(configStore, stateStore, knownPathsStore, records, config, state, knownPaths, scanner, runner)
+        var main = new MainWindowViewModel(configStore, stateStore, knownPathsStore, hiddenStore, records, config, state, knownPaths, stores.Hidden, scanner, runner)
         {
             ComputerLanguages = ComputerLanguages,
         };

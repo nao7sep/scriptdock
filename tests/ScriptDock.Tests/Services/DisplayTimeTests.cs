@@ -148,8 +148,8 @@ public sealed class DisplayTimeTests : IDisposable
         var configStore = new FakeConfigStore();
         var stateStore = new FakeJsonStore<AppState>();
         var vm = new MainWindowViewModel(
-            configStore, stateStore, new FakeJsonStore<KnownPaths>(), new FakeRecordStore(),
-            configStore.Value, stateStore.Value, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+            configStore, stateStore, new FakeJsonStore<KnownPaths>(), new FakeJsonStore<HiddenScripts>(), new FakeRecordStore(),
+            configStore.Value, stateStore.Value, new KnownPaths(), new HiddenScripts(), new ScriptScanner(), new FakeProcessRunner());
         try
         {
             var draft = vm.CreateSettingsDraft();

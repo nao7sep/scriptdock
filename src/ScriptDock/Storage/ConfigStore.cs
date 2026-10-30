@@ -21,8 +21,14 @@ public sealed class ConfigStore : IConfigStore
     // The stored entries the last Load could not apply, by key, kept for every later save.
     private readonly Dictionary<string, JsonElement> _kept = [];
 
+    /// <summary>Where a hidden list was kept before it had its own file.</summary>
+    public const string MovedHiddenKey = "hidden";
+
     /// <summary>The keys the last <see cref="Load"/> could not apply, which saves keep unchanged.</summary>
-    public IReadOnlyList<string> KeptKeys => [.. _kept.Keys];
+    public IReadOnlyList<string> KeptKeys => [.. _kept.Keys.Where(key => MovedHidden is null || key != MovedHiddenKey)];
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string>? MovedHidden { get; private set; }
 
     /// <summary>The settings file.</summary>
     public static string FilePath => System.IO.Path.Combine(StorageRoot.Directory, AppPaths.ConfigFileName);
@@ -30,9 +36,19 @@ public sealed class ConfigStore : IConfigStore
     public AppConfig Load()
     {
         _kept.Clear();
+        MovedHidden = null;
         var config = new AppConfig();
         foreach (var (key, value) in _store.Load())
         {
+            // Kept like an entry the app cannot apply, so no save drops it before the startup move has put
+            // it in hidden.json; one that is not a list of paths stays an unknown key.
+            if (key == MovedHiddenKey && value.ValueKind == JsonValueKind.Array
+                && value.EnumerateArray().All(path => path.ValueKind == JsonValueKind.String))
+            {
+                MovedHidden = ConfigSets.Strings(value);
+                _kept[key] = value.Clone();
+                continue;
+            }
             if (!ConfigSets.IsKnown(key))
             {
                 Log.Warn("config: unknown key, kept unchanged", new { key });
@@ -69,5 +85,7 @@ public sealed class ConfigStore : IConfigStore
         await _store.SaveAsync(document);
         foreach (var key in retired)
             _kept.Remove(key);
+        if (chosen.Contains(MovedHiddenKey))
+            MovedHidden = null;
     }
 }

@@ -13,6 +13,9 @@ public static class FormatVersions
     /// <summary><c>state.json</c>.</summary>
     public const int State = 1;
 
+    /// <summary><c>hidden.json</c>.</summary>
+    public const int Hidden = 1;
+
     /// <summary><c>known-paths.json</c>.</summary>
     public const int KnownPaths = 1;
 

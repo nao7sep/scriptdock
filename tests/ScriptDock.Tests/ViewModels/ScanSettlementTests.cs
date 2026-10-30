@@ -43,8 +43,8 @@ public sealed class ScanSettlementTests : IAsyncLifetime
     {
         var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
         return _vm = new MainWindowViewModel(new FakeConfigStore { Value = config },
-            new FakeJsonStore<AppState>(), _store, records ?? new FakeRecordStore(), config, new AppState(),
-            _known, new ScriptScanner(), new FakeProcessRunner()) { Time = time ?? TimeProvider.System };
+            new FakeJsonStore<AppState>(), _store, new FakeJsonStore<HiddenScripts>(), records ?? new FakeRecordStore(), config, new AppState(),
+            _known, new HiddenScripts(), new ScriptScanner(), new FakeProcessRunner()) { Time = time ?? TimeProvider.System };
     }
 
     private static ScriptFlag FlagOf(MainWindowViewModel vm, string name) =>
@@ -152,7 +152,8 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         _known.Paths = [old, deleted];
         var config = new AppConfig { RootDirs = [subtree, _root], Extensions = [".command"], IgnorePatterns = [new("parked/")] };
         var vm = _vm = new MainWindowViewModel(new FakeConfigStore { Value = config },
-            new FakeJsonStore<AppState>(), _store, new FakeRecordStore(), config, new AppState(), _known,
+            new FakeJsonStore<AppState>(), _store, new FakeJsonStore<HiddenScripts>(), new FakeRecordStore(), config, new AppState(), _known,
+            new HiddenScripts(),
             new ScriptScanner(), new FakeProcessRunner());
 
         Directory.Move(subtree, parked); // The configured root is unavailable, not evidence of deletion.

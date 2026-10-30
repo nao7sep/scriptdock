@@ -40,7 +40,7 @@ public sealed class MainWindowViewModelRunnerTests : IAsyncLifetime
         var runner = _fixture.Runner();
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config }, new FakeJsonStore<AppState> { Value = state },
-            new FakeJsonStore<KnownPaths>(), records, config, state, new KnownPaths(), new ScriptScanner(), runner)
+            new FakeJsonStore<KnownPaths>(), new FakeJsonStore<HiddenScripts>(), records, config, state, new KnownPaths(), new HiddenScripts(), new ScriptScanner(), runner)
         {
             ConfirmHandler = _ => Task.FromResult(true),
         };

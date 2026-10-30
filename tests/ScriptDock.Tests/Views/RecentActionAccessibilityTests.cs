@@ -26,10 +26,12 @@ public sealed class RecentActionAccessibilityTests : WindowTest
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
             new FakeJsonStore<KnownPaths>(),
+            new FakeJsonStore<HiddenScripts>(),
             new FakeRecordStore(),
             config,
             state,
             new KnownPaths(),
+            new HiddenScripts(),
             new ScriptScanner(),
             runner);
         var process = runner.AddRunning("/x/live.command");

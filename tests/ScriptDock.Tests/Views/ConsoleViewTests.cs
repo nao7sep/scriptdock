@@ -56,8 +56,8 @@ public sealed class ConsoleViewTests : WindowTest, IDisposable
     }
 
     private MainWindowViewModel NewVm() => new(
-        new FakeConfigStore(), new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeRecordStore(),
-        new AppConfig(), new AppState(), new KnownPaths(), new ScriptScanner(), _runner);
+        new FakeConfigStore(), new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeJsonStore<HiddenScripts>(),
+        new FakeRecordStore(), new AppConfig(), new AppState(), new KnownPaths(), new HiddenScripts(), new ScriptScanner(), _runner);
 
     [AvaloniaFact]
     public async Task NativeCopyUsesTheFocusedConsoleSelectionAndCopiesTheHeldText()

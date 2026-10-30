@@ -52,25 +52,17 @@ public sealed class ConfigStoreTests : IAsyncLifetime
         Assert.Equal([ConfigDefaults.DefaultExtension], config.Extensions);
         Assert.Equal(ConfigDefaults.BuiltInIgnorePatterns, config.IgnorePatterns);
         Assert.Empty(config.RootDirs);
-        Assert.Empty(config.Hidden);
     }
 
     [Fact]
-    public async Task Hide_WritesExactlyHiddenAndLeavesOtherSetsAbsent()
+    public async Task Hide_WritesTheHiddenListAndLeavesTheSettingsUnwritten()
     {
         var store = new ConfigStore();
         var config = store.Load();
         var vm = NewViewModel(store, config);
         await vm.ToggleHiddenCommand.ExecuteAsync(new ScriptItem("/scripts/run.command"));
-        Assert.Equal(["hidden"], ReadKeys());
-        var loaded = store.Load();
-        Assert.Equal(["/scripts/run.command"], loaded.Hidden);
-        Assert.Equal([ConfigDefaults.DefaultExtension], loaded.Extensions);
-        Assert.Equal(ConfigDefaults.BuiltInIgnorePatterns, loaded.IgnorePatterns);
-        Assert.Equal("", loaded.UiFontFamily);
-        Assert.Equal("system", loaded.Language);
-        Assert.Equal(ThemePreference.System, loaded.Theme);
-        Assert.Empty(loaded.RootDirs);
+        Assert.False(File.Exists(ConfigPath));
+        Assert.Equal(["/scripts/run.command"], AppStores.Hidden().Load().Paths);
     }
 
     [Fact]
@@ -81,8 +73,8 @@ public sealed class ConfigStoreTests : IAsyncLifetime
         var item = new ScriptItem("/scripts/run.command");
         await vm.ToggleHiddenCommand.ExecuteAsync(item);
         await vm.ToggleHiddenCommand.ExecuteAsync(item);
-        Assert.Empty(ReadKeys());
-        Assert.Empty(store.Load().Hidden);
+        Assert.True(File.Exists(Path.Combine(_root, "hidden.json")));
+        Assert.Empty(AppStores.Hidden().Load().Paths);
     }
 
     [Fact]
@@ -101,7 +93,10 @@ public sealed class ConfigStoreTests : IAsyncLifetime
         Assert.Equal("[]", ReadRaw("extensions"));
         Assert.Equal([ConfigDefaults.DefaultExtension], store.Load().Extensions);
         Assert.Contains("extensions", store.KeptKeys);
-        Assert.Equal(["/hidden"], store.Load().Hidden);
+        // A hidden list from before hidden.json stays until the startup move takes it, and is not a kept setting.
+        store.Load();
+        Assert.Equal(["/hidden"], store.MovedHidden);
+        Assert.DoesNotContain("hidden", store.KeptKeys);
     }
 
     // The startup notice says to fix a kept set in Settings: choosing its built-in there is a real change.
@@ -160,9 +155,8 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     {
         File.WriteAllText(ConfigPath, $$"""{"formatVersion":1,"extensions":[" {{ConfigDefaults.DefaultExtension}}\n"],"uiFontFamily":"  ","theme":"system"}""");
         var store = new ConfigStore();
-        var vm = NewViewModel(store, store.Load());
-        await vm.ToggleHiddenCommand.ExecuteAsync(new ScriptItem("/scripts/run.command"));
-        Assert.Equal(["hidden"], ReadKeys());
+        await store.SaveAsync(store.Load());
+        Assert.Empty(ReadKeys());
     }
 
     [Fact]
@@ -172,9 +166,9 @@ public sealed class ConfigStoreTests : IAsyncLifetime
         var store = new ConfigStore();
         var config = store.Load();
         Assert.Equal(["extensions", "theme"], store.KeptKeys.Order());
-        config.Hidden.Add("/new");
+        config.RootDirs.Add("/new");
         await store.SaveAsync(config);
-        Assert.Equal(["extensions", "hidden", "theme"], ReadKeys());
+        Assert.Equal(["extensions", "hidden", "rootDirs", "theme"], ReadKeys());
         Assert.Equal("""[null,".sh"]""", ReadRaw("extensions"));
         Assert.Equal("\"future\"", ReadRaw("theme"));
     }
@@ -219,9 +213,10 @@ public sealed class ConfigStoreTests : IAsyncLifetime
             Directory.Delete(ConfigPath);
             File.Move(ConfigPath + ".held", ConfigPath);
         }
-        await vm.ToggleHiddenCommand.ExecuteAsync(new ScriptItem("/scripts/run.command"));
+        config.RootDirs = ["/later"];
+        await store.SaveAsync(config);
         Assert.Equal("""[null,".sh"]""", ReadRaw("extensions"));
-        Assert.Equal(["extensions", "hidden"], ReadKeys());
+        Assert.Equal(["extensions", "rootDirs"], ReadKeys());
         await vm.ShutdownAsync();
     }
 
@@ -235,7 +230,7 @@ public sealed class ConfigStoreTests : IAsyncLifetime
         Assert.Equal([ConfigDefaults.DefaultExtension], loaded.Extensions);
         Assert.Equal(ThemePreference.System, loaded.Theme);
         Assert.Equal("system", loaded.Language);
-        Assert.Equal(["/ok"], loaded.Hidden);
+        Assert.Equal(["/ok"], store.MovedHidden);
         Assert.Equal(json, File.ReadAllText(ConfigPath));
         Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
     }
@@ -253,10 +248,11 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     public void InvalidIgnorePatterns_ReadAsTheirBuiltIn_AndKeepTheOtherSets(string patterns)
     {
         File.WriteAllText(ConfigPath, $$"""{"formatVersion":1,"ignorePatterns":{{patterns}},"extensions":[".sh"],"hidden":["/ok"]}""");
-        var loaded = new ConfigStore().Load();
+        var store = new ConfigStore();
+        var loaded = store.Load();
         Assert.Equal(ConfigDefaults.BuiltInIgnorePatterns, loaded.IgnorePatterns);
         Assert.Equal([".sh"], loaded.Extensions);
-        Assert.Equal(["/ok"], loaded.Hidden);
+        Assert.Equal(["/ok"], store.MovedHidden);
     }
 
     [Theory]
@@ -266,10 +262,11 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     public void InvalidExtensions_ReadAsTheirBuiltIn_AndKeepTheOtherSets(string extensions)
     {
         File.WriteAllText(ConfigPath, $$"""{"formatVersion":1,"extensions":{{extensions}},"ignorePatterns":[{"pattern":"/build/","kind":"regex"}],"hidden":["/ok"]}""");
-        var loaded = new ConfigStore().Load();
+        var store = new ConfigStore();
+        var loaded = store.Load();
         Assert.Equal([ConfigDefaults.DefaultExtension], loaded.Extensions);
         Assert.Equal([new IgnorePattern("/build/", IgnorePatternKind.Regex)], loaded.IgnorePatterns);
-        Assert.Equal(["/ok"], loaded.Hidden);
+        Assert.Equal(["/ok"], store.MovedHidden);
     }
 
     // A pattern is stored with its kind, and a built-in with its id.
@@ -323,22 +320,83 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     {
         var store = new ConfigStore();
         var config = store.Load();
-        config.Hidden.Add("/one");
+        config.RootDirs.Add("/one");
         var first = store.SaveAsync(config);
-        config.Hidden.Add("/two");
+        config.RootDirs.Add("/two");
         var second = store.SaveAsync(config);
         config.Extensions = [".sh"];
         var third = store.SaveAsync(config);
         config.Extensions.Add(".late");
         await Task.WhenAll(first, second, third);
-        Assert.Equal(["/one", "/two"], store.Load().Hidden);
+        Assert.Equal(["/one", "/two"], store.Load().RootDirs);
         Assert.Equal([".sh"], store.Load().Extensions);
-        Assert.Equal(["extensions", "hidden"], ReadKeys());
+        Assert.Equal(["extensions", "rootDirs"], ReadKeys());
+    }
+
+    // A "hidden" entry that is not a list of paths is not a hidden list to move: it stays as an unknown key.
+    [Fact]
+    public async Task A_hidden_entry_that_is_not_a_list_of_paths_is_kept_as_an_unknown_key()
+    {
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"hidden":[3]}""");
+        var store = new ConfigStore();
+        var config = store.Load();
+        Assert.Null(store.MovedHidden);
+        Assert.Equal(["hidden"], store.KeptKeys);
+        await store.SaveAsync(config);
+        Assert.Equal("[3]", ReadRaw("hidden"));
+    }
+
+    // The startup move: the list leaves config.json for hidden.json, the other sets stay, and a second
+    // launch has nothing left to move.
+    [Fact]
+    public void Startup_moves_a_hidden_list_out_of_config_json_once()
+    {
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"hidden":["/a.command","/b.command"],"theme":"dark","unknown":true}""");
+        var first = new StartupStores(new ConfigStore(), AppStores.Hidden(), new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>());
+        first.ThrowIfFailed();
+        Assert.Equal(["/a.command", "/b.command"], first.Hidden.Paths);
+        Assert.Equal(["/a.command", "/b.command"], AppStores.Hidden().Load().Paths);
+        Assert.Equal(["theme", "unknown"], ReadKeys());
+        Assert.Equal(ThemePreference.Dark, first.Config.Theme);
+
+        var config = File.ReadAllText(ConfigPath);
+        var second = new StartupStores(new ConfigStore(), AppStores.Hidden(), new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>());
+        Assert.Null(second.ConfigStore.MovedHidden);
+        Assert.Equal(["/a.command", "/b.command"], second.Hidden.Paths);
+        Assert.Equal(config, File.ReadAllText(ConfigPath));
+    }
+
+    // A move cut off after its first write left the list in both files; the next launch joins them.
+    [Fact]
+    public void Startup_joins_a_hidden_list_left_in_both_files()
+    {
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"hidden":["/a.command","/b.command"]}""");
+        File.WriteAllText(Path.Combine(_root, "hidden.json"), """{"formatVersion":1,"paths":["/a.command","/c.command"]}""");
+        var loaded = new StartupStores(new ConfigStore(), AppStores.Hidden(), new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>());
+        Assert.Equal(["/a.command", "/c.command", "/b.command"], loaded.Hidden.Paths);
+        Assert.Equal(["/a.command", "/c.command", "/b.command"], AppStores.Hidden().Load().Paths);
+        Assert.Empty(ReadKeys());
+    }
+
+    // A failed hidden.json write leaves the list in config.json, where later saves keep it for the next try.
+    [Fact]
+    public async Task A_failed_move_keeps_the_hidden_list_in_config_json()
+    {
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"hidden":["/a.command"]}""");
+        var store = new ConfigStore();
+        var loaded = new StartupStores(store, new FakeJsonStore<HiddenScripts> { ThrowOnSave = true },
+            new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>());
+        loaded.ThrowIfFailed();
+        Assert.Equal(["/a.command"], loaded.Hidden.Paths); // hidden this session all the same
+        loaded.Config.Theme = ThemePreference.Dark;
+        await store.SaveAsync(loaded.Config, ["theme"]);
+        Assert.Equal("""["/a.command"]""", ReadRaw("hidden"));
     }
 
     private MainWindowViewModel NewViewModel(ConfigStore store, AppConfig config)
     {
-        var vm = new MainWindowViewModel(store, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeRecordStore(), config, new AppState(), new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+        var hiddenStore = AppStores.Hidden();
+        var vm = new MainWindowViewModel(store, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), hiddenStore, new FakeRecordStore(), config, new AppState(), new KnownPaths(), hiddenStore.Load(), new ScriptScanner(), new FakeProcessRunner());
         _vms.Add(vm);
         return vm;
     }

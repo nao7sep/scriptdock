@@ -45,7 +45,8 @@ public sealed class ListKeyCommandTests : WindowTest, IDisposable
         var runner = new FakeProcessRunner();
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config }, new FakeJsonStore<AppState> { Value = state }, new FakeJsonStore<KnownPaths>(),
-            new FakeRecordStore(), config, state, new KnownPaths(), new ScriptScanner(), runner);
+            new FakeJsonStore<HiddenScripts>(),
+            new FakeRecordStore(), config, state, new KnownPaths(), new HiddenScripts(), new ScriptScanner(), runner);
         var window = Show(new MainWindow { DataContext = vm });
         var list = window.FindControl<ListBox>("ScriptsList")!;
         list.ItemsSource = new[] { new ScriptItem(script) { DisplayName = "dev.command" } };
@@ -74,7 +75,8 @@ public sealed class ListKeyCommandTests : WindowTest, IDisposable
         records.Runs.Add(new RunRecord(records.Session, 1, DateTimeOffset.UtcNow, "/x/old.command", null, null, null));
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config }, new FakeJsonStore<AppState> { Value = state }, new FakeJsonStore<KnownPaths>(),
-            records, config, state, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+            new FakeJsonStore<HiddenScripts>(),
+            records, config, state, new KnownPaths(), new HiddenScripts(), new ScriptScanner(), new FakeProcessRunner());
         var window = Show(new MainWindow { DataContext = vm });
         // The window reads Recent before its first scan starts, and that scan rebuilds Recent when it ends,
         // so wait for the scan's own result: an entry focused before then is replaced under the key press.

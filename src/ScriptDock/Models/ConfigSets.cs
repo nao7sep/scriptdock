@@ -38,7 +38,6 @@ public static class ConfigSets
             c => c.Extensions),
         ["ignorePatterns"] = new(c => c.IgnorePatterns, (c, v) => c.IgnorePatterns = Patterns(v),
             c => c.IgnorePatterns.Select(PatternKey)),
-        ["hidden"] = new(c => c.Hidden, (c, v) => c.Hidden = Strings(v)),
     };
 
     /// <summary>Why an extension, trimmed, is not valid, or null when it is: the check the settings
@@ -100,7 +99,7 @@ public static class ConfigSets
         JsonValueKind.False => false,
         _ => throw new JsonException("Expected true or false"),
     };
-    private static List<string> Strings(JsonElement value) => value.EnumerateArray().Select(String).ToList();
+    internal static List<string> Strings(JsonElement value) => value.EnumerateArray().Select(String).ToList();
 
     // Each member is checked before cleanup, which could otherwise conceal what makes it invalid.
     private static List<string> Texts(JsonElement value, Func<string, Message?> error) =>

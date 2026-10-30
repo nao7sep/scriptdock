@@ -249,8 +249,10 @@ public sealed class BackupStoreTests : IDisposable
 
         var configStore = new ConfigStore();
         var config = configStore.Load();
-        config.Hidden = ["/hidden.command"];
+        config.RootDirs = ["/scripts"];
         await configStore.SaveAsync(config);
+        var hiddenStore = AppStores.Hidden();
+        await hiddenStore.SaveAsync(new HiddenScripts { Paths = ["/hidden.command"] });
 
         state.WindowWidth = 1200;
         await stateStore.SaveAsync(state);
@@ -258,6 +260,8 @@ public sealed class BackupStoreTests : IDisposable
         Assert.Empty(RowsFor(statePath));
         var configPath = Path.Combine(_root, AppPaths.ConfigFileName);
         Assert.Equal(File.ReadAllBytes(configPath), Assert.Single(RowsFor(configPath)).Content);
+        var hiddenPath = Path.Combine(_root, AppPaths.HiddenFileName);
+        Assert.Equal(File.ReadAllBytes(hiddenPath), Assert.Single(RowsFor(hiddenPath)).Content);
     }
 
     [Fact]

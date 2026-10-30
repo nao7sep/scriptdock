@@ -92,8 +92,9 @@ public sealed class MainWindowViewModelScriptsTests : IAsyncLifetime
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
             new FakeJsonStore<KnownPaths>(),
+            new FakeJsonStore<HiddenScripts>(),
             new FakeRecordStore(),
-            config, state, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner()));
+            config, state, new KnownPaths(), new HiddenScripts(), new ScriptScanner(), new FakeProcessRunner()));
         await vm.RescanCommand.ExecuteAsync(null);
         return vm;
     }
@@ -136,8 +137,9 @@ public sealed class MainWindowViewModelScriptsTests : IAsyncLifetime
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
             new FakeJsonStore<KnownPaths>(),
+            new FakeJsonStore<HiddenScripts>(),
             records,
-            config, state, new KnownPaths(), new ScriptScanner(), runner));
+            config, state, new KnownPaths(), new HiddenScripts(), new ScriptScanner(), runner));
 
         await vm.InitializeAsync();
 
@@ -210,30 +212,33 @@ public sealed class MainWindowViewModelScriptsTests : IAsyncLifetime
         Touch("a.command");
         Touch("b.command");
         var config = new AppConfig { RootDirs = [_root], Extensions = [".command"] };
-        var configStore = new FakeConfigStore { Value = config, ThrowOnSave = true };
+        var configStore = new FakeConfigStore { Value = config };
+        var hidden = new HiddenScripts();
+        var hiddenStore = new FakeJsonStore<HiddenScripts> { Value = hidden, ThrowOnSave = true };
         var vm = Own(new MainWindowViewModel(
-            configStore, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeRecordStore(),
-            config, new AppState(), new KnownPaths(), new ScriptScanner(), new FakeProcessRunner()));
+            configStore, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), hiddenStore, new FakeRecordStore(),
+            config, new AppState(), new KnownPaths(), hidden, new ScriptScanner(), new FakeProcessRunner()));
         await vm.RescanCommand.ExecuteAsync(null);
 
         await vm.ToggleHiddenCommand.ExecuteAsync(vm.Scripts.Single(s => Name(s) == "b.command"));
 
         Assert.True(vm.HasOperationalError);
-        Assert.Empty(config.Hidden);
+        Assert.Empty(hidden.Paths);
         await vm.RescanCommand.ExecuteAsync(null); // a later rebuild does not apply the failed choice
         Assert.False(vm.Scripts.Single(s => Name(s) == "b.command").IsHidden);
 
-        // A later settings save does not persist it either.
-        configStore.ThrowOnSave = false;
+        // The hidden list is not the settings': a settings save leaves it alone.
+        hiddenStore.ThrowOnSave = false;
         Assert.True(await vm.TryApplySettingsAsync(new SettingsDialogViewModel(config)));
-        Assert.Empty(configStore.LastSaved!.Hidden);
+        Assert.Equal(0, hiddenStore.SaveCount);
 
         // The retry performs the originally requested action: it hides.
         await vm.ToggleHiddenCommand.ExecuteAsync(vm.Scripts.Single(s => Name(s) == "b.command"));
 
         Assert.False(vm.HasOperationalError);
-        Assert.Equal([Path.Combine(_root, "b.command")], config.Hidden);
-        Assert.Equal(config.Hidden, configStore.LastSaved!.Hidden);
+        Assert.Equal([Path.Combine(_root, "b.command")], hidden.Paths);
+        Assert.Equal(hidden.Paths, hiddenStore.LastSaved!.Paths);
+        Assert.Equal(1, configStore.SaveCount); // only the settings save above
         Assert.DoesNotContain(vm.Scripts, s => Name(s) == "b.command");
     }
 
@@ -269,8 +274,9 @@ public sealed class MainWindowViewModelScriptsTests : IAsyncLifetime
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
             new FakeJsonStore<KnownPaths>(),
+            new FakeJsonStore<HiddenScripts>(),
             new FakeRecordStore(),
-            config, state, new KnownPaths { Paths = [] }, new ScriptScanner(), new FakeProcessRunner()));
+            config, state, new KnownPaths { Paths = [] }, new HiddenScripts(), new ScriptScanner(), new FakeProcessRunner()));
         await vm.RescanCommand.ExecuteAsync(null);
         Assert.All(vm.Scripts, s => Assert.True(s.IsNew));
 
@@ -298,8 +304,9 @@ public sealed class MainWindowViewModelScriptsTests : IAsyncLifetime
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
             store,
+            new FakeJsonStore<HiddenScripts>(),
             new FakeRecordStore(),
-            config, state, store.Load(), new ScriptScanner(), new FakeProcessRunner()));
+            config, state, store.Load(), new HiddenScripts(), new ScriptScanner(), new FakeProcessRunner()));
         await vm.RescanCommand.ExecuteAsync(null);
         return vm;
     }
@@ -372,8 +379,9 @@ public sealed class MainWindowViewModelScriptsTests : IAsyncLifetime
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
             new FakeJsonStore<KnownPaths>(),
+            new FakeJsonStore<HiddenScripts>(),
             records,
-            config, state, known ?? new KnownPaths(), new ScriptScanner(), new FakeProcessRunner()) { Time = clock });
+            config, state, known ?? new KnownPaths(), new HiddenScripts(), new ScriptScanner(), new FakeProcessRunner()) { Time = clock });
         return (vm, records, clock);
     }
 
@@ -481,8 +489,9 @@ public sealed class MainWindowViewModelScriptsTests : IAsyncLifetime
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
             new FakeJsonStore<KnownPaths>(),
+            new FakeJsonStore<HiddenScripts>(),
             new FakeRecordStore(),
-            config, state, new KnownPaths { Paths = [] }, new ScriptScanner(), new FakeProcessRunner()));
+            config, state, new KnownPaths { Paths = [] }, new HiddenScripts(), new ScriptScanner(), new FakeProcessRunner()));
         await vm.RescanCommand.ExecuteAsync(null);
 
         var font = vm.CreateSettingsDraft();

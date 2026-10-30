@@ -28,8 +28,8 @@ public sealed class MainWindowViewModelTests
         var stateStore = new FakeJsonStore<AppState> { Value = state };
         var runner = new FakeProcessRunner();
         var vm = new MainWindowViewModel(
-            configStore, stateStore, new FakeJsonStore<KnownPaths>(), records ?? new FakeRecordStore(),
-            config, state, new KnownPaths(), new ScriptScanner(), runner);
+            configStore, stateStore, new FakeJsonStore<KnownPaths>(), new FakeJsonStore<HiddenScripts>(), records ?? new FakeRecordStore(),
+            config, state, new KnownPaths(), new HiddenScripts(), new ScriptScanner(), runner);
         return (vm, runner);
     }
 
@@ -384,10 +384,12 @@ public sealed class MainWindowViewModelTests
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState> { Value = state },
             new FakeJsonStore<KnownPaths>(),
+            new FakeJsonStore<HiddenScripts>(),
             new FakeRecordStore { ThrowOnWrite = true },
             config,
             state,
             new KnownPaths(),
+            new HiddenScripts(),
             new ScriptScanner(),
             runner);
         vm.ConfirmHandler = new ConfirmSpy(result: true).Handle;
@@ -423,8 +425,8 @@ public sealed class MainWindowViewModelTests
         var configStore = new FakeConfigStore();
         var stateStore = new FakeJsonStore<AppState>();
         var vm = new MainWindowViewModel(
-            configStore, stateStore, new FakeJsonStore<KnownPaths>(), new FakeRecordStore(), configStore.Value, stateStore.Value,
-            new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+            configStore, stateStore, new FakeJsonStore<KnownPaths>(), new FakeJsonStore<HiddenScripts>(), new FakeRecordStore(), configStore.Value, stateStore.Value,
+            new KnownPaths(), new HiddenScripts(), new ScriptScanner(), new FakeProcessRunner());
 
         vm.CaptureWindowPlacement(-1400, 80, 1100.5, 720.25, maximized: true);
         await vm.PersistPaneSizesAsync(420, 240);
@@ -444,7 +446,7 @@ public sealed class MainWindowViewModelTests
         var configStore = new FakeConfigStore { Value = config, ThrowOnSave = true };
         var stateStore = new FakeJsonStore<AppState>();
         var vm = new MainWindowViewModel(
-            configStore, stateStore, new FakeJsonStore<KnownPaths>(), new FakeRecordStore(), config, new AppState(), new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+            configStore, stateStore, new FakeJsonStore<KnownPaths>(), new FakeJsonStore<HiddenScripts>(), new FakeRecordStore(), config, new AppState(), new KnownPaths(), new HiddenScripts(), new ScriptScanner(), new FakeProcessRunner());
         var draft = vm.CreateSettingsDraft();
         draft.RootDirs.Clear();
         draft.RootDirs.Add("/new");
@@ -466,7 +468,7 @@ public sealed class MainWindowViewModelTests
         var config = new AppConfig();
         var configStore = new FakeConfigStore { Value = config };
         var vm = new MainWindowViewModel(
-            configStore, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeRecordStore(), config, new AppState(), new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+            configStore, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeJsonStore<HiddenScripts>(), new FakeRecordStore(), config, new AppState(), new KnownPaths(), new HiddenScripts(), new ScriptScanner(), new FakeProcessRunner());
         try
         {
             Assert.True(vm.NeedsScanFolder);
@@ -490,7 +492,7 @@ public sealed class MainWindowViewModelTests
         var config = new AppConfig();
         var configStore = new FakeConfigStore { Value = config, ThrowOnSave = true };
         var vm = new MainWindowViewModel(
-            configStore, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeRecordStore(), config, new AppState(), new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+            configStore, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeJsonStore<HiddenScripts>(), new FakeRecordStore(), config, new AppState(), new KnownPaths(), new HiddenScripts(), new ScriptScanner(), new FakeProcessRunner());
 
         Assert.False(await vm.AddFirstScanFolderAsync("/scripts"));
 
@@ -505,7 +507,7 @@ public sealed class MainWindowViewModelTests
         var configStore = new FakeConfigStore { Value = config, ThrowOnSave = true };
         var stateStore = new FakeJsonStore<AppState>();
         var vm = new MainWindowViewModel(
-            configStore, stateStore, new FakeJsonStore<KnownPaths>(), new FakeRecordStore(), config, stateStore.Value, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+            configStore, stateStore, new FakeJsonStore<KnownPaths>(), new FakeJsonStore<HiddenScripts>(), new FakeRecordStore(), config, stateStore.Value, new KnownPaths(), new HiddenScripts(), new ScriptScanner(), new FakeProcessRunner());
         var draft = vm.CreateSettingsDraft();
         draft.UiFontFamily = "Helvetica";
 
@@ -549,10 +551,12 @@ public sealed class MainWindowViewModelTests
             new FakeConfigStore { Value = config },
             new FakeJsonStore<AppState>(),
             new FakeJsonStore<KnownPaths>(),
+            new FakeJsonStore<HiddenScripts>(),
             new FakeRecordStore(),
             config,
             new AppState(),
             new KnownPaths(),
+            new HiddenScripts(),
             new ScriptScanner(),
             new FakeProcessRunner());
         var fontChanges = 0;

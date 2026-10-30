@@ -42,8 +42,8 @@ public sealed class SessionEndDeliveryTests : WindowTest, IDisposable
     private async Task<(MainWindow Window, MainWindowViewModel Vm)> ShowWithRunningScriptAsync()
     {
         var vm = new MainWindowViewModel(
-            _configStore, _stateStore, new FakeJsonStore<KnownPaths>(), new FakeRecordStore(),
-            _configStore.Value, _stateStore.Value, new KnownPaths(), new ScriptScanner(), _runner)
+            _configStore, _stateStore, new FakeJsonStore<KnownPaths>(), new FakeJsonStore<HiddenScripts>(), new FakeRecordStore(),
+            _configStore.Value, _stateStore.Value, new KnownPaths(), new HiddenScripts(), new ScriptScanner(), _runner)
         {
             Time = _clock,
         };

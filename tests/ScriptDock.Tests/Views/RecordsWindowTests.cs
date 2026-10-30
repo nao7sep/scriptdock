@@ -115,23 +115,16 @@ public sealed class RecordsWindowTests : WindowTest
     }
 
     [AvaloniaFact]
-    public async Task The_list_splitter_takes_the_keyboard_and_saves_once_per_key()
+    public async Task The_list_splitter_takes_the_keyboard_and_a_close_saves_the_pending_width()
     {
         var window = Show(new RecordsWindow { DataContext = NewViewModel(), Width = 1200, Height = 700 });
         var splitter = window.GetVisualDescendants().OfType<GridSplitter>().Single();
 
-        foreach (var _ in new[] { 1, 2 }) // a held key repeats its press, then releases once
+        foreach (var _ in new[] { 1, 2 })
             splitter.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Right });
         Dispatcher.UIThread.RunJobs();
         Assert.Equal(RecordsLayout.ListDefaultWidth + 32, window.ListWidthIntent);
-        Assert.Equal(0, _stateStore.SaveCount);
-
-        splitter.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = Key.Right });
-        Dispatcher.UIThread.RunJobs();
-        // The fake store saves on a pool thread, as the real one does.
-        await _stateStore.LastSave;
-        Assert.Equal(1, _stateStore.SaveCount);
-        Assert.Equal(RecordsLayout.ListDefaultWidth + 32, _stateStore.Value.RecordsListWidth);
+        Assert.Equal(0, _stateStore.SaveCount); // saved a short delay after the last key, not per key
 
         // The keyboard's width is the intent, so a resize away and back keeps it.
         window.Width = 900;
@@ -140,6 +133,13 @@ public sealed class RecordsWindowTests : WindowTest
         Dispatcher.UIThread.RunJobs();
         var grid = window.GetVisualDescendants().OfType<Grid>().Single(grid => grid.Name == "Shell");
         Assert.Equal(RecordsLayout.ListDefaultWidth + 32, grid.ColumnDefinitions[0].ActualWidth);
+
+        // Closing before the delay has passed still saves the stepped width.
+        window.Close();
+        Dispatcher.UIThread.RunJobs();
+        // The fake store saves on a pool thread, as the real one does.
+        await _stateStore.LastSave;
+        Assert.Equal(RecordsLayout.ListDefaultWidth + 32, _stateStore.Value.RecordsListWidth);
     }
 
     [AvaloniaFact]
@@ -209,8 +209,8 @@ public sealed class RecordsWindowTests : WindowTest
     {
         var config = new AppConfig();
         var vm = new MainWindowViewModel(
-            new FakeConfigStore { Value = config }, _stateStore, new FakeJsonStore<KnownPaths>(), new FakeRecordStore(),
-            config, _stateStore.Value, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+            new FakeConfigStore { Value = config }, _stateStore, new FakeJsonStore<KnownPaths>(), new FakeJsonStore<HiddenScripts>(), new FakeRecordStore(),
+            config, _stateStore.Value, new KnownPaths(), new HiddenScripts(), new ScriptScanner(), new FakeProcessRunner());
         var host = Host();
         var main = Show(new MainWindow { DataContext = vm, Records = host });
         var records = Track(host.ShowOrActivate());

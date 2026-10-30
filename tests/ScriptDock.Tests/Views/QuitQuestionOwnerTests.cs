@@ -42,7 +42,8 @@ public sealed class QuitQuestionOwnerTests : WindowTest
         var state = new AppState();
         var vm = new MainWindowViewModel(
             new FakeConfigStore { Value = config }, new FakeJsonStore<AppState> { Value = state }, new FakeJsonStore<KnownPaths>(),
-            new FakeRecordStore(), config, state, new KnownPaths(), new ScriptScanner(), runner);
+            new FakeJsonStore<HiddenScripts>(),
+            new FakeRecordStore(), config, state, new KnownPaths(), new HiddenScripts(), new ScriptScanner(), runner);
         var main = Show(new MainWindow { DataContext = vm });
         await Wait.UntilAsync(vm.ShouldConfirmQuit, vm);
         main.WindowState = WindowState.Minimized;

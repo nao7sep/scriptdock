@@ -47,12 +47,12 @@ public sealed class FormatVersionTests : IDisposable
     [Fact]
     public void Config_WithoutMarker_ReadsAsTheCurrentFormat()
     {
-        File.WriteAllText(PathOf(AppPaths.ConfigFileName), """{"theme":"dark","hidden":["/a.command"]}""");
+        File.WriteAllText(PathOf(AppPaths.ConfigFileName), """{"theme":"dark","rootDirs":["/scripts"]}""");
 
         var config = new ConfigStore().Load();
 
         Assert.Equal(ThemePreference.Dark, config.Theme);
-        Assert.Equal(["/a.command"], config.Hidden);
+        Assert.Equal(["/scripts"], config.RootDirs);
         Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
     }
 
@@ -61,16 +61,52 @@ public sealed class FormatVersionTests : IDisposable
     {
         var store = new ConfigStore();
         var config = store.Load();
-        config.Hidden = ["/a.command"];
+        config.RootDirs = ["/scripts"];
         await store.SaveAsync(config);
 
         Assert.Equal(FormatVersions.Config, FirstKeyVersion(AppPaths.ConfigFileName));
-        Assert.Equal(["/a.command"], store.Load().Hidden);
+        Assert.Equal(["/scripts"], store.Load().RootDirs);
     }
 
     [Fact]
     public void Config_NewerVersion_IsRefusedAndLeftByteIdentical() =>
         AssertJsonRefused(AppPaths.ConfigFileName, FormatVersions.Config, () => new ConfigStore().Load());
+
+    // hidden.json
+
+    [Fact]
+    public void Hidden_WithoutMarker_ReadsAsTheCurrentFormat()
+    {
+        File.WriteAllText(PathOf(AppPaths.HiddenFileName), """{"paths":["/a.command"]}""");
+
+        Assert.Equal(["/a.command"], AppStores.Hidden().Load().Paths);
+        Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
+    }
+
+    [Fact]
+    public async Task Hidden_CurrentVersion_RoundTrips()
+    {
+        var store = AppStores.Hidden();
+        await store.SaveAsync(new HiddenScripts { Paths = ["/a.command"] });
+
+        Assert.Equal(FormatVersions.Hidden, FirstKeyVersion(AppPaths.HiddenFileName));
+        Assert.Equal(["/a.command"], store.Load().Paths);
+    }
+
+    [Fact]
+    public void Hidden_NewerVersion_IsRefusedAndLeftByteIdentical() =>
+        AssertJsonRefused(AppPaths.HiddenFileName, FormatVersions.Hidden, () => AppStores.Hidden().Load());
+
+    // The user's hides are not rebuilt from nothing: a member that is not a path quarantines the file.
+    [Fact]
+    public void Hidden_WithAMemberThatIsNotAPath_IsQuarantined()
+    {
+        File.WriteAllText(PathOf(AppPaths.HiddenFileName), """{"formatVersion":1,"paths":["/a.command",null]}""");
+
+        Assert.Empty(AppStores.Hidden().Load().Paths);
+        var quarantined = Assert.Single(Directory.GetFiles(_root, "hidden-*.invalid"));
+        Assert.Equal([quarantined], QuarantineJournal.Drain());
+    }
 
     // state.json
 

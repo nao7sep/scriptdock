@@ -11,8 +11,9 @@ namespace ScriptDock.Storage;
 
 /// <summary>
 /// The backup history (data-backup-conventions): <c>backups.sqlite3</c> under the storage root, holding the
-/// last version of each protected file saved in each session (one process launch). Only <c>config.json</c> is
-/// protected: the user's scan folders, extensions, ignore patterns and hidden scripts. Records, view state,
+/// last version of each protected file saved in each session (one process launch). <c>config.json</c> (the
+/// user's settings: scan folders, extensions, ignore patterns and the rest) and <c>hidden.json</c> (the
+/// hidden scripts) are protected. Records, view state,
 /// the remembered script list and logs are not (see <see cref="AppStores"/>). Restore is manual.
 /// </summary>
 /// <remarks>

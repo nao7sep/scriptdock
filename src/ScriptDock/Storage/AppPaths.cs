@@ -15,6 +15,9 @@ public static class AppPaths
     /// <summary>Volatile session state (see <see cref="Models.AppState"/>).</summary>
     public const string StateFileName = "state.json";
 
+    /// <summary>The scripts hidden from the default list (see <see cref="Models.HiddenScripts"/>).</summary>
+    public const string HiddenFileName = "hidden.json";
+
     /// <summary>The last scan's found paths (see <see cref="Models.KnownPaths"/>).</summary>
     public const string KnownPathsFileName = "known-paths.json";
 }

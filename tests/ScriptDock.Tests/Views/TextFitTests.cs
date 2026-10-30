@@ -49,7 +49,8 @@ public sealed class TextFitTests : WindowTest
         var state = new AppState();
         return new MainWindowViewModel(
             new FakeConfigStore { Value = config }, new FakeJsonStore<AppState> { Value = state }, new FakeJsonStore<KnownPaths>(),
-            records ?? new FakeRecordStore(), config, state, new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+            new FakeJsonStore<HiddenScripts>(),
+            records ?? new FakeRecordStore(), config, state, new KnownPaths(), new HiddenScripts(), new ScriptScanner(), new FakeProcessRunner());
     }
 
     [AvaloniaFact]

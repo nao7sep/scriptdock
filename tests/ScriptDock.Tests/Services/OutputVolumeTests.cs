@@ -176,8 +176,8 @@ public sealed class OutputVolumeTests : IDisposable
     public void The_console_appends_lines_replaces_the_one_still_arriving_and_lets_the_oldest_go()
     {
         var vm = new MainWindowViewModel(
-            new FakeConfigStore(), new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeRecordStore(),
-            new AppConfig(), new AppState(), new KnownPaths(), new ScriptScanner(), new FakeProcessRunner());
+            new FakeConfigStore(), new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), new FakeJsonStore<HiddenScripts>(), new FakeRecordStore(),
+            new AppConfig(), new AppState(), new KnownPaths(), new HiddenScripts(), new ScriptScanner(), new FakeProcessRunner());
 
         vm.ApplyConsoleUpdate(new ConsoleUpdate(true, ["a", "b"], "c-partial"));
         var b = vm.ConsoleLines[1];

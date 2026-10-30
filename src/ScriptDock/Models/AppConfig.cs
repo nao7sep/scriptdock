@@ -3,8 +3,8 @@ using System.Collections.Generic;
 namespace ScriptDock.Models;
 
 /// <summary>
-/// Durable user preferences, persisted to <c>~/.scriptdock/config.json</c>. These
-/// survive across sessions and are the settings a user deliberately changes.
+/// Durable user preferences, persisted to <c>~/.scriptdock/config.json</c>: the settings the Settings
+/// dialog edits. The hidden scripts change apart from them and are <see cref="HiddenScripts"/>.
 /// </summary>
 public sealed class AppConfig
 {
@@ -54,7 +54,4 @@ public sealed class AppConfig
     /// <summary>Ignore patterns (<see cref="Services.IgnoreRules"/>): a folder one matches is pruned with
     /// its subtree, a file one matches is skipped.</summary>
     public List<IgnorePattern> IgnorePatterns { get; set; } = [.. ConfigDefaults.BuiltInIgnorePatterns];
-
-    /// <summary>Absolute paths the user has hidden from the default list.</summary>
-    public List<string> Hidden { get; set; } = [];
 }

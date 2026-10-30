@@ -20,6 +20,7 @@ public sealed class FakeConfigStore : IConfigStore
     public TaskCompletionSource? SaveGate { get; set; }
 
     public IReadOnlyList<string> KeptKeys { get; set; } = [];
+    public IReadOnlyList<string>? MovedHidden { get; set; }
 
     /// <summary>The sets the last save was told the user chose a value for.</summary>
     public IReadOnlyCollection<string>? LastReplaced { get; private set; }

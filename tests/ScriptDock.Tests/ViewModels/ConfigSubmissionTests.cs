@@ -24,7 +24,9 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
     private readonly string? _previousHome = Environment.GetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable);
     private readonly List<Task> _work = [];
     private readonly List<TaskCompletionSource> _gates = [];
+    private readonly Holds _holds = new();
     private HeldConfigStore _store = null!;
+    private HiddenScripts _hidden = new();
     private readonly FakeTimeProvider _clock = new();
     private MainWindowViewModel? _vm;
     private AppConfig _config = new();
@@ -33,10 +35,13 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
     {
         Directory.CreateDirectory(_home);
         Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, _home);
-        _store = new HeldConfigStore();
+        _store = new HeldConfigStore(_holds);
+        var hiddenStore = new HeldHiddenStore(_holds);
         _config = _store.Load();
+        _hidden = hiddenStore.Load();
         _vm = new MainWindowViewModel(_store, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(),
-            new FakeRecordStore(), _config, new AppState(), new KnownPaths(), new ScriptScanner(), new FakeProcessRunner())
+            hiddenStore,
+            new FakeRecordStore(), _config, new AppState(), new KnownPaths(), _hidden, new ScriptScanner(), new FakeProcessRunner())
             { Time = _clock };
         return ValueTask.CompletedTask;
     }
@@ -66,7 +71,7 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
     {
         var gate = new TaskCompletionSource();
         _gates.Add(gate);
-        _store.Gates.Enqueue(gate);
+        _holds.Gates.Enqueue(gate);
         return gate;
     }
 
@@ -92,7 +97,7 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
             saved = Track(_vm.TryApplySettingsAsync(draft));
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => { });
             Assert.False(saved.IsCompleted);
-            Assert.Equal(0, _store.Submissions);
+            Assert.Equal(0, _holds.Submissions);
         }
         finally
         {
@@ -130,7 +135,7 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
             if (save is not null) await save;
         }
         Assert.False(await save!);
-        Assert.Equal(0, _store.Submissions);
+        Assert.Equal(0, _holds.Submissions);
         Assert.Empty(_config.RootDirs);
     }
 
@@ -148,8 +153,8 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
 
         Assert.True(await settings);
         var loaded = new ConfigStore().Load();
-        Assert.Equal([Path.Combine(_home, "script.command")], loaded.Hidden);
-        Assert.Equal(_config.Hidden, loaded.Hidden);
+        Assert.Equal([Path.Combine(_home, "script.command")], AppStores.Hidden().Load().Paths);
+        Assert.Equal(_hidden.Paths, AppStores.Hidden().Load().Paths);
         Assert.Equal("Helvetica", loaded.UiFontFamily);
         Assert.Equal(_config.UiFontFamily, loaded.UiFontFamily);
     }
@@ -158,7 +163,7 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
     public async Task FailedPredecessorIsNotAdoptedAndDoesNotPoisonTheNextSettingsSave()
     {
         var gate = HoldNextSave();
-        _store.FailNext = true;
+        _holds.FailNext = true;
         var hide = Hide();
         var draft = _vm!.CreateSettingsDraft();
         draft.Theme = ThemePreference.Dark;
@@ -166,9 +171,9 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
         gate.SetResult();
         await Task.WhenAll(hide, settings).WaitAsync(TestContext.Current.CancellationToken);
         Assert.True(await settings);
-        Assert.Empty(_config.Hidden);
+        Assert.Empty(_hidden.Paths);
         var loaded = new ConfigStore().Load();
-        Assert.Empty(loaded.Hidden);
+        Assert.Empty(AppStores.Hidden().Load().Paths);
         Assert.Equal(ThemePreference.Dark, loaded.Theme);
         Assert.Equal(_config.Theme, loaded.Theme);
     }
@@ -179,7 +184,7 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
         var first = HoldNextSave();
         var second = HoldNextSave();
         var hide = Hide();
-        await _store.LastPublication.WaitAsync(TestContext.Current.CancellationToken);
+        await _holds.LastPublication.WaitAsync(TestContext.Current.CancellationToken);
         _vm!.BeginQuit();
         var quit = Track(_vm.SettingsSavedForQuitAsync());
         var draft = _vm.CreateSettingsDraft();
@@ -210,8 +215,8 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
         gate.SetResult();
         Assert.True(await retry.WaitAsync(TestContext.Current.CancellationToken));
         await hide;
-        Assert.Equal(1, _store.Submissions);
-        Assert.Equal(_config.Hidden, new ConfigStore().Load().Hidden);
+        Assert.Equal(1, _holds.Submissions);
+        Assert.Equal(_hidden.Paths, AppStores.Hidden().Load().Paths);
     }
 
     [AvaloniaFact]
@@ -222,23 +227,22 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
         var draft = _vm.CreateSettingsDraft();
         draft.Theme = ThemePreference.Dark;
         Assert.False(await _vm.TryApplySettingsAsync(draft));
-        Assert.Equal(0, _store.Submissions);
-        Assert.Empty(_config.Hidden);
+        Assert.Equal(0, _holds.Submissions);
+        Assert.Empty(_hidden.Paths);
         Assert.Equal(ThemePreference.System, _config.Theme);
     }
 
-    // Uses the real writer. Holding its completion keeps publication separate from the VM's adoption,
-    // so the regression cannot rely on continuation order or fast local filesystem timing.
-    private sealed class HeldConfigStore : IConfigStore
+    // Uses the real writers. Holding their completion keeps publication separate from the VM's adoption,
+    // so the regression cannot rely on continuation order or fast local filesystem timing. The settings
+    // and the hidden list share one queue of holds, as they share one owner in the view model.
+    private sealed class Holds
     {
-        private readonly ConfigStore _inner = new();
         public Queue<TaskCompletionSource> Gates { get; } = new();
         public int Submissions { get; private set; }
         public bool FailNext { get; set; }
         public Task LastPublication { get; private set; } = Task.CompletedTask;
-        public AppConfig Load() => _inner.Load();
-        public IReadOnlyList<string> KeptKeys => _inner.KeptKeys;
-        public Task SaveAsync(AppConfig value, IReadOnlyCollection<string>? replaced = null)
+
+        public Task Save(Func<Task> write)
         {
             Submissions++;
             if (FailNext)
@@ -246,10 +250,27 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
                 FailNext = false;
                 return Fail(Gates.Dequeue().Task);
             }
-            var write = LastPublication = _inner.SaveAsync(value, replaced);
-            return Gates.TryDequeue(out var gate) ? Hold(write, gate.Task) : write;
+            var published = LastPublication = write();
+            return Gates.TryDequeue(out var gate) ? Hold(published, gate.Task) : published;
         }
         private static async Task Hold(Task write, Task gate) { await write; await gate; }
         private static async Task Fail(Task gate) { await gate; throw new IOException("Held save failed before publication."); }
+    }
+
+    private sealed class HeldConfigStore(Holds holds) : IConfigStore
+    {
+        private readonly ConfigStore _inner = new();
+        public AppConfig Load() => _inner.Load();
+        public IReadOnlyList<string> KeptKeys => _inner.KeptKeys;
+        public IReadOnlyList<string>? MovedHidden => _inner.MovedHidden;
+        public Task SaveAsync(AppConfig value, IReadOnlyCollection<string>? replaced = null) =>
+            holds.Save(() => _inner.SaveAsync(value, replaced));
+    }
+
+    private sealed class HeldHiddenStore(Holds holds) : IJsonStore<HiddenScripts>
+    {
+        private readonly JsonStore<HiddenScripts> _inner = AppStores.Hidden();
+        public HiddenScripts Load() => _inner.Load();
+        public Task SaveAsync(HiddenScripts value) => holds.Save(() => _inner.SaveAsync(value));
     }
 }
