@@ -24,6 +24,7 @@ public partial class RecordsWindow : Window
     private double _listWidthIntent;
     private (int X, int Y, double Width, double Height)? _normalGeometry;
     private bool _closed;
+    private readonly Action _saveKeyboardListWidth;
 
     public RecordsWindow()
     {
@@ -57,7 +58,7 @@ public partial class RecordsWindow : Window
                 ClampListToWindow();
         };
         ListSplitter.AddHandler(Thumb.DragCompletedEvent, OnListSplitterDragCompleted);
-        SplitterKeyboard.Attach(ListSplitter, Avalonia.Layout.Orientation.Horizontal, paneBefore: true,
+        _saveKeyboardListWidth = SplitterKeyboard.Attach(ListSplitter, Avalonia.Layout.Orientation.Horizontal, paneBefore: true,
             () => (RecordsLayout.DisplayListWidth(_listWidthIntent, ShellWindowWidth),
                 RecordsLayout.ListMinWidth, RecordsLayout.MaxListWidth(ShellWindowWidth)),
             width =>
@@ -191,6 +192,8 @@ public partial class RecordsWindow : Window
         // Avalonia raises Closing again for a Close() on a window already closed.
         if (_closed)
             return;
+        // A width stepped by keyboard in the last moment before closing is saved now, not after.
+        _saveKeyboardListWidth();
         RememberNormalGeometry();
         if (ViewModel is { } vm
             && WindowState is WindowState.Normal or WindowState.Maximized

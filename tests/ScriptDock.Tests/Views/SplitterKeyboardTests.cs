@@ -1,4 +1,9 @@
+using System;
+using Avalonia.Controls;
+using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Threading;
+using ScriptDock.Tests.Fakes;
 using Avalonia.Layout;
 using ScriptDock.Views;
 using Xunit;
@@ -37,4 +42,49 @@ public sealed class SplitterKeyboardTests
     {
         Assert.Null(SplitterKeyboard.Resize(key, axis, 300, 100, 400, paneBefore: true));
     }
+
+    [AvaloniaFact]
+    public void SteppedSize_IsSavedOnceAfterTheLastKey()
+    {
+        var clock = new FakeTimeProvider();
+        var splitter = new GridSplitter();
+        var size = 300.0;
+        var saves = 0;
+        SplitterKeyboard.Attach(splitter, Orientation.Horizontal, paneBefore: true,
+            () => (size, 100, 600), next => size = next, () => saves++, clock);
+
+        for (var i = 0; i < 3; i++)
+        {
+            Press(splitter, Key.Right);
+            clock.Advance(SplitterKeyboard.SaveDelay - TimeSpan.FromMilliseconds(1));
+            Dispatcher.UIThread.RunJobs();
+        }
+        Assert.Equal(0, saves); // each key pushed the save back
+
+        clock.Advance(TimeSpan.FromMilliseconds(1));
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(1, saves);
+        Assert.Equal(348.0, size);
+    }
+
+    [AvaloniaFact]
+    public void PendingSize_IsSavedAtOnceWhenAsked_AndNotAgain()
+    {
+        var clock = new FakeTimeProvider();
+        var splitter = new GridSplitter();
+        var saves = 0;
+        var saveNow = SplitterKeyboard.Attach(splitter, Orientation.Horizontal, paneBefore: true,
+            () => (300, 100, 600), _ => { }, () => saves++, clock);
+
+        saveNow();
+        Assert.Equal(0, saves); // nothing stepped, nothing to save
+
+        Press(splitter, Key.Left);
+        saveNow();
+        Assert.Equal(1, saves);
+        Assert.Equal(0, clock.Pending);
+    }
+
+    private static void Press(GridSplitter splitter, Key key) =>
+        splitter.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = key });
 }
