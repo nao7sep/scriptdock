@@ -7,25 +7,6 @@
              x:Class="ScriptDock.Views.SettingsView"
              x:DataType="vm:SettingsDialogViewModel">
 
-    <UserControl.Resources>
-        <DataTemplate x:Key="EditableRow" x:DataType="vm:EditableItem">
-            <StackPanel Spacing="2" Margin="0,0,0,6">
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
-                    <ctl:ComposingTextBox Text="{Binding Text}" Classes.invalid="{Binding HasError}"
-                                          AutomationProperties.HelpText="{Binding Error}"/>
-                    <Button Grid.Column="1" Classes="resultClose" VerticalAlignment="Center" Click="OnRemoveRowClick"
-                            i18n:Localized.AutomationName="common.remove" i18n:Localized.ToolTip="common.remove">
-                        <Path Width="10" Height="10" Stretch="Uniform"
-                              Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1.8"
-                              StrokeLineCap="Round" Data="M1,1 L9,9 M9,1 L1,9"/>
-                    </Button>
-                </Grid>
-                <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}"
-                           Foreground="{DynamicResource DangerTextBrush}" FontSize="12" TextWrapping="Wrap"/>
-            </StackPanel>
-        </DataTemplate>
-    </UserControl.Resources>
-
     <UserControl.Styles>
         <!-- A checkbox caption wraps rather than being cut off: the settings dialog has a fixed width,
              and several of these captions are whole sentences that grow by half again in German. -->
@@ -136,20 +117,15 @@
                         i18n:Localized.Content="settings.resetExtensions" Click="OnResetExtensionsClick"/>
                 <TextBlock i18n:Localized.Text="settings.extensions" Classes="cardHeader" VerticalAlignment="Center" TextWrapping="Wrap"/>
             </DockPanel>
-            <!-- One editable row per item (config-sets-conventions, In the interface): any item changes in
-                 place, Save trims each row and drops blank ones, and a row that fails its check is marked
-                 with a message naming it. Each row removes itself. -->
-            <ScrollViewer MaxHeight="168" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                <ItemsControl x:Name="ExtList" ItemsSource="{Binding Extensions}" ItemTemplate="{StaticResource EditableRow}"/>
-            </ScrollViewer>
-            <DockPanel>
-                <Button i18n:Localized.Content="common.add" DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnAddExtClick"/>
-                <ctl:ComposingTextBox x:Name="ExtEntry" PlaceholderText=".command" SubmitOnEnter="True" Submitted="OnExtSubmitted"
-                                      Classes.invalid="{Binding HasExtensionError}"
-                                      i18n:Localized.AutomationName="settings.extension"
-                                      AutomationProperties.HelpText="{Binding ExtensionError}"
-                                      AutomationProperties.ItemStatus="{Binding ExtensionItemStatus}"/>
-            </DockPanel>
+            <!-- One field, its items separated by commas (config-sets-conventions, A list the user types): it
+                 keeps what was typed, and Save names the first item that fails its check under it. -->
+            <ctl:ComposingTextBox x:Name="ExtensionsField" Text="{Binding ExtensionsText}" PlaceholderText=".command, .sh"
+                                  Classes.invalid="{Binding HasExtensionError}"
+                                  i18n:Localized.AutomationName="settings.extensions"
+                                  AutomationProperties.HelpText="{Binding ExtensionError}"
+                                  AutomationProperties.ItemStatus="{Binding ExtensionItemStatus}"/>
+            <TextBlock i18n:Localized.Text="settings.extensionsHint"
+                       Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
             <Grid x:Name="ExtensionErrorResult" IsVisible="{Binding HasExtensionError}"
                   AutomationProperties.LiveSetting="Assertive">
                 <TextBlock Text="{Binding ExtensionError}"

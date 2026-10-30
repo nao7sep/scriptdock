@@ -14,9 +14,9 @@ namespace ScriptDock.ViewModels;
 /// <summary>
 /// Editable draft of the configuration shown by the settings dialog: root directories,
 /// file extensions, ignore patterns, appearance, language, display zone and exit-code policy.
-/// Adding an extension validates and normalises it to a leading dot; adding an ignore pattern appends
-/// a blank row. Save validates the edited rows, dropping blank patterns and marking invalid entries,
-/// never validating mid-keystroke. <see cref="IsDirty"/> is the cleaned draft differing from the config it was seeded from, so
+/// The extensions are one comma-separated field kept as typed; adding an ignore pattern appends a blank
+/// row. Save validates the extensions field and the edited rows, dropping blank items and marking invalid
+/// ones, never validating mid-keystroke. <see cref="IsDirty"/> is the cleaned draft differing from the config it was seeded from, so
 /// the dialog can gate Save and prompt on discard.
 /// </summary>
 public sealed partial class SettingsDialogViewModel : ObservableObject
@@ -26,7 +26,6 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     private Task<bool> _picks = Task.FromResult(false);
 
     public ObservableCollection<string> RootDirs { get; }
-    public ObservableCollection<EditableItem> Extensions { get; }
     public ObservableCollection<IgnorePatternRow> IgnorePatterns { get; }
 
     // The stored sets the app could not apply, kept unchanged until the user saves a value for them, and
@@ -41,6 +40,11 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasExtensionError))]
     [NotifyPropertyChangedFor(nameof(ExtensionItemStatus))]
     private Message? _extensionErrorMessage;
+
+    // The extensions as typed: short single tokens, so one field with its items separated by commas
+    // (config-sets-conventions, A list the user types). It keeps what was typed; Save checks it.
+    [ObservableProperty]
+    private string _extensionsText;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SaveError))]
@@ -115,12 +119,11 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         _nonZeroExitIsError = config.NonZeroExitIsError;
 
         RootDirs = new ObservableCollection<string>(config.RootDirs);
-        Extensions = new ObservableCollection<EditableItem>(config.Extensions.Select(text => new EditableItem(text)));
+        _extensionsText = string.Join(", ", config.Extensions);
         IgnorePatterns = new ObservableCollection<IgnorePatternRow>(config.IgnorePatterns.Select(pattern => new IgnorePatternRow(pattern)));
         _opened = ToConfig();
 
         RootDirs.CollectionChanged += (_, _) => Chose("rootDirs");
-        TrackRows(Extensions, "extensions", nameof(EditableItem.Text));
         TrackRows(IgnorePatterns, "ignorePatterns", nameof(IgnorePatternRow.Text), nameof(IgnorePatternRow.Kind));
     }
 
@@ -148,6 +151,12 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     partial void OnUiFontFamilyChanged(string value) => Chose("uiFontFamily");
     partial void OnNonZeroExitIsErrorChanged(bool value) => Chose("nonZeroExitIsError");
 
+    // Editing the field clears its message until the next Save checks it again.
+    partial void OnExtensionsTextChanged(string value)
+    {
+        ExtensionErrorMessage = null;
+        Chose("extensions");
+    }
     private void Chose(string set)
     {
         _chosen.Add(set);
@@ -157,17 +166,19 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     /// <summary>The sets this draft chose a value for, which replace any stored entry the app kept.</summary>
     public IReadOnlyCollection<string> ChosenSets => _chosen;
 
-    // A list as stored: each row trimmed, blank rows dropped, and one entry per member as the scanner
-    // matches them, ignoring case.
-    private static List<string> Rows(IEnumerable<EditableItem> rows, Func<string, string> stored) =>
-        rows.Select(row => row.Text.Trim()).Where(text => text.Length > 0).Select(stored)
-            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    // The field's items: each trimmed, blank ones (a doubled or trailing comma) dropped. A Chinese or
+    // Japanese input method types a full-width or ideographic comma, which separates items too.
+    private static readonly char[] ExtensionSeparators = [',', '，', '、'];
+
+    private IEnumerable<string> ExtensionItems =>
+        ExtensionsText.Split(ExtensionSeparators).Select(item => item.Trim()).Where(item => item.Length > 0);
 
     /// <summary>The draft as a config, its text cleaned. It holds no hidden scripts: the dialog does not edit them.</summary>
     public AppConfig ToConfig() => new()
     {
         RootDirs = RootDirs.ToList(),
-        Extensions = Rows(Extensions, ConfigSets.Extension),
+        // Each with its leading dot, one entry per extension as the scanner matches them, ignoring case.
+        Extensions = ExtensionItems.Select(ConfigSets.Extension).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
         // One entry per pattern as the scanner matches them, ignoring case.
         IgnorePatterns = IgnorePatterns.Select(row => row.ToPattern()).OfType<IgnorePattern>()
             .DistinctBy(ConfigSets.PatternKey, StringComparer.OrdinalIgnoreCase).ToList(),
@@ -183,20 +194,15 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     public bool IsDirty => !ConfigSets.Same(ToConfig(), _opened) || _chosen.Overlaps(_kept);
 
     /// <summary>
-    /// The check Save runs: each non-blank row passes its set's check, or carries a message naming it on
-    /// its own row, and the extensions keep at least one. False holds Save and shows the first tab with a
-    /// message, so a failing row is never left out of sight.
+    /// The check Save runs: the extensions field holds at least one extension and each of its items passes,
+    /// or the field's message names the first that does not; each non-blank pattern row passes its check,
+    /// or carries a message naming it on its own row. False holds Save and shows the first tab with a
+    /// message, so a failing item is never left out of sight.
     /// </summary>
     public bool Validate()
     {
-        var general = true;
-        foreach (var row in Extensions)
-            general &= Checked(row.Text, ConfigSets.ExtensionError, message => row.ErrorMessage = message);
-        if (general && ToConfig().Extensions.Count == 0)
-        {
-            ExtensionErrorMessage = Message.Of("settings.extensionsRequired");
-            general = false;
-        }
+        ExtensionErrorMessage = ExtensionsProblem();
+        var general = ExtensionErrorMessage is null;
 
         var patterns = true;
         foreach (var row in IgnorePatterns)
@@ -211,13 +217,32 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
         static bool Checked(string text, Func<string, Message?> error, Action<Message?> mark)
         {
             var trimmed = text.Trim();
-            var message = trimmed.Length > 0 && error(trimmed) is { } reason
-                ? Message.Of("settings.rowError", ("item", trimmed), ("reason", reason))
-                : null;
+            var message = trimmed.Length > 0 && error(trimmed) is { } reason ? Named(trimmed, reason) : null;
             mark(message);
             return message is null;
         }
     }
+
+    // The first item the extensions field cannot store, named with why. "sh" and ".sh" are one extension,
+    // and so are ".sh" and ".SH", as the scanner matches them.
+    private Message? ExtensionsProblem()
+    {
+        var items = ExtensionItems.ToList();
+        if (items.Count == 0)
+            return Message.Of("settings.extensionsRequired");
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in items)
+        {
+            if (ConfigSets.ExtensionError(item) is { } reason)
+                return Named(item, reason);
+            if (!seen.Add(ConfigSets.Extension(item)))
+                return Named(item, Message.Of("settings.extensionDuplicate"));
+        }
+        return null;
+    }
+
+    private static Message Named(string item, Message reason) =>
+        Message.Of("settings.rowError", ("item", item), ("reason", reason));
 
     // One flag per radio: checking one selects its theme; the others clear through the group.
     public bool IsThemeSystem
@@ -310,31 +335,6 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     private static string ResolveRoot(string value) =>
         HomePath.AnchorToHome(value, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
 
-    public bool AddExtension(string value)
-    {
-        var trimmed = value.Trim();
-        if (ConfigSets.ExtensionError(trimmed) is { } error)
-        {
-            ExtensionErrorMessage = error;
-            return false;
-        }
-
-        trimmed = ConfigSets.Extension(trimmed);
-
-        // Dedup case-insensitively to match how the scanner compares extensions
-        // (OrdinalIgnoreCase, mirroring the case-insensitive filesystems it runs on), so
-        // ".command" and ".Command" are one entry rather than two that match the same files.
-        if (Extensions.Any(e => string.Equals(ConfigSets.Extension(e.Text.Trim()), trimmed, StringComparison.OrdinalIgnoreCase)))
-        {
-            ExtensionErrorMessage = Message.Of("settings.extensionDuplicate");
-            return false;
-        }
-
-        Extensions.Add(new EditableItem(trimmed));
-        ExtensionErrorMessage = null;
-        return true;
-    }
-
     /// <summary>Adds a blank wildcard row for the user to type into; left blank, Save drops it.</summary>
     public IgnorePatternRow AddIgnorePattern()
     {
@@ -346,8 +346,7 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     // A reset chooses the built-in, which replaces a stored set the app could not apply.
     public void ResetExtensions()
     {
-        Extensions.Clear();
-        Extensions.Add(new EditableItem(ConfigDefaults.DefaultExtension));
+        ExtensionsText = ConfigDefaults.DefaultExtension;
         ExtensionErrorMessage = null;
         Chose("extensions");
     }
@@ -361,7 +360,6 @@ public sealed partial class SettingsDialogViewModel : ObservableObject
     }
 
     public void RemoveRootDir(string value) => RootDirs.Remove(value);
-    public void RemoveExtension(EditableItem row) => Extensions.Remove(row);
     public void RemoveIgnorePattern(IgnorePatternRow row) => IgnorePatterns.Remove(row);
 }
 

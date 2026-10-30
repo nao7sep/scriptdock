@@ -531,7 +531,7 @@ public sealed class MainWindowViewModelTests
         Assert.False(vm.HasCatalogResult);
 
         draft = vm.CreateSettingsDraft();
-        draft.AddExtension(".new-extension");
+        draft.ExtensionsText += ", .new-extension";
         Assert.True(await vm.TryApplySettingsAsync(draft));
         Assert.Contains("Rescan", vm.CatalogResult, StringComparison.Ordinal);
         var pending = vm.CatalogResult;

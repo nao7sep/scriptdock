@@ -336,8 +336,7 @@ public sealed class ScanSettlementTests : IAsyncLifetime
         var held = await _store.NextAsync();
         var draft = vm.CreateSettingsDraft();
         // Changing the extensions changes the scan inputs while its durable wait is held.
-        draft.Extensions.Clear();
-        draft.Extensions.Add(new EditableItem(".ps1"));
+        draft.ExtensionsText = ".ps1";
         Assert.True(await vm.TryApplySettingsAsync(draft));
         held.Settled.SetResult();
         await scan.WaitAsync(TestContext.Current.CancellationToken);

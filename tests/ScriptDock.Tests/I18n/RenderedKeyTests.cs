@@ -53,7 +53,8 @@ public class RenderedKeyTests : WindowTest
         AssertNoKeys(window);
 
         // And with something to say: a rejected entry puts a held message on screen.
-        draft.AddExtension("bad extension");
+        draft.ExtensionsText = "bad extension";
+        draft.Validate();
         Dispatcher.UIThread.RunJobs();
         AssertNoKeys(window);
     }

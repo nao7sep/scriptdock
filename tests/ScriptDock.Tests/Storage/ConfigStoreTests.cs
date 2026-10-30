@@ -198,8 +198,7 @@ public sealed class ConfigStoreTests : IAsyncLifetime
         var config = store.Load();
         var vm = NewViewModel(store, config);
         var draft = new SettingsDialogViewModel(config);
-        draft.Extensions.Clear();
-        draft.Extensions.Add(new EditableItem(".py"));
+        draft.ExtensionsText = ".py";
         // A directory at the destination forces a real publication failure on both platforms.
         File.Move(ConfigPath, ConfigPath + ".held");
         Directory.CreateDirectory(ConfigPath);

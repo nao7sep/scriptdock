@@ -28,7 +28,7 @@ public sealed class SettingsAccessibilityTests : WindowTest
         view.FindControl<Button>("ResetExtensions")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         view.FindControl<Button>("ResetIgnorePatterns")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
-        Assert.Equal([ConfigDefaults.DefaultExtension], vm.Extensions.Select(row => row.Text));
+        Assert.Equal(ConfigDefaults.DefaultExtension, vm.ExtensionsText);
         Assert.Equal(ConfigDefaults.BuiltInIgnorePatterns, vm.IgnorePatterns.Select(row => row.ToPattern()));
         Assert.True(vm.IsDirty);
     }
@@ -40,10 +40,11 @@ public sealed class SettingsAccessibilityTests : WindowTest
         var view = new SettingsView { DataContext = vm };
         Show(new Window { Content = view, Width = 600, Height = 800 });
 
-        vm.AddExtension("bad extension");
+        vm.ExtensionsText = "bad extension";
+        Assert.False(vm.Validate());
         Dispatcher.UIThread.RunJobs();
 
-        var field = view.FindControl<ComposingTextBox>("ExtEntry")!;
+        var field = view.FindControl<ComposingTextBox>("ExtensionsField")!;
         var result = view.FindControl<Grid>("ExtensionErrorResult")!;
         Assert.Contains("invalid", field.Classes);
         Assert.Equal(vm.ExtensionError, AutomationProperties.GetHelpText(field));
@@ -53,23 +54,23 @@ public sealed class SettingsAccessibilityTests : WindowTest
     }
 
     [AvaloniaFact]
-    public void Correcting_the_same_field_clears_invalid_state_without_touching_other_results()
+    public void Correcting_the_field_clears_its_invalid_state_without_touching_other_results()
     {
         var vm = new SettingsDialogViewModel(new AppConfig());
         var view = new SettingsView { DataContext = vm };
         Show(new Window { Content = view, Width = 600, Height = 800 });
 
-        vm.AddExtension("bad extension");
-        vm.Extensions[0].ErrorMessage = ScriptDock.I18n.Message.Of("settings.extensionSpaces");
-        Assert.True(vm.AddExtension(".sh"));
+        vm.ExtensionsText = "bad extension";
+        var pattern = vm.AddIgnorePattern();
+        pattern.Text = "//"; // a wildcard that names nothing
+        Assert.False(vm.Validate());
+        vm.ExtensionsText = ".sh";
         Dispatcher.UIThread.RunJobs();
 
-        var extension = view.FindControl<ComposingTextBox>("ExtEntry")!;
-        var row = view.FindControl<ItemsControl>("ExtList")!.GetVisualDescendants().OfType<ComposingTextBox>().First();
-        Assert.DoesNotContain("invalid", extension.Classes);
-        Assert.Contains("invalid", row.Classes);
-        Assert.Equal(string.Empty, AutomationProperties.GetHelpText(extension));
-        Assert.Equal(vm.Extensions[0].Error, AutomationProperties.GetHelpText(row));
+        var extensions = view.FindControl<ComposingTextBox>("ExtensionsField")!;
+        Assert.DoesNotContain("invalid", extensions.Classes);
+        Assert.Equal(string.Empty, AutomationProperties.GetHelpText(extensions));
+        Assert.True(pattern.HasError);
     }
 
     [AvaloniaFact]

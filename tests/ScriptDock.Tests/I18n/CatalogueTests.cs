@@ -39,7 +39,7 @@ public class CatalogueTests
         ["fr"] = [
             "about.version", "nativeMenu.services", "nativeMenu.zoom", "records.levelInfo", "records.message",
             "scripts.title",
-            "settings.extension", "settings.extensions", "shortcuts.groupNavigation",
+            "settings.extensions", "shortcuts.groupNavigation",
             "shortcuts.groupScripts", "status.scriptCount"],
         // Italian also keeps "Output" as the console's name; "Uscita" would read as exiting.
         ["it"] = ["nativeMenu.zoom", "output.title", "records.output", "records.levelDebug", "records.levelInfo", "status.scriptCount"],

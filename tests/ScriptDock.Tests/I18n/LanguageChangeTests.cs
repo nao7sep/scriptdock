@@ -88,14 +88,15 @@ public class LanguageChangeTests : WindowTest
     public void a_view_model_re_reads_what_it_holds()
     {
         var draft = new SettingsDialogViewModel(new AppConfig());
-        draft.AddExtension("bad extension");
+        draft.ExtensionsText = "bad extension";
+        Assert.False(draft.Validate());
 
-        Assert.Equal(English.Of("settings.extensionSpaces"), draft.ExtensionError);
+        Assert.Contains(English.Of("settings.extensionSpaces"), draft.ExtensionError);
 
         using (Localizer.Speaking("de"))
         {
-            Assert.Equal(Localizer.T("settings.extensionSpaces"), draft.ExtensionError);
-            Assert.NotEqual(English.Of("settings.extensionSpaces"), draft.ExtensionError);
+            Assert.Contains(Localizer.T("settings.extensionSpaces"), draft.ExtensionError);
+            Assert.DoesNotContain(English.Of("settings.extensionSpaces"), draft.ExtensionError);
         }
     }
 

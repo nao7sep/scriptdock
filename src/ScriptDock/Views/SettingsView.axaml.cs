@@ -41,11 +41,6 @@ public partial class SettingsView : UserControl
 
     private SettingsDialogViewModel? Vm => DataContext as SettingsDialogViewModel;
 
-    // Enter adds the typed value. The IME guard lives in ComposingTextBox, which raises Submitted only
-    // on a real Enter — never the IME's candidate-commit (Key.ImeProcessed) — per the
-    // text-input-ime-conventions, so a composed Enter never adds a half-finished item.
-    private void OnExtSubmitted(object? sender, RoutedEventArgs e) => AddExtension();
-
     // Root directories are chosen with the OS folder picker. The picker is an external boundary,
     // so its work is wrapped per the crash guard's Layer-1 contract — a failure logs, never crashes.
     private async void OnAddRootClick(object? sender, RoutedEventArgs e)
@@ -83,7 +78,6 @@ public partial class SettingsView : UserControl
     private void OnResetExtensionsClick(object? sender, RoutedEventArgs e) => Vm?.ResetExtensions();
     private void OnResetIgnorePatternsClick(object? sender, RoutedEventArgs e) => Vm?.ResetIgnorePatterns();
 
-    private void OnAddExtClick(object? sender, RoutedEventArgs e) => AddExtension();
     private void OnAddPatternClick(object? sender, RoutedEventArgs e) => AddPattern();
 
     private void OnRemoveRootClick(object? sender, RoutedEventArgs e) => RemoveSelectedRoot();
@@ -105,24 +99,8 @@ public partial class SettingsView : UserControl
 
     private void OnRemoveRowClick(object? sender, RoutedEventArgs e)
     {
-        switch ((sender as Control)?.DataContext)
-        {
-            case EditableItem row:
-                Vm?.RemoveExtension(row);
-                break;
-            case IgnorePatternRow row:
-                Vm?.RemoveIgnorePattern(row);
-                break;
-        }
-    }
-
-    private void AddExtension()
-    {
-        if (Vm is null)
-            return;
-        if (Vm.AddExtension(ExtEntry.Text ?? string.Empty))
-            ExtEntry.Text = string.Empty;
-        ExtEntry.Focus();
+        if ((sender as Control)?.DataContext is IgnorePatternRow row)
+            Vm?.RemoveIgnorePattern(row);
     }
 
     // The new row's field takes focus once the list has laid it out, for the pattern to be typed.

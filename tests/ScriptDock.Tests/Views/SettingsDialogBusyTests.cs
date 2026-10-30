@@ -22,7 +22,7 @@ public sealed class SettingsDialogBusyTests : WindowTest
     private (SettingsDialog Dialog, SettingsDialogViewModel Draft) Open(TaskCompletionSource<bool> save, Counter saves)
     {
         var draft = new SettingsDialogViewModel(new AppConfig());
-        draft.Extensions.Add(new EditableItem(".sh"));
+        draft.ExtensionsText += ", .sh";
         var dialog = Show(new SettingsDialog(draft, _ =>
         {
             saves.Count++;
@@ -79,7 +79,7 @@ public sealed class SettingsDialogBusyTests : WindowTest
 
         Assert.True(dialog.IsVisible);
         Assert.True(saveButton.IsEffectivelyEnabled);
-        Assert.Contains(".sh", draft.Extensions.Select(row => row.Text));
+        Assert.Contains(".sh", draft.ExtensionsText);
         Assert.Equal("settings.saveFailed", draft.SaveErrorMessage?.Key);
     }
 

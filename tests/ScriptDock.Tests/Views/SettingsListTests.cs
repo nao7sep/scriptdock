@@ -28,20 +28,21 @@ public sealed class SettingsListTests : WindowTest
     }
 
     [AvaloniaFact]
-    public void Each_extension_and_pattern_is_an_editable_row_that_removes_itself()
+    public void The_extensions_are_one_field_and_each_pattern_is_a_row_that_removes_itself()
     {
-        var (view, vm) = ShowSettings(new AppConfig { Extensions = [".command", ".sh"] });
-        var list = view.FindControl<ItemsControl>("ExtList")!;
-        var fields = list.GetVisualDescendants().OfType<ComposingTextBox>().ToList();
-        Assert.Equal([".command", ".sh"], fields.Select(field => field.Text));
+        var (view, vm) = ShowSettings(new AppConfig { Extensions = [".command", ".sh"], IgnorePatterns = [new("a/"), new("b/")] });
+        var field = view.FindControl<ComposingTextBox>("ExtensionsField")!;
+        Assert.Equal(".command, .sh", field.Text);
+        field.Text = ".command, .zsh";
+        Assert.Equal(".command, .zsh", vm.ExtensionsText);
 
-        fields[1].Text = ".zsh";
-        Assert.Equal(".zsh", vm.Extensions[1].Text);
-
+        vm.Tab = SettingsTab.IgnorePatterns;
+        Dispatcher.UIThread.RunJobs();
+        var list = view.FindControl<ItemsControl>("PatternList")!;
         var remove = list.GetVisualDescendants().OfType<Button>().First();
         remove.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Dispatcher.UIThread.RunJobs();
-        Assert.Equal([".zsh"], vm.Extensions.Select(row => row.Text));
+        Assert.Equal([new IgnorePattern("b/")], vm.IgnorePatterns.Select(row => row.ToPattern()));
     }
 
     [AvaloniaFact]

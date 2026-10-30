@@ -36,7 +36,8 @@ public sealed class SettingsDialogViewModelTests
         var vm = new SettingsDialogViewModel(new AppConfig { Extensions = [".sh"] });
         vm.ResetExtensions();
         Assert.True(vm.IsDirty);
-        vm.AddExtension(".custom");
+        Assert.Equal(ConfigDefaults.DefaultExtension, vm.ExtensionsText);
+        vm.ExtensionsText += ", .custom";
         Assert.True(vm.IsDirty);
         Assert.Equal([ConfigDefaults.DefaultExtension, ".custom"], vm.ToConfig().Extensions);
     }
@@ -99,59 +100,57 @@ public sealed class SettingsDialogViewModelTests
         Assert.False(vm.HasRootPickerResult);
     }
 
-    [Fact]
-    public void AddExtension_NormalisesLeadingDot()
-    {
-        var vm = new SettingsDialogViewModel(Seed());
+    // ── The extensions field (config-sets-conventions, A list the user types) ───────────────────
 
-        Assert.True(vm.AddExtension("sh"));
-        Assert.Contains(".sh", vm.Extensions.Select(row => row.Text));
+    [Fact]
+    public void Extensions_open_as_one_comma_separated_field()
+    {
+        var vm = new SettingsDialogViewModel(new AppConfig { Extensions = [".command", ".sh"] });
+
+        Assert.Equal(".command, .sh", vm.ExtensionsText);
+        Assert.False(vm.IsDirty);
     }
 
     [Fact]
-    public void AddExtension_DedupsCaseInsensitively_MatchingTheScanner()
+    public void Extensions_store_each_item_trimmed_with_its_dot_once_ignoring_case()
     {
         var vm = new SettingsDialogViewModel(Seed()); // seeded with ".command"
 
-        // The scanner matches extensions case-insensitively, so a differently-cased
-        // duplicate must not create a second entry.
-        Assert.False(vm.AddExtension(".COMMAND"));
-        Assert.False(vm.AddExtension("Command")); // normalises to ".Command", still a dup
-        Assert.Single(vm.Extensions);
+        vm.ExtensionsText = " .command ,sh,, .py ,";
+        Assert.Equal(" .command ,sh,, .py ,", vm.ExtensionsText); // the field keeps what was typed
+        Assert.True(vm.Validate());
+        Assert.Equal([".command", ".sh", ".py"], vm.ToConfig().Extensions);
     }
 
     [Fact]
-    public void AddExtension_RejectsWhitespace_AndReportsIt()
+    public void Extensions_take_the_commas_an_input_method_types()
     {
         var vm = new SettingsDialogViewModel(Seed());
 
-        // Interior space — a pasted multi-token blob, never a real extension.
-        Assert.False(vm.AddExtension(".com mand"));
-        Assert.NotEqual(string.Empty, vm.ExtensionError);
-        Assert.DoesNotContain(".com mand", vm.Extensions.Select(row => row.Text));
-
-        // A multi-line paste leaks a newline into the single-line field.
-        Assert.False(vm.AddExtension(".sh\n.ps1"));
-
-        // A clean value still adds and clears the error.
-        Assert.True(vm.AddExtension(".sh"));
-        Assert.Contains(".sh", vm.Extensions.Select(row => row.Text));
-        Assert.Equal(string.Empty, vm.ExtensionError);
-        Assert.False(vm.HasExtensionError);
-        Assert.Equal(string.Empty, vm.ExtensionItemStatus);
+        vm.ExtensionsText = ".command，.sh、.py";
+        Assert.True(vm.Validate());
+        Assert.Equal([".command", ".sh", ".py"], vm.ToConfig().Extensions);
     }
 
-    [Fact]
-    public void AddExtension_BlankAndDuplicateExposeInvalidState()
+    [Theory]
+    [InlineData(".command, sh, .sh", ".sh")]     // "sh" and ".sh" are one extension
+    [InlineData(".command, .COMMAND", ".COMMAND")] // the scanner matches extensions ignoring case
+    [InlineData(".command, .com mand", ".com mand")]
+    public void An_item_that_fails_is_named_under_the_field_and_holds_Save(string typed, string named)
     {
         var vm = new SettingsDialogViewModel(Seed());
 
-        Assert.False(vm.AddExtension("  "));
+        vm.ExtensionsText = typed;
+        Assert.False(vm.HasExtensionError); // never checked mid-keystroke
+        Assert.False(vm.Validate());
         Assert.True(vm.HasExtensionError);
         Assert.Equal("Invalid", vm.ExtensionItemStatus);
+        Assert.Contains($"“{named}”", vm.ExtensionError);
+        Assert.Equal(typed, vm.ExtensionsText);
 
-        Assert.False(vm.AddExtension(".COMMAND"));
-        Assert.Contains("already", vm.ExtensionError, StringComparison.OrdinalIgnoreCase);
+        vm.ExtensionsText = ".command"; // editing clears the message until the next Save
+        Assert.False(vm.HasExtensionError);
+        Assert.Equal(string.Empty, vm.ExtensionItemStatus);
     }
 
     [Fact]
@@ -188,7 +187,7 @@ public sealed class SettingsDialogViewModelTests
     public void A_failing_row_on_the_other_tab_brings_that_tab_forward()
     {
         var vm = new SettingsDialogViewModel(Seed()) { Tab = SettingsTab.IgnorePatterns };
-        vm.Extensions[0].Text = ".com mand";
+        vm.ExtensionsText = ".com mand";
 
         Assert.False(vm.Validate());
         Assert.Equal(SettingsTab.General, vm.Tab);
@@ -247,10 +246,10 @@ public sealed class SettingsDialogViewModelTests
     public void Remove_BackToOriginal_ClearsDirty()
     {
         var vm = new SettingsDialogViewModel(Seed());
-        vm.AddExtension(".ps1");
+        vm.ExtensionsText = ".command, .ps1";
         Assert.True(vm.IsDirty);
 
-        vm.RemoveExtension(vm.Extensions.Single(row => row.Text == ".ps1"));
+        vm.ExtensionsText = " .command";
 
         Assert.False(vm.IsDirty);
     }
@@ -261,9 +260,6 @@ public sealed class SettingsDialogViewModelTests
     public void Each_row_edits_in_place_and_Save_trims_drops_blanks_and_merges_case()
     {
         var vm = new SettingsDialogViewModel(new AppConfig { Extensions = [".command"], IgnorePatterns = [new("a/")] });
-        vm.Extensions[0].Text = "  sh  ";
-        vm.Extensions.Add(new EditableItem("   "));
-        vm.Extensions.Add(new EditableItem(".SH"));
         vm.IgnorePatterns[0].Text = " b/ ";
         vm.AddIgnorePattern().Text = "B/";
         vm.AddIgnorePattern().Text = "  ";
@@ -272,7 +268,6 @@ public sealed class SettingsDialogViewModelTests
         regex.Kind = IgnorePatternKind.Regex; // the same text read another way is another pattern
 
         Assert.True(vm.Validate());
-        Assert.Equal([".sh"], vm.ToConfig().Extensions);
         Assert.Equal([new IgnorePattern("b/"), new IgnorePattern("b/", IgnorePatternKind.Regex)], vm.ToConfig().IgnorePatterns);
         Assert.True(vm.IsDirty);
     }
@@ -284,13 +279,13 @@ public sealed class SettingsDialogViewModelTests
         var bad = vm.AddIgnorePattern();
         bad.Text = "[";
         bad.Kind = IgnorePatternKind.Regex;
-        vm.Extensions[0].Text = ".com mand";
+        vm.ExtensionsText = ".com mand";
 
         Assert.False(vm.Validate());
         Assert.True(bad.HasError);
         Assert.Contains("[", bad.Error);
-        Assert.True(vm.Extensions[0].HasError);
-        Assert.Contains(".com mand", vm.Extensions[0].Error);
+        Assert.True(vm.HasExtensionError);
+        Assert.Contains(".com mand", vm.ExtensionError);
         Assert.False(vm.IgnorePatterns[0].HasError); // the built-ins pass
 
         bad.Text = "/fixed/"; // editing clears the mark until the next check
@@ -298,10 +293,10 @@ public sealed class SettingsDialogViewModelTests
     }
 
     [Fact]
-    public void An_empty_extension_list_holds_Save()
+    public void An_empty_extension_field_holds_Save()
     {
         var vm = new SettingsDialogViewModel(new AppConfig());
-        vm.Extensions[0].Text = " ";
+        vm.ExtensionsText = " , ";
 
         Assert.False(vm.Validate());
         Assert.True(vm.HasExtensionError);

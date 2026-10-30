@@ -21,10 +21,10 @@ public class HardCodedTextTests
 {
     /// <summary>
     /// Literals allowed in a text position: the two placeholders that show an example value rather than
-    /// words, a font family, a product name and a file extension, which read the same in every language. Text with no
+    /// words, a font family, a product name and file extensions, which read the same in every language. Text with no
     /// letters, such as a separator, is never a sentence and needs no entry.
     /// </summary>
-    private static readonly string[] AllowedLiterals = ["Inter", ".command", "ScriptDock"];
+    private static readonly string[] AllowedLiterals = ["Inter", ".command, .sh", "ScriptDock"];
 
     private static readonly string[] TextProperties =
         ["Text", "Content", "Header", "Title", "PlaceholderText", "Watermark"];
