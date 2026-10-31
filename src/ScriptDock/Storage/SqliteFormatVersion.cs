@@ -11,7 +11,7 @@ internal static class SqliteFormatVersion
     /// <summary>
     /// Runs before anything else writes to the database. A database without a version, a brand-new one
     /// included, is the current format and is stamped with <paramref name="current"/>. One a newer version
-    /// wrote is refused with <see cref="NewerFormatVersionException"/>, and one an older format wrote with
+    /// wrote is refused with <see cref="NewerFormatVersionException"/>, and any other value with
     /// <see cref="InvalidDataException"/>; either is left as it is.
     /// </summary>
     public static void Check(SqliteConnection connection, string filePath, int current)

@@ -226,7 +226,7 @@ public static class BackupStore
         }
         catch (Exception ex)
         {
-            // An older format among them: left untouched, like a newer one.
+            // An unreadable version marker among them: left untouched, like a newer one.
             connection?.Dispose();
             Log.Warn("backup store: could not open; recording off for this session", ex, new { file });
         }

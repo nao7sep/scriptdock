@@ -239,28 +239,6 @@ public sealed class FormatVersionTests : IDisposable
     // backups.sqlite3, a side store: a newer one disables recording for the session instead of stopping the app.
 
     [Fact]
-    public void Backups_AtAnOlderFormat_AreLeftAloneAndRecordNothing()
-    {
-        Execute(BackupStore.StoreFile, """
-            CREATE TABLE backups (id INTEGER PRIMARY KEY, path TEXT NOT NULL, content BLOB NOT NULL, content_sha256 TEXT NOT NULL, byte_size INTEGER NOT NULL, written_at_utc TEXT NOT NULL);
-            CREATE INDEX idx_backups_path_id ON backups (path, id);
-            INSERT INTO backups (path, content, content_sha256, byte_size, written_at_utc) VALUES ('/a.json', x'01', 'a', 1, '2026-10-06T00:00:00.000Z');
-            INSERT INTO backups (path, content, content_sha256, byte_size, written_at_utc) VALUES ('/a.json', x'02', 'b', 1, '2026-10-07T00:00:00.000Z');
-            PRAGMA user_version = 1;
-            """);
-
-        SqliteConnection.ClearAllPools();
-        var before = File.ReadAllBytes(BackupStore.StoreFile);
-
-        BackupStore.Session = "now";
-        BackupStore.Record("/a.json", [3]);
-        BackupStore.Close();
-
-        SqliteConnection.ClearAllPools();
-        Assert.Equal(before, File.ReadAllBytes(BackupStore.StoreFile));
-    }
-
-    [Fact]
     public void Backups_CurrentVersion_RoundTrips()
     {
         BackupStore.Session = "first";

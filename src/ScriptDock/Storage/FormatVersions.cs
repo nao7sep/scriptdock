@@ -22,6 +22,6 @@ public static class FormatVersions
     /// <summary><c>records.sqlite3</c>.</summary>
     public const int Records = 1;
 
-    /// <summary><c>backups.sqlite3</c>: one row per file per session.</summary>
-    public const int Backups = 2;
+    /// <summary><c>backups.sqlite3</c>.</summary>
+    public const int Backups = 1;
 }
