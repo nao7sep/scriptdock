@@ -36,10 +36,10 @@ public static class FileHeader
         public const string State = "state";
 
         /// <summary><c>hidden.json</c>.</summary>
-        public const string HiddenScripts = "hiddenScripts";
+        public const string HiddenScripts = "hidden-scripts";
 
         /// <summary><c>known-paths.json</c>.</summary>
-        public const string KnownPaths = "knownPaths";
+        public const string KnownPaths = "known-paths";
 
         /// <summary><c>records.sqlite3</c>.</summary>
         public const string Records = "records";

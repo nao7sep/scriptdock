@@ -362,7 +362,7 @@ public sealed class MainWindowViewModelScriptsTests : IAsyncLifetime
     {
         Touch("a.command");
         Touch("b.command");
-        File.WriteAllText(KnownPathsFile, """{"format":{"owner":"scriptdock","kind":"knownPaths","version":1},"paths":[]}""");
+        File.WriteAllText(KnownPathsFile, """{"format":{"owner":"scriptdock","kind":"known-paths","version":1},"paths":[]}""");
 
         var vm = await ScannedWithRealKnownPaths();
 

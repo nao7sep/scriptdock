@@ -119,11 +119,28 @@ public sealed class FileHeaderTests : IDisposable
     public void Hidden_NewerVersion_IsRefusedAndLeftByteIdentical() =>
         AssertJsonRefused(AppPaths.HiddenFileName, FileHeader.Kinds.HiddenScripts, () => AppStores.Hidden().Load());
 
+    // Kinds are lowercase kebab-case; the camelCase spelling is another kind.
+    [Fact]
+    public void Hidden_WithTheCamelCaseKind_IsQuarantined()
+    {
+        File.WriteAllText(PathOf(AppPaths.HiddenFileName), """{"format":{"owner":"scriptdock","kind":"hiddenScripts","version":1},"paths":["/a.command"]}""");
+
+        Assert.Empty(AppStores.Hidden().Load().Paths);
+        Assert.Single(Directory.GetFiles(_root, "hidden-*.invalid"));
+    }
+
+    [Fact]
+    public void Kinds_AreLowercaseKebabCase() =>
+        Assert.Equal(
+            ["config", "state", "hidden-scripts", "known-paths", "records", "backups"],
+            [FileHeader.Kinds.Config, FileHeader.Kinds.State, FileHeader.Kinds.HiddenScripts,
+             FileHeader.Kinds.KnownPaths, FileHeader.Kinds.Records, FileHeader.Kinds.Backups]);
+
     // The user's hides are not rebuilt from nothing: a member that is not a path quarantines the file.
     [Fact]
     public void Hidden_WithAMemberThatIsNotAPath_IsQuarantined()
     {
-        File.WriteAllText(PathOf(AppPaths.HiddenFileName), """{"format":{"owner":"scriptdock","kind":"hiddenScripts","version":1},"paths":["/a.command",null]}""");
+        File.WriteAllText(PathOf(AppPaths.HiddenFileName), """{"format":{"owner":"scriptdock","kind":"hidden-scripts","version":1},"paths":["/a.command",null]}""");
 
         Assert.Empty(AppStores.Hidden().Load().Paths);
         var quarantined = Assert.Single(Directory.GetFiles(_root, "hidden-*.invalid"));
@@ -176,7 +193,7 @@ public sealed class FileHeaderTests : IDisposable
     [InlineData("""["/a.command",1]""")]
     public void KnownPaths_WithAMemberThatIsNotAPath_AreNoBaseline(string paths)
     {
-        File.WriteAllText(PathOf(AppPaths.KnownPathsFileName), $$"""{"format":{"owner":"scriptdock","kind":"knownPaths","version":1},"paths":{{paths}}}""");
+        File.WriteAllText(PathOf(AppPaths.KnownPathsFileName), $$"""{"format":{"owner":"scriptdock","kind":"known-paths","version":1},"paths":{{paths}}}""");
 
         Assert.Null(AppStores.KnownPaths().Load().Paths);
         Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
@@ -185,7 +202,7 @@ public sealed class FileHeaderTests : IDisposable
     [Fact]
     public void KnownPaths_WithAnEmptyList_AreABaseline()
     {
-        File.WriteAllText(PathOf(AppPaths.KnownPathsFileName), """{"format":{"owner":"scriptdock","kind":"knownPaths","version":1},"paths":[]}""");
+        File.WriteAllText(PathOf(AppPaths.KnownPathsFileName), """{"format":{"owner":"scriptdock","kind":"known-paths","version":1},"paths":[]}""");
 
         Assert.Equal([], AppStores.KnownPaths().Load().Paths!);
     }
