@@ -16,7 +16,7 @@ namespace ScriptDock.Storage;
 /// </remarks>
 public sealed class ConfigStore : IConfigStore
 {
-    private readonly JsonStore<Dictionary<string, JsonElement>> _store = new(AppPaths.ConfigFileName, "config", FormatVersions.Config);
+    private readonly JsonStore<Dictionary<string, JsonElement>> _store = new(AppPaths.ConfigFileName, "config", FileHeader.Kinds.Config);
 
     // The stored entries the last Load could not apply, by key, kept for every later save.
     private readonly Dictionary<string, JsonElement> _kept = [];

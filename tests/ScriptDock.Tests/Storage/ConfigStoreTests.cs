@@ -81,7 +81,7 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     public async Task Dialog_WritesEverySetThatDiffers_AndKeepsUnknownKeys()
     {
         // Keys this version does not know are kept unchanged.
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[],"version":1,"unknown":true}""");
+        File.WriteAllText(ConfigPath, """{"format":{"owner":"scriptdock","kind":"config","version":1},"extensions":[],"version":1,"unknown":true}""");
         var store = new ConfigStore();
         var config = store.Load();
         var vm = NewViewModel(store, config);
@@ -99,7 +99,7 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [Fact]
     public async Task Resetting_a_kept_set_in_Settings_replaces_it_with_the_built_in()
     {
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[],"ignorePatterns":["["]}""");
+        File.WriteAllText(ConfigPath, """{"format":{"owner":"scriptdock","kind":"config","version":1},"extensions":[],"ignorePatterns":["["]}""");
         var store = new ConfigStore();
         var vm = NewViewModel(store, store.Load());
         var draft = vm.CreateSettingsDraft();
@@ -132,7 +132,7 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [Fact]
     public async Task Reset_RemovesTheResetSets()
     {
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[".sh"],"ignorePatterns":[{"pattern":"/custom/","kind":"regex"}]}""");
+        File.WriteAllText(ConfigPath, """{"format":{"owner":"scriptdock","kind":"config","version":1},"extensions":[".sh"],"ignorePatterns":[{"pattern":"/custom/","kind":"regex"}]}""");
         var store = new ConfigStore();
         var config = store.Load();
         var vm = NewViewModel(store, config);
@@ -149,7 +149,7 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [Fact]
     public async Task CopiesEqualToTheirBuiltInAfterCleanup_LoseTheirKeysAtTheNextSave()
     {
-        File.WriteAllText(ConfigPath, $$"""{"formatVersion":1,"extensions":[" {{ConfigDefaults.DefaultExtension}}\n"],"uiFontFamily":"  ","theme":"system"}""");
+        File.WriteAllText(ConfigPath, $$"""{"format":{"owner":"scriptdock","kind":"config","version":1},"extensions":[" {{ConfigDefaults.DefaultExtension}}\n"],"uiFontFamily":"  ","theme":"system"}""");
         var store = new ConfigStore();
         await store.SaveAsync(store.Load());
         Assert.Empty(ReadKeys());
@@ -158,7 +158,7 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [Fact]
     public async Task InvalidSet_IsKeptUnchangedAtTheNextSave()
     {
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[null,".sh"],"theme":"future"}""");
+        File.WriteAllText(ConfigPath, """{"format":{"owner":"scriptdock","kind":"config","version":1},"extensions":[null,".sh"],"theme":"future"}""");
         var store = new ConfigStore();
         var config = store.Load();
         Assert.Equal(["extensions", "theme"], store.KeptKeys.Order());
@@ -172,7 +172,7 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [Fact]
     public async Task InvalidSet_IsReplacedOnceTheUserSavesANewValue()
     {
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[null,".sh"]}""");
+        File.WriteAllText(ConfigPath, """{"format":{"owner":"scriptdock","kind":"config","version":1},"extensions":[null,".sh"]}""");
         var store = new ConfigStore();
         var config = store.Load();
         config.Extensions = [".py"];
@@ -188,7 +188,7 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [Fact]
     public async Task FailedReplacement_KeepsOriginalSetForALaterUnrelatedSave()
     {
-        const string original = """{"formatVersion":1,"extensions":[null,".sh"]}""";
+        const string original = """{"format":{"owner":"scriptdock","kind":"config","version":1},"extensions":[null,".sh"]}""";
         File.WriteAllText(ConfigPath, original);
         var store = new ConfigStore();
         var config = store.Load();
@@ -218,7 +218,7 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [Fact]
     public void InvalidSet_UsesBuiltInWithoutQuarantiningOrChangingOtherSets()
     {
-        const string json = """{"formatVersion":1,"extensions":[null,".sh"],"theme":"future","language":"unknown"}""";
+        const string json = """{"format":{"owner":"scriptdock","kind":"config","version":1},"extensions":[null,".sh"],"theme":"future","language":"unknown"}""";
         File.WriteAllText(ConfigPath, json);
         var store = new ConfigStore();
         var loaded = store.Load();
@@ -241,7 +241,7 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [InlineData("""[3]""")]                                    // not a pattern at all
     public void InvalidIgnorePatterns_ReadAsTheirBuiltIn_AndKeepTheOtherSets(string patterns)
     {
-        File.WriteAllText(ConfigPath, $$"""{"formatVersion":1,"ignorePatterns":{{patterns}},"extensions":[".sh"]}""");
+        File.WriteAllText(ConfigPath, $$"""{"format":{"owner":"scriptdock","kind":"config","version":1},"ignorePatterns":{{patterns}},"extensions":[".sh"]}""");
         var store = new ConfigStore();
         var loaded = store.Load();
         Assert.Equal(ConfigDefaults.BuiltInIgnorePatterns, loaded.IgnorePatterns);
@@ -254,7 +254,7 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [InlineData("""[".sh\n.py"]""")]         // multiline, which cleanup would flatten into ".sh .py"
     public void InvalidExtensions_ReadAsTheirBuiltIn_AndKeepTheOtherSets(string extensions)
     {
-        File.WriteAllText(ConfigPath, $$"""{"formatVersion":1,"extensions":{{extensions}},"ignorePatterns":[{"pattern":"/build/","kind":"regex"}]}""");
+        File.WriteAllText(ConfigPath, $$"""{"format":{"owner":"scriptdock","kind":"config","version":1},"extensions":{{extensions}},"ignorePatterns":[{"pattern":"/build/","kind":"regex"}]}""");
         var store = new ConfigStore();
         var loaded = store.Load();
         Assert.Equal([ConfigDefaults.DefaultExtension], loaded.Extensions);
@@ -283,7 +283,7 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [Fact]
     public async Task InvalidIgnorePatterns_AreKeptUnchangedAtTheNextSave()
     {
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"ignorePatterns":["["]}""");
+        File.WriteAllText(ConfigPath, """{"format":{"owner":"scriptdock","kind":"config","version":1},"ignorePatterns":["["]}""");
         var store = new ConfigStore();
         await store.SaveAsync(store.Load());
         Assert.Equal(["ignorePatterns"], ReadKeys());
@@ -340,13 +340,13 @@ public sealed class ConfigStoreTests : IAsyncLifetime
         return JsonSerializer.Serialize(document.RootElement.GetProperty(key));
     }
 
-    // The sets the file holds; the format version beside them is the store's own.
+    // The sets the file holds; the header beside them is the store's own.
     private string[] ReadKeys()
     {
         using var document = JsonDocument.Parse(File.ReadAllText(ConfigPath));
         return document.RootElement.EnumerateObject()
             .Select(property => property.Name)
-            .Where(name => name != "formatVersion")
+            .Where(name => name is not "format" and not "writer")
             .Order()
             .ToArray();
     }

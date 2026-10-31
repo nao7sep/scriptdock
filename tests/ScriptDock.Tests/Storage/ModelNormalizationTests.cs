@@ -31,7 +31,7 @@ public sealed class ModelNormalizationTests : IDisposable
     public void Load_NormalizesNestedNullCollectionsAndReferences()
     {
         File.WriteAllText(Path.Combine(_root, "config.json"),
-            """{"formatVersion":1,"uiFontFamily":null,"rootDirs":[null,"/ok"],"extensions":null,"ignorePatterns":null}""");
+            """{"format":{"owner":"scriptdock","kind":"config","version":1},"uiFontFamily":null,"rootDirs":[null,"/ok"],"extensions":null,"ignorePatterns":null}""");
 
         var config = new ConfigStore().Load();
 
@@ -44,7 +44,7 @@ public sealed class ModelNormalizationTests : IDisposable
     [Fact]
     public void Load_PreservesAnExplicitBundledFontName()
     {
-        File.WriteAllText(Path.Combine(_root, "config.json"), """{"formatVersion":1,"uiFontFamily":"Inter"}""");
+        File.WriteAllText(Path.Combine(_root, "config.json"), """{"format":{"owner":"scriptdock","kind":"config","version":1},"uiFontFamily":"Inter"}""");
 
         var config = new ConfigStore().Load();
 
@@ -54,7 +54,7 @@ public sealed class ModelNormalizationTests : IDisposable
     [Fact]
     public void Load_KeepsAStoredValueDifferentFromTheDefault()
     {
-        File.WriteAllText(Path.Combine(_root, "config.json"), """{"formatVersion":1,"uiFontFamily":"Helvetica Neue"}""");
+        File.WriteAllText(Path.Combine(_root, "config.json"), """{"format":{"owner":"scriptdock","kind":"config","version":1},"uiFontFamily":"Helvetica Neue"}""");
 
         var config = new ConfigStore().Load();
 

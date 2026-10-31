@@ -77,7 +77,7 @@ public sealed class JsonStoreTests : IDisposable
     public void Load_DuplicateProperties_QuarantinesOriginal(string json)
     {
         File.WriteAllText(PathOf("doc.json"), json);
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
         Assert.Equal("", store.Load().Name);
         Assert.False(File.Exists(PathOf("doc.json")));
         Assert.Equal(json, File.ReadAllText(Assert.Single(Directory.GetFiles(_root, "*.invalid"))));
@@ -86,7 +86,7 @@ public sealed class JsonStoreTests : IDisposable
     [Fact]
     public async Task SaveThenLoad_RoundTripsValue()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
         await store.SaveAsync(new SampleDoc { Name = "x", Kind = SampleKind.SecondChoice, Items = ["a", "b"] });
 
         var loaded = store.Load();
@@ -99,7 +99,7 @@ public sealed class JsonStoreTests : IDisposable
     [Fact]
     public void Load_MissingFile_ReturnsDefault()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
 
         var loaded = store.Load();
 
@@ -114,13 +114,13 @@ public sealed class JsonStoreTests : IDisposable
     public void Load_DeniedReadLeavesProtectedContentAtItsOriginalPath()
     {
         var path = PathOf("doc.json");
-        const string original = """{"formatVersion":1,"name":"valuable"}""";
+        const string original = """{"format":{"owner":"scriptdock","kind":"sample","version":1},"name":"valuable"}""";
         File.WriteAllText(path, original);
         var mode = File.GetUnixFileMode(path);
         try
         {
             File.SetUnixFileMode(path, UnixFileMode.UserWrite);
-            var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+            var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
             var error = Assert.Throws<StoreReadFailedException>(() => store.Load());
             Assert.Equal(path, error.FilePath);
             Assert.True(File.Exists(path));
@@ -134,11 +134,11 @@ public sealed class JsonStoreTests : IDisposable
     public void Load_SharingDenialLeavesProtectedContentAtItsOriginalPath()
     {
         var path = PathOf("doc.json");
-        const string original = """{"formatVersion":1,"name":"valuable"}""";
+        const string original = """{"format":{"owner":"scriptdock","kind":"sample","version":1},"name":"valuable"}""";
         File.WriteAllText(path, original);
         using (var held = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
         {
-            var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+            var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
             Assert.Throws<StoreReadFailedException>(() => store.Load());
             Assert.True(File.Exists(path));
             Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
@@ -149,7 +149,7 @@ public sealed class JsonStoreTests : IDisposable
     [Fact]
     public async Task Save_UnchangedContent_LeavesTheFileUntouched()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
         await store.SaveAsync(new SampleDoc { Name = "one" });
         var earlier = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         File.SetLastWriteTimeUtc(PathOf("doc.json"), earlier);
@@ -162,7 +162,7 @@ public sealed class JsonStoreTests : IDisposable
     [Fact]
     public async Task Save_ComparesAgainstTheFileOnDisk_SoAnOutsideEditIsReplaced()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
         await store.SaveAsync(new SampleDoc { Name = "one" });
         var saved = File.ReadAllText(PathOf("doc.json"));
         File.WriteAllText(PathOf("doc.json"), saved.Replace("one", "edited"));
@@ -176,7 +176,7 @@ public sealed class JsonStoreTests : IDisposable
     [SupportedOSPlatform("macos")]
     public async Task Save_Changed_KeepsTheFilesPermissionMode()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
         await store.SaveAsync(new SampleDoc { Name = "one" });
         var path = PathOf("doc.json");
         const UnixFileMode restricted = UnixFileMode.UserRead | UnixFileMode.UserWrite;
@@ -194,7 +194,7 @@ public sealed class JsonStoreTests : IDisposable
         // The .bak sidecar is retired: an unreadable live file is quarantined aside (see the
         // dedicated quarantine tests below) rather than a sidecar being consulted; earlier content
         // is recovered, if ever needed, from the quarantine file or backups.sqlite3.
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
         await store.SaveAsync(new SampleDoc { Name = "one" });
         await store.SaveAsync(new SampleDoc { Name = "two" });
 
@@ -214,7 +214,7 @@ public sealed class JsonStoreTests : IDisposable
         // never be left in place for a later Save to silently overwrite (the storage-path
         // conventions' forbidden path). The storage layer moves it aside instead, so it survives
         // as diagnostic debris, and defaults proceed from here.
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
         await store.SaveAsync(new SampleDoc { Name = "one" });
         await store.SaveAsync(new SampleDoc { Name = "two" });
 
@@ -239,7 +239,7 @@ public sealed class JsonStoreTests : IDisposable
     [Fact]
     public async Task Save_AfterQuarantine_RecreatesTheLiveFileAndLeavesTheQuarantineAlone()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
         File.WriteAllText(PathOf("doc.json"), "{ not valid json");
 
         store.Load(); // quarantines the corrupt file and returns defaults
@@ -265,7 +265,7 @@ public sealed class JsonStoreTests : IDisposable
         var path = PathOf("doc.json");
         const string corruptContent = "{ not valid json";
         File.WriteAllText(path, corruptContent);
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1, recordBackups: false);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample", recordBackups: false);
 
         // The move aside fails: on Windows an open handle that does not share deletion blocks it, and on
         // macOS a folder that cannot be written to.
@@ -296,7 +296,7 @@ public sealed class JsonStoreTests : IDisposable
     {
         File.WriteAllText(PathOf("doc.json"), "{ not valid json");
         QuarantineJournal.Drain();
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1, recordBackups: false, rebuildable: true);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample", recordBackups: false, rebuildable: true);
 
         var loaded = store.Load();
 
@@ -313,36 +313,84 @@ public sealed class JsonStoreTests : IDisposable
     [InlineData("\"1\"")]
     [InlineData("1.5")]
     [InlineData("0")]
+    [InlineData("-1")]
     [InlineData("null")]
-    public void Load_FormatVersionThatIsNotAPositiveInteger_IsUnreadable(string marker)
+    public void Load_HeaderVersionThatIsNotOne_OrHigher_IsUnreadable(string version)
     {
-        File.WriteAllText(PathOf("doc.json"), $$"""{"formatVersion":{{marker}},"name":"x"}""");
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        File.WriteAllText(PathOf("doc.json"), $$"""{"format":{"owner":"scriptdock","kind":"sample","version":{{version}}},"name":"x"}""");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
 
         Assert.Equal("", store.Load().Name);
         Assert.Single(Directory.EnumerateFiles(_root, "doc-*.invalid"));
     }
 
-    [Fact]
-    public async Task Load_TakesTheMarkerOutBeforeTheDocumentIsRead()
+    [Theory]
+    [InlineData("""{"name":"x"}""")]
+    [InlineData("""{"format":1,"name":"x"}""")]
+    [InlineData("""{"format":"scriptdock.sample","name":"x"}""")]
+    [InlineData("""{"formatVersion":1,"name":"x"}""")]
+    [InlineData("""{"format":{"kind":"sample","version":1},"name":"x"}""")]
+    [InlineData("""{"format":{"owner":"scriptdock","version":1},"name":"x"}""")]
+    [InlineData("""{"format":{"owner":"scriptdock","kind":"sample"},"name":"x"}""")]
+    [InlineData("""{"format":{"owner":1,"kind":"sample","version":1},"name":"x"}""")]
+    [InlineData("""{"format":{"owner":"pathhide","kind":"sample","version":1},"name":"x"}""")]
+    [InlineData("""{"format":{"owner":"scriptdock","kind":"config","version":1},"name":"x"}""")]
+    [InlineData("""{"format":{"owner":"ScriptDock","kind":"sample","version":1},"name":"x"}""")]
+    public void Load_MissingMalformedOrForeignHeader_IsUnreadable(string json)
     {
-        // A dictionary-shaped document, like config.json's sets, never sees the store's own key.
-        var store = new JsonStore<Dictionary<string, int>>("doc.json", "doc", formatVersion: 1);
+        File.WriteAllText(PathOf("doc.json"), json);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
+
+        Assert.Equal("", store.Load().Name);
+        Assert.False(File.Exists(PathOf("doc.json")));
+        Assert.Equal(json, File.ReadAllText(Assert.Single(Directory.EnumerateFiles(_root, "doc-*.invalid"))));
+    }
+
+    [Fact]
+    public async Task Load_TakesTheHeaderOutBeforeTheDocumentIsRead()
+    {
+        // A dictionary-shaped document, like config.json's sets, never sees the store's own keys.
+        var store = new JsonStore<Dictionary<string, int>>("doc.json", "doc", kind: "sample");
         await store.SaveAsync(new Dictionary<string, int> { ["a"] = 1 });
 
         Assert.Equal(["a"], store.Load().Keys);
     }
 
-    [Fact]
-    public void Load_ObjectWithoutTheMarker_ReadsAsTheCurrentFormat()
+    // The file is accepted on format alone: whatever writer says, or its absence, changes nothing.
+    [Theory]
+    [InlineData("")]
+    [InlineData(""","writer":{"name":"x"}""")]
+    [InlineData(",\"writer\":\"anything\"")]
+    [InlineData(""","writer":{"name":"OtherApp","version":"99.0.0","caller":{"name":"y","version":"z"}}""")]
+    public void Load_IgnoresTheWriter(string writer)
     {
-        const string json = """{"name":"x"}""";
+        var json = """{"format":{"owner":"scriptdock","kind":"sample","version":1}""" + writer + ""","name":"x"}""";
         File.WriteAllText(PathOf("doc.json"), json);
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
 
         Assert.Equal("x", store.Load().Name);
         Assert.Equal(json, File.ReadAllText(PathOf("doc.json")));
         Assert.Empty(Directory.EnumerateFiles(_root, "doc-*.invalid"));
+    }
+
+    [Fact]
+    public async Task Save_PutsFormatThenWriterFirst()
+    {
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
+        await store.SaveAsync(new SampleDoc { Name = "x" });
+
+        using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(PathOf("doc.json")));
+        var keys = document.RootElement.EnumerateObject().Select(property => property.Name).ToList();
+        Assert.Equal(["format", "writer"], keys.Take(2));
+        var format = document.RootElement.GetProperty("format");
+        Assert.Equal("scriptdock", format.GetProperty("owner").GetString());
+        Assert.Equal("sample", format.GetProperty("kind").GetString());
+        Assert.Equal(1, format.GetProperty("version").GetInt32());
+        Assert.Equal(3, format.EnumerateObject().Count());
+        var writer = document.RootElement.GetProperty("writer");
+        Assert.Equal(FileHeader.WriterName, writer.GetProperty("name").GetString());
+        Assert.Equal(FileHeader.WriterVersion, writer.GetProperty("version").GetString());
+        Assert.Equal(2, writer.EnumerateObject().Count());
     }
 
     [Theory]
@@ -351,7 +399,7 @@ public sealed class JsonStoreTests : IDisposable
     public void Load_DocumentThatIsNotAnObject_IsUnreadable(string json)
     {
         File.WriteAllText(PathOf("doc.json"), json);
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
 
         Assert.Equal("", store.Load().Name);
         Assert.Equal(json, File.ReadAllText(Assert.Single(Directory.EnumerateFiles(_root, "doc-*.invalid"))));
@@ -360,7 +408,7 @@ public sealed class JsonStoreTests : IDisposable
     [Fact]
     public async Task Save_FirstTime_CreatesLiveFileButNoBakSidecar()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
 
         await store.SaveAsync(new SampleDoc());
 
@@ -371,7 +419,7 @@ public sealed class JsonStoreTests : IDisposable
     [Fact]
     public async Task Save_SecondTime_WritesNewContentAndStillNoBakSidecar()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
         await store.SaveAsync(new SampleDoc { Name = "one" });
         await store.SaveAsync(new SampleDoc { Name = "two" });
 
@@ -386,7 +434,7 @@ public sealed class JsonStoreTests : IDisposable
     public async Task Save_LeavesOnlyTheLiveFileInTheRoot()
     {
         // Locks the retirement: repeated saves produce exactly one file — no .bak, no leftover .tmp.
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
         await store.SaveAsync(new SampleDoc { Name = "one" });
         await store.SaveAsync(new SampleDoc { Name = "two" });
         await store.SaveAsync(new SampleDoc { Name = "three" });
@@ -403,7 +451,7 @@ public sealed class JsonStoreTests : IDisposable
     [Fact]
     public async Task Save_LeavesNoTempFiles()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
         await store.SaveAsync(new SampleDoc());
         await store.SaveAsync(new SampleDoc { Name = "two" });
 
@@ -419,7 +467,7 @@ public sealed class JsonStoreTests : IDisposable
         // even though the shared document is mutated in place between calls and every write is queued
         // off the calling thread rather than run inline. This drives many overlapping SaveAsync calls
         // against the SAME store, back to back, with no artificial ordering help from the caller.
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
 
         // Queue every write back to back before any of them can possibly have landed, exactly as the
         // UI thread does when several actions fire close together (e.g. a burst of process events).
@@ -436,7 +484,7 @@ public sealed class JsonStoreTests : IDisposable
     [Fact]
     public async Task Save_WritesCamelCasePropertiesAndSnakeCaseEnums()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
         await store.SaveAsync(new SampleDoc { Name = "x", Kind = SampleKind.SecondChoice });
 
         var json = File.ReadAllText(PathOf("doc.json"));

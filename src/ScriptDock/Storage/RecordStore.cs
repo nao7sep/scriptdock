@@ -125,7 +125,7 @@ public sealed class RecordStore : IRecordStore, IRecordReader, IDisposable
             // No busy timeout: this is the database's one connection in the app.
             connection.Open();
             // Before anything writes, the journal mode included.
-            SqliteFormatVersion.Check(connection, FilePath, FormatVersions.Records);
+            FileHeader.Open(connection, FilePath, FileHeader.Kinds.Records);
             Execute(connection, "PRAGMA journal_mode = WAL;");
             Execute(connection, "PRAGMA synchronous = NORMAL;");
             Execute(connection, Schema);

@@ -225,7 +225,7 @@ public sealed class BackupStoreTests : IDisposable
     {
         // The end-to-end wire: a managed-text save through JsonStore's single atomic-write choke point
         // records the exact bytes it wrote, at the file's full absolute path, strictly after the rename.
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
         var docPath = Path.Combine(_root, "doc.json");
 
         await store.SaveAsync(new SampleDoc { Name = "one" });
@@ -267,7 +267,7 @@ public sealed class BackupStoreTests : IDisposable
     [Fact]
     public async Task JsonStoreSave_KeepsTheSessionsLatestVersion()
     {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
         var docPath = Path.Combine(_root, "doc.json");
 
         await store.SaveAsync(new SampleDoc { Name = "one" });
@@ -281,7 +281,7 @@ public sealed class BackupStoreTests : IDisposable
     {
         // Another connection holds the history locked, so recording waits on the provider's retry of a
         // busy command; the save still completes while the lock is held, and the row lands once it is gone.
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", formatVersion: 1);
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
         var docPath = Path.Combine(_root, "doc.json");
         await store.SaveAsync(new SampleDoc { Name = "one" });
         BackupStore.Flush();

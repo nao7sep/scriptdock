@@ -213,7 +213,7 @@ public static class BackupStore
             connection.Open();
 
             // Before anything writes, the journal mode included.
-            SqliteFormatVersion.Check(connection, file, FormatVersions.Backups);
+            FileHeader.Open(connection, file, FileHeader.Kinds.Backups);
             Execute(connection, "PRAGMA journal_mode = WAL;");
             Execute(connection, Schema);
             owner.Value = connection;
@@ -226,7 +226,7 @@ public static class BackupStore
         }
         catch (Exception ex)
         {
-            // An unreadable version marker among them: left untouched, like a newer one.
+            // An unreadable header among them: left untouched, like a newer one.
             connection?.Dispose();
             Log.Warn("backup store: could not open; recording off for this session", ex, new { file });
         }
