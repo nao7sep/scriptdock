@@ -13,18 +13,18 @@ namespace ScriptDock.Storage;
 /// <c>{file}</c> is the live document, replaced by a write-to-temp-then-rename so a
 /// crash mid-write never tears it, and is not written at all when its bytes already match the
 /// file on disk, so an unchanged save leaves the file and its backups alone. If the live
-/// document is missing, the type's default-constructed value is returned. If it exists but will not parse, it is
-/// quarantined (moved aside, bytes preserved) and the default-constructed value is
-/// returned in its place — see <see cref="TryLoadFile"/>; a rebuildable store's unreadable
-/// file is only logged, and its next save replaces it (store-recovery-conventions).
+/// document is missing, the type's default-constructed value is returned. If it exists but cannot be read, will not
+/// parse or has no valid header, it is refused with <see cref="UnreadableStoreException"/> and left exactly in
+/// place — see <see cref="TryLoadFile"/>; a rebuildable store's unreadable file is only logged, and its next save
+/// replaces it (store-recovery-conventions).
 /// </summary>
 /// <remarks>
 /// The store owns its file's identity header (<see cref="FileHeader"/>): every write puts it first in the
 /// document, and a read checks it and takes it out before the document is deserialized, so the stored type
 /// never sees it. A file without the header, or with another owner or kind, is unreadable like a file that will
 /// not parse. A file recording a newer version is refused with <see cref="NewerFormatVersionException"/> and
-/// left exactly in place, except in a rebuildable store, whose disposable contents are rebuilt like any
-/// unreadable file.
+/// left exactly in place, in a rebuildable store too. A store whose file was refused never writes it: its saves
+/// fail at the write itself.
 /// </remarks>
 /// <remarks>
 /// The app's single managed-text atomic-write choke point, and so the one place the
@@ -53,6 +53,9 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
     private readonly bool _recordBackups;
     private readonly bool _rebuildable;
 
+    // Set when Load refused the file, so no save can reach it for the rest of the session.
+    private volatile bool _refused;
+
     // The queue's tail: the next write chains onto this so writes run one at a time, strictly in
     // the order they were queued. Guarded by _queueGate since callers may queue from any thread.
     private readonly object _queueGate = new();
@@ -65,7 +68,7 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
     /// <param name="label">Human-readable noun used in log messages, e.g. <c>"config"</c>.</param>
     /// <param name="kind">The file's kind in its header, from <see cref="FileHeader.Kinds"/>.</param>
     /// <param name="recordBackups">False for volatile state; durable text is recorded by default.</param>
-    /// <param name="rebuildable">True for a store the app rebuilds on its own, whose unreadable or newer-version file is not preserved.</param>
+    /// <param name="rebuildable">True for a store the app rebuilds on its own, whose unreadable file is not preserved.</param>
     public JsonStore(string fileName, string label, string kind, bool recordBackups = true, bool rebuildable = false)
     {
         _filePath = Path.Combine(StorageRoot.Directory, fileName);
@@ -77,7 +80,18 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
 
     public T Load()
     {
-        if (TryLoadFile(_filePath, out var value))
+        bool loaded;
+        T value;
+        try
+        {
+            loaded = TryLoadFile(_filePath, out value);
+        }
+        catch (Exception ex) when (ex is NewerFormatVersionException or UnreadableStoreException)
+        {
+            _refused = true;
+            throw;
+        }
+        if (loaded)
             return value;
 
         // Reached on first run (no file yet — normal) or after the live file was
@@ -123,6 +137,9 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
 
         await Task.Run(() =>
         {
+            // A refused file stays byte-identical, whichever path the save came from.
+            if (_refused)
+                throw new InvalidOperationException($"{_filePath} was refused at load and is not written.");
             // A write that changes nothing is skipped (content-lifecycle-conventions).
             if (MatchesFile(bytes))
                 return;
@@ -156,7 +173,7 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
             Log.Warn("store: file could not be read, left in place", ex, new { label = _label, path = filePath });
             if (_rebuildable)
                 return false;
-            throw new StoreReadFailedException(filePath, ex);
+            throw new UnreadableStoreException(filePath, ex);
         }
 
         try
@@ -170,50 +187,24 @@ public sealed class JsonStore<T> : IJsonStore<T> where T : class, new()
             Log.Info("store: loaded", new { label = _label, path = filePath });
             return true;
         }
-        catch (NewerFormatVersionException ex) when (!_rebuildable)
+        catch (NewerFormatVersionException ex)
         {
-            // Intact data a newer build wrote: never quarantined, rebuilt or written to.
+            // Intact data a newer build wrote: never rebuilt or written to, even when disposable.
             Log.Warn("store: written by a newer version, left in place", ex,
                 new { label = _label, path = filePath, found = ex.Found, supported = ex.Supported });
             throw;
         }
         catch (Exception ex) when (_rebuildable)
         {
-            // Disposable contents, a newer version's included: defaults now, replaced on the next save.
+            // Disposable contents: defaults now, replaced on the next save.
             Log.Warn("store: file unreadable, rebuilding", ex, new { label = _label, path = filePath });
             return false;
         }
         catch (JsonException ex)
         {
-            // Successfully read but unparseable: quarantine aside (bytes preserved) before defaults proceed.
-            Quarantine(filePath, ex);
-            return false;
-        }
-    }
-
-    // Moves the unreadable file aside to its timestamped same-directory .invalid name, preserving
-    // the bytes, and logs one warning naming both paths. The move either lands or its failure
-    // propagates — falling through to defaults with the corrupt file still in place would let the
-    // next Save overwrite the very bytes quarantine exists to preserve.
-    private void Quarantine(string filePath, Exception loadException)
-    {
-        var directory = Path.GetDirectoryName(filePath) ?? string.Empty;
-        var stem = Path.GetFileNameWithoutExtension(filePath);
-        var quarantinePath = Path.Combine(
-            directory, $"{stem}-{TimestampConventions.FileStamp(DateTimeOffset.UtcNow)}.invalid");
-
-        try
-        {
-            File.Move(filePath, quarantinePath);
-            Log.Warn("store: file unreadable, quarantined", loadException,
-                new { label = _label, path = filePath, quarantine = quarantinePath });
-            QuarantineJournal.Record(quarantinePath);
-        }
-        catch (Exception moveEx)
-        {
-            Log.Warn("store: file unreadable, could not quarantine", moveEx,
-                new { label = _label, path = filePath, loadError = loadException.Message });
-            throw new QuarantineFailedException(filePath, moveEx);
+            // Read but not interpretable: left exactly in place, and the launch stops on it.
+            Log.Warn("store: file unreadable, left in place", ex, new { label = _label, path = filePath });
+            throw new UnreadableStoreException(filePath, ex);
         }
     }
 

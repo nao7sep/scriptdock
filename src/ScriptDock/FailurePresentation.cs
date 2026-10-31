@@ -16,11 +16,13 @@ public static class FailurePresentation
 {
     public static Message StartupStorage() => Message.Of("failure.startupStorage");
 
-    public static Message StartupData(string path) => Message.Of("failure.startupData", ("path", path));
-
-    public static Message RecoveredData(string path) => Message.Of("failure.recoveredData", ("path", path));
-
-    public static Message NewerStore(string path) => Message.Of("failure.newerStore", ("path", path));
+    /// <summary>The launch stop's notice: one paragraph per refused file, saying whether a newer version wrote it
+    /// or it could not be read, then what the reader can do (store-recovery-conventions).</summary>
+    public static IReadOnlyList<Message> LaunchStopped(IEnumerable<Storage.RefusedFile> refused) =>
+    [
+        .. refused.Select(file => Message.Of(file.Newer ? "failure.refusedNewer" : "failure.refusedUnreadable", ("path", file.Path))),
+        Message.Of("failure.launchStopped"),
+    ];
 
     /// <summary>How many values a message names before it counts the rest (interface-styling-conventions,
     /// Labels); the file it names holds them all.</summary>
@@ -37,6 +39,8 @@ public static class FailurePresentation
     }
 
     public static Message RecordsUnavailable(string path) => Message.Of("failure.recordsUnavailable", ("path", path));
+
+    public static Message BackupsUnavailable(string path) => Message.Of("failure.backupsUnavailable", ("path", path));
 
     public static Message RootPicker(Exception error) => Message.Of("failure.rootPicker");
 

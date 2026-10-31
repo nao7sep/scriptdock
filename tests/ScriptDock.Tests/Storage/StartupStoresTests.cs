@@ -30,32 +30,32 @@ public sealed class StartupStoresTests
         var paths = new FakeJsonStore<KnownPaths>();
         var loaded = await Task.Run(() => new StartupStores(config, hidden, state, paths), TestContext.Current.CancellationToken);
         config.Value = new AppConfig { Language = "en" };
-        loaded.ThrowIfFailed();
+        Assert.Empty(loaded.Refused);
         Assert.Equal("ja", loaded.Config.Language);
         Assert.Same(hidden.Value, loaded.Hidden);
         Assert.Same(state.Value, loaded.State);
         Assert.Same(paths.Value, loaded.KnownPaths);
         Assert.Same(config, loaded.ConfigStore);
-        loaded.ThrowIfFailed();
         Assert.Equal(1, config.Reads);
         Assert.Equal(1, hidden.LoadCount);
         Assert.Equal(1, state.LoadCount);
         Assert.Equal(1, paths.LoadCount);
     }
 
+    // Every store is read even after one is refused, so the launch stop names each refused file at once,
+    // and a refused store never becomes defaults the window could save.
     [Fact]
-    public void A_protected_read_failure_survives_until_the_startup_gate_and_never_becomes_defaults()
+    public void Every_refused_store_is_named_and_none_stops_the_others_being_read()
     {
-        var failure = new StoreReadFailedException("config.json", new UnauthorizedAccessException());
-        var config = new Config { Failure = failure };
+        var config = new Config { Failure = new UnreadableStoreException("/x/config.json", new UnauthorizedAccessException()) };
         var hidden = new FakeJsonStore<HiddenScripts>();
-        var state = new FakeJsonStore<AppState>();
+        var state = new FakeJsonStore<AppState> { LoadFailure = new NewerFormatVersionException("/x/state.json", 2, 1) };
         var paths = new FakeJsonStore<KnownPaths>();
         var loaded = new StartupStores(config, hidden, state, paths);
-        Assert.Same(failure, Assert.Throws<StoreReadFailedException>(loaded.ThrowIfFailed));
+        Assert.Equal([new RefusedFile("/x/config.json", Newer: false), new RefusedFile("/x/state.json", Newer: true)], loaded.Refused);
         Assert.Equal(1, config.Reads);
-        Assert.Equal(0, hidden.LoadCount);
-        Assert.Equal(0, state.LoadCount);
-        Assert.Equal(0, paths.LoadCount);
+        Assert.Equal(1, hidden.LoadCount);
+        Assert.Equal(1, state.LoadCount);
+        Assert.Equal(1, paths.LoadCount);
     }
 }

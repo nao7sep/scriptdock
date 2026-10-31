@@ -298,13 +298,12 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     }
 
     [Fact]
-    public void CorruptFile_IsQuarantinedWithoutSeedingAReplacement()
+    public void CorruptFile_IsRefusedAndLeftExactlyInPlace()
     {
         File.WriteAllText(ConfigPath, "{ broken");
-        var loaded = new ConfigStore().Load();
-        Assert.False(File.Exists(ConfigPath));
-        Assert.Single(Directory.GetFiles(_root, "*.invalid"));
-        Assert.Equal([ConfigDefaults.DefaultExtension], loaded.Extensions);
+        Assert.Equal(ConfigPath, Assert.Throws<UnreadableStoreException>(() => new ConfigStore().Load()).FilePath);
+        Assert.Equal("{ broken", File.ReadAllText(ConfigPath));
+        Assert.Single(Directory.GetFiles(_root));
     }
 
     [Fact]

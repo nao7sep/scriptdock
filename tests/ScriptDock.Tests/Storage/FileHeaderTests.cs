@@ -28,7 +28,6 @@ public sealed class FileHeaderTests : IDisposable
     {
         Directory.CreateDirectory(_root);
         Environment.SetEnvironmentVariable(StorageRoot.HomeEnvironmentVariable, _root);
-        QuarantineJournal.Drain();
     }
 
     public void Dispose()
@@ -45,28 +44,15 @@ public sealed class FileHeaderTests : IDisposable
     // config.json
 
     [Fact]
-    public void Config_WithoutHeader_IsQuarantined()
-    {
-        File.WriteAllText(PathOf(AppPaths.ConfigFileName), """{"theme":"dark","rootDirs":["/scripts"]}""");
-
-        var config = new ConfigStore().Load();
-
-        Assert.Equal(ThemePreference.System, config.Theme);
-        Assert.Empty(config.RootDirs);
-        Assert.Single(Directory.GetFiles(_root, "config-*.invalid"));
-    }
+    public void Config_WithoutHeader_IsRefusedAndLeftByteIdentical() =>
+        AssertJsonUnreadable(AppPaths.ConfigFileName, """{"theme":"dark","rootDirs":["/scripts"]}""", () => new ConfigStore().Load());
 
     [Theory]
     [InlineData("pathhide", FileHeader.Kinds.Config)]
     [InlineData(FileHeader.Owner, FileHeader.Kinds.State)]
-    public void Config_OfAnotherOwnerOrKind_IsQuarantined(string owner, string kind)
-    {
-        File.WriteAllText(PathOf(AppPaths.ConfigFileName),
-            $$"""{"format":{"owner":"{{owner}}","kind":"{{kind}}","version":1},"theme":"dark"}""");
-
-        Assert.Equal(ThemePreference.System, new ConfigStore().Load().Theme);
-        Assert.Single(Directory.GetFiles(_root, "config-*.invalid"));
-    }
+    public void Config_OfAnotherOwnerOrKind_IsRefusedAndLeftByteIdentical(string owner, string kind) =>
+        AssertJsonUnreadable(AppPaths.ConfigFileName,
+            $$"""{"format":{"owner":"{{owner}}","kind":"{{kind}}","version":1},"theme":"dark"}""", () => new ConfigStore().Load());
 
     [Fact]
     public void Config_IsReadWhateverTheWriterSays()
@@ -75,7 +61,7 @@ public sealed class FileHeaderTests : IDisposable
             """{"format":{"owner":"scriptdock","kind":"config","version":1},"writer":{"name":"SomethingElse","version":"0.0.1"},"theme":"dark"}""");
 
         Assert.Equal(ThemePreference.Dark, new ConfigStore().Load().Theme);
-        Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
+        Assert.Single(Directory.GetFiles(_root));
     }
 
     [Fact]
@@ -97,13 +83,8 @@ public sealed class FileHeaderTests : IDisposable
     // hidden.json
 
     [Fact]
-    public void Hidden_WithoutHeader_IsQuarantined()
-    {
-        File.WriteAllText(PathOf(AppPaths.HiddenFileName), """{"paths":["/a.command"]}""");
-
-        Assert.Empty(AppStores.Hidden().Load().Paths);
-        Assert.Single(Directory.GetFiles(_root, "hidden-*.invalid"));
-    }
+    public void Hidden_WithoutHeader_IsRefusedAndLeftByteIdentical() =>
+        AssertJsonUnreadable(AppPaths.HiddenFileName, """{"paths":["/a.command"]}""", () => AppStores.Hidden().Load());
 
     [Fact]
     public async Task Hidden_CurrentVersion_RoundTrips()
@@ -121,13 +102,9 @@ public sealed class FileHeaderTests : IDisposable
 
     // Kinds are lowercase kebab-case; the camelCase spelling is another kind.
     [Fact]
-    public void Hidden_WithTheCamelCaseKind_IsQuarantined()
-    {
-        File.WriteAllText(PathOf(AppPaths.HiddenFileName), """{"format":{"owner":"scriptdock","kind":"hiddenScripts","version":1},"paths":["/a.command"]}""");
-
-        Assert.Empty(AppStores.Hidden().Load().Paths);
-        Assert.Single(Directory.GetFiles(_root, "hidden-*.invalid"));
-    }
+    public void Hidden_WithTheCamelCaseKind_IsRefused() =>
+        AssertJsonUnreadable(AppPaths.HiddenFileName,
+            """{"format":{"owner":"scriptdock","kind":"hiddenScripts","version":1},"paths":["/a.command"]}""", () => AppStores.Hidden().Load());
 
     [Fact]
     public void Kinds_AreLowercaseKebabCase() =>
@@ -136,15 +113,26 @@ public sealed class FileHeaderTests : IDisposable
             [FileHeader.Kinds.Config, FileHeader.Kinds.State, FileHeader.Kinds.HiddenScripts,
              FileHeader.Kinds.KnownPaths, FileHeader.Kinds.Records, FileHeader.Kinds.Backups]);
 
-    // The user's hides are not rebuilt from nothing: a member that is not a path quarantines the file.
+    // The user's hides are not rebuilt from nothing: a member that is not a path refuses the file.
     [Fact]
-    public void Hidden_WithAMemberThatIsNotAPath_IsQuarantined()
-    {
-        File.WriteAllText(PathOf(AppPaths.HiddenFileName), """{"format":{"owner":"scriptdock","kind":"hidden-scripts","version":1},"paths":["/a.command",null]}""");
+    public void Hidden_WithAMemberThatIsNotAPath_IsRefused() =>
+        AssertJsonUnreadable(AppPaths.HiddenFileName,
+            """{"format":{"owner":"scriptdock","kind":"hidden-scripts","version":1},"paths":["/a.command",null]}""", () => AppStores.Hidden().Load());
 
-        Assert.Empty(AppStores.Hidden().Load().Paths);
-        var quarantined = Assert.Single(Directory.GetFiles(_root, "hidden-*.invalid"));
-        Assert.Equal([quarantined], QuarantineJournal.Drain());
+    // Members this version does not know are written back by a Hide.
+    [Fact]
+    public async Task Hidden_KeepsUnknownMembersOnSave()
+    {
+        File.WriteAllText(PathOf(AppPaths.HiddenFileName),
+            """{"format":{"owner":"scriptdock","kind":"hidden-scripts","version":1},"paths":["/a.command"],"future":{"x":1}}""");
+        var store = AppStores.Hidden();
+        var hidden = store.Load();
+
+        await store.SaveAsync(new HiddenScripts { Paths = ["/b.command"], Unknown = hidden.Unknown });
+
+        using var document = JsonDocument.Parse(File.ReadAllText(PathOf(AppPaths.HiddenFileName)));
+        Assert.Equal(1, document.RootElement.GetProperty("future").GetProperty("x").GetInt32());
+        Assert.Equal(["/b.command"], store.Load().Paths);
     }
 
     // state.json
@@ -156,7 +144,7 @@ public sealed class FileHeaderTests : IDisposable
         File.WriteAllText(PathOf(AppPaths.StateFileName), """{"windowWidth":900}""");
 
         Assert.Null(AppStores.State().Load().WindowWidth);
-        Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
+        Assert.Single(Directory.GetFiles(_root));
     }
 
     [Fact]
@@ -169,12 +157,26 @@ public sealed class FileHeaderTests : IDisposable
         Assert.Equal(900, store.Load().WindowWidth);
     }
 
+    // Disposable, but a newer version's: refused like any other store, so a quit cannot overwrite it.
     [Fact]
-    public async Task State_NewerVersion_IsRebuilt()
+    public void State_NewerVersion_IsRefusedAndLeftByteIdentical() =>
+        AssertJsonRefused(AppPaths.StateFileName, FileHeader.Kinds.State, () => AppStores.State().Load());
+
+    // A refused store's saves never reach its file, whichever path they come from.
+    [Fact]
+    public async Task A_refused_store_writes_nothing_for_the_rest_of_the_session()
     {
-        AssertJsonRebuilt(AppPaths.StateFileName, FileHeader.Kinds.State, () => AppStores.State().Load().WindowWidth);
-        await AppStores.State().SaveAsync(new AppState { WindowWidth = 900 });
-        AssertHeaderFirst(AppPaths.StateFileName, FileHeader.Kinds.State);
+        var file = PathOf(AppPaths.StateFileName);
+        File.WriteAllText(file, NewerJson(FileHeader.Kinds.State));
+        var before = File.ReadAllBytes(file);
+        var store = AppStores.State();
+        Assert.Throws<NewerFormatVersionException>(() => store.Load());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.SaveAsync(new AppState { WindowWidth = 900 }));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.SaveAsync(new AppState { ShowHidden = true }));
+
+        Assert.Equal(before, File.ReadAllBytes(file));
+        Assert.Single(Directory.GetFiles(_root));
     }
 
     // known-paths.json
@@ -185,7 +187,7 @@ public sealed class FileHeaderTests : IDisposable
         File.WriteAllText(PathOf(AppPaths.KnownPathsFileName), """{"paths":["/a.command"]}""");
 
         Assert.Null(AppStores.KnownPaths().Load().Paths);
-        Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
+        Assert.Single(Directory.GetFiles(_root));
     }
 
     [Theory]
@@ -196,7 +198,7 @@ public sealed class FileHeaderTests : IDisposable
         File.WriteAllText(PathOf(AppPaths.KnownPathsFileName), $$"""{"format":{"owner":"scriptdock","kind":"known-paths","version":1},"paths":{{paths}}}""");
 
         Assert.Null(AppStores.KnownPaths().Load().Paths);
-        Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
+        Assert.Single(Directory.GetFiles(_root));
     }
 
     [Fact]
@@ -218,8 +220,8 @@ public sealed class FileHeaderTests : IDisposable
     }
 
     [Fact]
-    public void KnownPaths_NewerVersion_IsRebuilt() =>
-        AssertJsonRebuilt(AppPaths.KnownPathsFileName, FileHeader.Kinds.KnownPaths, () => AppStores.KnownPaths().Load().Paths);
+    public void KnownPaths_NewerVersion_IsRefusedAndLeftByteIdentical() =>
+        AssertJsonRefused(AppPaths.KnownPathsFileName, FileHeader.Kinds.KnownPaths, () => AppStores.KnownPaths().Load());
 
     // records.sqlite3
 
@@ -310,7 +312,63 @@ public sealed class FileHeaderTests : IDisposable
         Assert.Equal(before, File.ReadAllBytes(file));
     }
 
-    // backups.sqlite3, a side store: a newer one disables recording for the session instead of stopping the app.
+    // The launch's read-only check finds a newer records or backups database without writing to it.
+    [Theory]
+    [InlineData(RecordStore.FileName, FileHeader.Kinds.Records)]
+    [InlineData(BackupStore.FileName, FileHeader.Kinds.Backups)]
+    public void A_newer_database_is_found_at_launch_without_being_written(string fileName, string kind)
+    {
+        var file = PathOf(fileName);
+        CreateDatabase(file, FileHeader.Version + 1, FileHeader.Owner, kind);
+        SqliteConnection.ClearAllPools();
+        var before = File.ReadAllBytes(file);
+
+        Assert.Equal(new RefusedFile(file, Newer: true), FileHeader.ProbeNewer(file, kind));
+
+        Assert.Equal(before, File.ReadAllBytes(file));
+        Assert.Single(Directory.GetFiles(_root));
+    }
+
+    // Absent, current or unreadable is not the launch check's to refuse: the store reports an unreadable one.
+    [Fact]
+    public void The_launch_check_refuses_only_a_newer_database()
+    {
+        var file = PathOf(RecordStore.FileName);
+        Assert.Null(FileHeader.ProbeNewer(file, FileHeader.Kinds.Records));
+        CreateDatabase(file, FileHeader.Version, FileHeader.Owner, FileHeader.Kinds.Records);
+        Assert.Null(FileHeader.ProbeNewer(file, FileHeader.Kinds.Records));
+        File.WriteAllText(file, "not a database");
+        Assert.Null(FileHeader.ProbeNewer(file, FileHeader.Kinds.Records));
+        CreateDatabase(PathOf(BackupStore.FileName), FileHeader.Version + 1, "pathhide", FileHeader.Kinds.Backups);
+        Assert.Null(FileHeader.ProbeNewer(PathOf(BackupStore.FileName), FileHeader.Kinds.Backups));
+    }
+
+    // backups.sqlite3, a side store: an unreadable one turns recording off for the session, which the window
+    // reports; a newer one stops the launch before this is reached.
+
+    [Fact]
+    public void Backups_that_cannot_be_opened_are_reported_at_launch_and_left_byte_identical()
+    {
+        Execute(BackupStore.StoreFile, "CREATE TABLE backups (id INTEGER PRIMARY KEY); PRAGMA user_version = 1;");
+        SqliteConnection.ClearAllPools();
+        var before = File.ReadAllBytes(BackupStore.StoreFile);
+
+        Assert.False(BackupStore.OpenExisting());
+
+        BackupStore.Close();
+        SqliteConnection.ClearAllPools();
+        Assert.Equal(before, File.ReadAllBytes(BackupStore.StoreFile));
+    }
+
+    [Fact]
+    public void Backups_absent_or_current_open_at_launch()
+    {
+        Assert.True(BackupStore.OpenExisting());
+        Assert.False(File.Exists(BackupStore.StoreFile));
+        BackupStore.Record(PathOf("doc.json"), [1]);
+        BackupStore.Close();
+        Assert.True(BackupStore.OpenExisting());
+    }
 
     [Fact]
     public void Backups_CurrentVersion_RoundTrips()
@@ -380,7 +438,7 @@ public sealed class FileHeaderTests : IDisposable
         Assert.Equal(4L, Scalar(file, "SELECT COUNT(*) FROM file_header"));
     }
 
-    // A refused JSON store is neither quarantined, rebuilt nor reported as a reset.
+    // A JSON store a newer build wrote is refused and left byte-identical, a disposable one too.
     private void AssertJsonRefused(string fileName, string kind, Func<object> load)
     {
         var file = PathOf(fileName);
@@ -391,23 +449,22 @@ public sealed class FileHeaderTests : IDisposable
 
         Assert.Equal(file, refused.FilePath);
         Assert.Equal(before, File.ReadAllBytes(file));
-        Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
-        Assert.Empty(QuarantineJournal.Drain());
+        Assert.Single(Directory.GetFiles(_root));
     }
 
-    // A disposable store a newer build wrote is neither refused, quarantined nor reported: it reads as
-    // defaults, and the file stays as it is until the next save replaces it.
-    private void AssertJsonRebuilt(string fileName, string kind, Func<object?> loadValue)
+    // An unreadable store that holds what the user made is refused and left byte-identical, with nothing
+    // set aside beside it.
+    private void AssertJsonUnreadable(string fileName, string content, Func<object> load)
     {
         var file = PathOf(fileName);
-        File.WriteAllText(file, NewerJson(kind));
+        File.WriteAllText(file, content);
         var before = File.ReadAllBytes(file);
 
-        Assert.Null(loadValue());
+        var refused = Assert.Throws<UnreadableStoreException>(() => load());
 
+        Assert.Equal(file, refused.FilePath);
         Assert.Equal(before, File.ReadAllBytes(file));
-        Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
-        Assert.Empty(QuarantineJournal.Drain());
+        Assert.Single(Directory.GetFiles(_root));
     }
 
     private static string NewerJson(string kind) =>

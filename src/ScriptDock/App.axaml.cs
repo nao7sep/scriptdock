@@ -14,7 +14,11 @@ namespace ScriptDock;
 
 public partial class App : Application
 {
-    internal static I18n.Message? StartupFailureMessage { get; set; }
+    /// <summary>The paragraphs of the notice shown in place of the window when the launch stopped, or null.</summary>
+    internal static IReadOnlyList<I18n.Message>? StartupFailure { get; set; }
+
+    /// <summary>True when an existing settings history could not be opened, so recording is off this session.</summary>
+    internal static bool BackupsUnavailable { get; set; }
 
     /// <summary>
     /// The computer's own languages, in order, as <c>LanguageBootstrap</c> read them before the app was
@@ -63,7 +67,7 @@ public partial class App : Application
             // An emoji chosen in the macOS picker arrives while the window is in the background; macOS only.
             BackgroundTextInput.Install();
 
-            if (StartupFailureMessage is { } startupFailure)
+            if (StartupFailure is { } startupFailure)
             {
                 desktop.MainWindow = NoticeDialog.CreateStartupFailure(I18n.Message.Of("startup.failedTitle"), startupFailure);
                 RegisterOwnerActivation(desktop.MainWindow);
@@ -71,44 +75,8 @@ public partial class App : Application
                 return;
             }
 
-            // Stop before defaults can overwrite a store that a newer version wrote, or an unreadable one
-            // that cannot be set aside.
-            MainWindowViewModel viewModel;
-            Func<RecordsWindowViewModel> recordsViewModel;
-            IReadOnlyList<string> keptSettings;
-            try
-            {
-                (viewModel, recordsViewModel, keptSettings) = CreateViewModels();
-            }
-            catch (NewerFormatVersionException ex)
-            {
-                // Already logged by the store; the file stays exactly as it is.
-                desktop.MainWindow = NoticeDialog.CreateStartupFailure(
-                    I18n.Message.Of("startup.failedTitle"),
-                    FailurePresentation.NewerStore(ex.FilePath));
-                RegisterOwnerActivation(desktop.MainWindow);
-                base.OnFrameworkInitializationCompleted();
-                return;
-            }
-            catch (StoreReadFailedException ex)
-            {
-                desktop.MainWindow = NoticeDialog.CreateStartupFailure(
-                    I18n.Message.Of("startup.failedTitle"),
-                    FailurePresentation.StartupData(ex.FilePath));
-                RegisterOwnerActivation(desktop.MainWindow);
-                base.OnFrameworkInitializationCompleted();
-                return;
-            }
-            catch (QuarantineFailedException ex)
-            {
-                Log.Error("startup: a settings file could not be read or set aside", ex);
-                desktop.MainWindow = NoticeDialog.CreateStartupFailure(
-                    I18n.Message.Of("startup.failedTitle"),
-                    FailurePresentation.StartupData(ex.FilePath));
-                RegisterOwnerActivation(desktop.MainWindow);
-                base.OnFrameworkInitializationCompleted();
-                return;
-            }
+            // Every file the launch reads passed before the app was built (Program), so this cannot be refused.
+            var (viewModel, recordsViewModel, keptSettings) = CreateViewModels();
 
             // Before the main window exists, so its first frame and title bar take the saved theme.
             // The startup-failure notices above never read settings, so they follow the OS.
@@ -130,15 +98,6 @@ public partial class App : Application
             mainWindow.Opened += async (_, _) =>
             {
                 var quitting = viewModel.Quitting;
-                foreach (var quarantined in Storage.QuarantineJournal.Drain())
-                {
-                    if (quitting.IsCancellationRequested)
-                        return;
-                    await Views.NoticeDialog.ShowAsync(
-                        mainWindow,
-                        I18n.Message.Of("startup.settingsResetTitle"),
-                        FailurePresentation.RecoveredData(quarantined));
-                }
                 if (keptSettings.Count > 0 && !quitting.IsCancellationRequested)
                 {
                     await Views.NoticeDialog.ShowAsync(
@@ -152,6 +111,13 @@ public partial class App : Application
                         mainWindow,
                         I18n.Message.Of("startup.recordsUnavailableTitle"),
                         FailurePresentation.RecordsUnavailable(records.FilePath));
+                }
+                if (BackupsUnavailable && !quitting.IsCancellationRequested)
+                {
+                    await Views.NoticeDialog.ShowAsync(
+                        mainWindow,
+                        I18n.Message.Of("startup.backupsUnavailableTitle"),
+                        FailurePresentation.BackupsUnavailable(BackupStore.StoreFile));
                 }
                 await mainWindow.AskForFirstScanFolderAsync();
             };
@@ -209,7 +175,6 @@ public partial class App : Application
     private static (MainWindowViewModel Main, Func<RecordsWindowViewModel> Records, IReadOnlyList<string> KeptSettings) CreateViewModels()
     {
         var stores = PreparedStores ?? throw new InvalidOperationException("Startup stores have not been loaded.");
-        stores.ThrowIfFailed();
         var configStore = stores.ConfigStore;
         var stateStore = stores.StateStore;
         var knownPathsStore = stores.KnownPathsStore;

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Avalonia;
@@ -42,8 +43,7 @@ sealed class Program
         }
         catch (Exception ex)
         {
-            App.StartupFailureMessage =
-                FailurePresentation.StartupStorage();
+            App.StartupFailure = [FailurePresentation.StartupStorage()];
             // Diagnostics on stderr, which stay English with the exception's own message: this is the
             // log channel, not an interface surface. What the reader sees is the notice window above.
             Console.Error.WriteLine("ScriptDock cannot start: its storage location could not be created. " + ex.Message);
@@ -51,9 +51,23 @@ sealed class Program
             return 1;
         }
 
+        // Every file the launch opens is checked before anything is written (store-recovery-conventions):
+        // the JSON stores are read, and the two databases' headers are read without opening them for writing.
+        // Any refused file stops the launch, and one notice names them all. Until the records open, the
+        // stores' log lines go to the console.
+        var stores = System.Threading.Tasks.Task.Run(StartupStores.Load).GetAwaiter().GetResult();
+        Localizer.Use(stores.Config.Language, App.ComputerLanguages);
+        var refused = new List<RefusedFile>(stores.Refused);
+        if (FileHeader.ProbeNewer(System.IO.Path.Combine(StorageRoot.Directory, RecordStore.FileName), FileHeader.Kinds.Records) is { } newerRecords)
+            refused.Add(newerRecords);
+        if (FileHeader.ProbeNewer(BackupStore.StoreFile, FileHeader.Kinds.Backups) is { } newerBackups)
+            refused.Add(newerBackups);
+        if (refused.Count > 0)
+            return StopLaunch(args, refused);
+
         // The records hold this session's log; the logger installs its own crash hooks and
         // console fallback. The session is this launch, by its start time. Records a newer version
-        // wrote are left as they are, and the app stops before anything can write to them.
+        // wrote that the check above could not judge are still refused before anything writes to them.
         RecordStore records;
         try
         {
@@ -61,10 +75,7 @@ sealed class Program
         }
         catch (NewerFormatVersionException ex)
         {
-            App.StartupFailureMessage = FailurePresentation.NewerStore(ex.FilePath);
-            Console.Error.WriteLine("ScriptDock cannot start: " + ex.Message);
-            _ = BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
-            return 1;
+            return StopLaunch(args, [new RefusedFile(ex.FilePath, Newer: true)]);
         }
         Log.Start(records);
         App.Records = records;
@@ -81,8 +92,9 @@ sealed class Program
                 storageDir = StorageRoot.Directory,
                 debugLogging = Log.DebugEnabled,
             });
-            App.PreparedStores = System.Threading.Tasks.Task.Run(StartupStores.Load).GetAwaiter().GetResult();
-            Localizer.Use(App.PreparedStores.Config.Language, App.ComputerLanguages);
+            App.PreparedStores = stores;
+            // An existing settings history that cannot be opened is reported once the window shows.
+            App.BackupsUnavailable = !BackupStore.OpenExisting();
             LanguageBootstrap.AlignAppKit(Localizer.Language);
             // On macOS a logout or shutdown ends the process as soon as the lifetime exits, before the
             // finally below runs, so what the quit logged is written here first, within the exit deadline.
@@ -108,6 +120,17 @@ sealed class Program
             Log.Shutdown();
             records.Close(exit.Remaining);
         }
+    }
+
+    // Shows the one notice naming each refused file and ends the launch. Nothing has been written.
+    private static int StopLaunch(string[] args, IReadOnlyList<RefusedFile> refused)
+    {
+        foreach (var file in refused)
+            Console.Error.WriteLine($"ScriptDock cannot start: {file.Path} {(file.Newer ? "was saved by a newer version" : "could not be read")}.");
+        App.StartupFailure = FailurePresentation.LaunchStopped(refused);
+        LanguageBootstrap.AlignAppKit(Localizer.Language);
+        _ = BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        return 1;
     }
 
     // The deadline the quit fixed, or, when the app ends without one (a startup failure), one fixed now.

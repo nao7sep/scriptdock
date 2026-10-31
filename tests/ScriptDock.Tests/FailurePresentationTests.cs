@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using ScriptDock.Storage;
 using ScriptDock.Tests.I18n;
 using Xunit;
 
@@ -17,32 +20,41 @@ public sealed class FailurePresentationTests
         var messages = new[]
         {
             FailurePresentation.StartupStorage(),
-            FailurePresentation.StartupData("/x/config.json"),
-            FailurePresentation.RecoveredData("/x/config-20260101-000000-utc.invalid"),
+            FailurePresentation.BackupsUnavailable("/x/backups.sqlite3"),
             FailurePresentation.RootPicker(error),
             FailurePresentation.ScriptStart(error),
         };
 
-        Assert.All(messages, message => Assert.DoesNotContain(Hostile, English.Of(message), StringComparison.Ordinal));
+        var all = new List<ScriptDock.I18n.Message>(messages);
+        all.AddRange(FailurePresentation.LaunchStopped([new RefusedFile("/x/config.json", Newer: false)]));
+        Assert.All(all, message => Assert.DoesNotContain(Hostile, English.Of(message), StringComparison.Ordinal));
         Assert.NotNull(error.InnerException);
     }
 
+    // One paragraph per refused file, each naming it and saying whether a newer version wrote it or it could
+    // not be read, then what to do.
     [Fact]
-    public void NewerStoreNamesTheFileByItsPath()
+    public void LaunchStopNamesEveryRefusedFileAndWhy()
     {
-        const string path = "/Users/me/.scriptdock/config.json";
+        const string config = "/Users/me/.scriptdock/config.json";
+        const string records = "/Users/me/.scriptdock/records.sqlite3";
 
-        Assert.StartsWith(path + " was saved by a newer version", English.Of(FailurePresentation.NewerStore(path)), StringComparison.Ordinal);
+        var text = FailurePresentation.LaunchStopped([new RefusedFile(config, Newer: false), new RefusedFile(records, Newer: true)])
+            .Select(English.Of).ToList();
+
+        Assert.Equal(3, text.Count);
+        Assert.Equal(config + " could not be read.", text[0]);
+        Assert.StartsWith(records + " was saved by a newer version", text[1], StringComparison.Ordinal);
+        Assert.Contains("use that version", text[2], StringComparison.Ordinal);
+        Assert.Contains("move it away to start fresh", text[2], StringComparison.Ordinal);
     }
 
     [Fact]
-    public void RecoveryNoticesNameTheActualFile()
+    public void BackupsNoticeNamesTheDatabase()
     {
-        const string preserved = "/Users/me/.scriptdock/config-20260101-000000-utc.invalid";
-        const string halted = "/Users/me/.scriptdock/config.json";
+        const string path = "/Users/me/.scriptdock/backups.sqlite3";
 
-        Assert.Contains(preserved, English.Of(FailurePresentation.RecoveredData(preserved)), StringComparison.Ordinal);
-        Assert.StartsWith(halted + " could not be read", English.Of(FailurePresentation.StartupData(halted)), StringComparison.Ordinal);
+        Assert.StartsWith(path + " could not be opened", English.Of(FailurePresentation.BackupsUnavailable(path)), StringComparison.Ordinal);
     }
 
     [Fact]

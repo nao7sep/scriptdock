@@ -123,6 +123,38 @@ public static class FileHeader
         rewrite.Commit();
     }
 
+    /// <summary>
+    /// Whether the database at <paramref name="filePath"/> is one a newer build wrote, read without writing
+    /// anything, so the launch can stop on it before any store is opened for writing. Returns its refusal, or
+    /// null when it is absent, current or could not be judged here: an unreadable one is the store's to report
+    /// when it opens, since an unreadable records or backups database does not stop the launch.
+    /// </summary>
+    internal static RefusedFile? ProbeNewer(string filePath, string kind)
+    {
+        if (!File.Exists(filePath))
+            return null;
+        try
+        {
+            using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource = filePath,
+                Mode = SqliteOpenMode.ReadOnly,
+                Pooling = false,
+            }.ToString());
+            connection.Open();
+            var version = (long)Scalar(connection, "PRAGMA user_version;")!;
+            if (version <= Version)
+                return null;
+            var owner = Scalar(connection, $"SELECT value FROM {Table} WHERE key = 'format.owner';") as string;
+            var foundKind = Scalar(connection, $"SELECT value FROM {Table} WHERE key = 'format.kind';") as string;
+            return owner == Owner && foundKind == kind ? new RefusedFile(filePath, Newer: true) : null;
+        }
+        catch (Exception ex) when (ex is SqliteException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     // Owner and kind first: a file of another format is unreadable whatever version it records.
     private static void Check(string owner, string foundKind, long version, string kind, string filePath,
         Func<string, Exception> unreadable)

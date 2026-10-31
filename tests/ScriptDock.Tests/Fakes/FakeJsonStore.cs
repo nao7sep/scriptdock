@@ -17,9 +17,14 @@ public sealed class FakeJsonStore<T> : IJsonStore<T> where T : class, new()
     public int LoadCount { get; private set; }
     public T? LastSaved { get; private set; }
 
+    /// <summary>When set, <see cref="Load"/> throws it: a refused file.</summary>
+    public System.Exception? LoadFailure { get; set; }
+
     public T Load()
     {
         LoadCount++;
+        if (LoadFailure is not null)
+            throw LoadFailure;
         return Value;
     }
 

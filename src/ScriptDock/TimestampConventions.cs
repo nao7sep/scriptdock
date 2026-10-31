@@ -13,7 +13,7 @@ namespace ScriptDock;
 /// <c>written_at_utc</c>) and log envelopes.</item>
 /// <item><see cref="FileStamp"/> — the whole-second compact token used in <em>file names</em>
 /// (<c>20260617-001541-utc</c>): run logs (<c>{stamp}-{name}-{id}.log</c>), the records fallback
-/// log and a quarantined file's <c>.invalid</c> name. Seconds are the convention's default, and none
+/// log. Seconds are the convention's default, and none
 /// of these needs finer precision.</item>
 /// </list>
 /// Keeping every form here means a convention change is a one-line edit that every writer

@@ -122,6 +122,23 @@ public static class BackupStore
             done.Wait();
     }
 
+    /// <summary>
+    /// At launch: opens an existing store now, on its owner, so one that cannot be opened is reported while the
+    /// window shows rather than found at the first save. Returns false when it exists and recording is off for
+    /// the session. A missing store is created by the first recording, as before.
+    /// </summary>
+    public static bool OpenExisting()
+    {
+        if (!File.Exists(StoreFile))
+            return true;
+        var open = false;
+        using var done = new ManualResetEventSlim();
+        if (!Post(connection => { open = Open(connection) is not null; done.Set(); }))
+            return false;
+        done.Wait();
+        return open;
+    }
+
     // False once the exit has closed the queue.
     private static bool Post(Action<Connection> work)
     {
@@ -190,8 +207,9 @@ public static class BackupStore
         }
     }
 
-    // Opens the store on its first use in a session. A database a newer version wrote is left untouched and,
-    // like any other open failure, turns recording off for the session.
+    // Opens the store on its first use in a session. A database a newer version wrote stops the launch before
+    // this runs (FileHeader.ProbeNewer); one found here anyway is left untouched and, like any other open
+    // failure, turns recording off for the session, which the window reports (OpenExisting).
     private static SqliteConnection? Open(Connection owner)
     {
         if (owner.Opened)

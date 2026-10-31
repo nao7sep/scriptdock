@@ -165,7 +165,7 @@ public class RenderedKeyTests : WindowTest
         {
             using var speaking = Localizer.Speaking(tag);
             text.Text = Localizer.T("stop.message", ("name", name));
-            ToolTip.SetTip(button, Localizer.T("failure.newerStore", ("path", path)));
+            ToolTip.SetTip(button, Localizer.T("failure.refusedNewer", ("path", path)));
             Assert.Contains(name, text.Text);
             AssertFinished(text.Text, name);
             Assert.Contains(path, ToolTip.GetTip(button) as string);

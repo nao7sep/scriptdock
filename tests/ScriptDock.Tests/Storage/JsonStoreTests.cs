@@ -18,8 +18,7 @@ namespace ScriptDock.Tests.Storage;
 /// data from a torn write, and a fake filesystem would not exercise it. The <c>.bak</c>
 /// last-good sidecar has been retired (see the data-backup conventions), so these also
 /// assert no such sidecar is ever produced — and that a present-but-corrupt file is
-/// quarantined aside (bytes preserved, per the storage-path conventions' derived-filename
-/// grammar) rather than left for a later save to silently overwrite. A self-contained
+/// refused and left byte-identical, with nothing set aside and no later save reaching it. A self-contained
 /// <see cref="SampleDoc"/> stands in for any persisted model, so these tests do not depend
 /// on the app's evolving config/state shape.
 /// </summary>
@@ -74,13 +73,20 @@ public sealed class JsonStoreTests : IDisposable
     [Theory]
     [InlineData("{\"name\":\"a\",\"name\":\"b\"}")]
     [InlineData("{\"unknown\":{\"nested\":1,\"nested\":2}}")]
-    public void Load_DuplicateProperties_QuarantinesOriginal(string json)
+    public void Load_DuplicateProperties_IsRefused(string json) => AssertRefused(json);
+
+    // An unreadable file is refused with its path, left byte-identical, with nothing beside it.
+    private void AssertRefused(string json)
     {
-        File.WriteAllText(PathOf("doc.json"), json);
+        var path = PathOf("doc.json");
+        File.WriteAllText(path, json);
+        var before = File.ReadAllBytes(path);
         var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
-        Assert.Equal("", store.Load().Name);
-        Assert.False(File.Exists(PathOf("doc.json")));
-        Assert.Equal(json, File.ReadAllText(Assert.Single(Directory.GetFiles(_root, "*.invalid"))));
+
+        Assert.Equal(path, Assert.Throws<UnreadableStoreException>(() => store.Load()).FilePath);
+
+        Assert.Equal(before, File.ReadAllBytes(path));
+        Assert.Equal(["doc.json"], Directory.GetFiles(_root).Select(Path.GetFileName));
     }
 
     [Fact]
@@ -121,10 +127,10 @@ public sealed class JsonStoreTests : IDisposable
         {
             File.SetUnixFileMode(path, UnixFileMode.UserWrite);
             var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
-            var error = Assert.Throws<StoreReadFailedException>(() => store.Load());
+            var error = Assert.Throws<UnreadableStoreException>(() => store.Load());
             Assert.Equal(path, error.FilePath);
             Assert.True(File.Exists(path));
-            Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
+            Assert.Single(Directory.GetFiles(_root));
         }
         finally { File.SetUnixFileMode(path, mode); }
         Assert.Equal(original, File.ReadAllText(path));
@@ -139,9 +145,9 @@ public sealed class JsonStoreTests : IDisposable
         using (var held = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
         {
             var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
-            Assert.Throws<StoreReadFailedException>(() => store.Load());
+            Assert.Throws<UnreadableStoreException>(() => store.Load());
             Assert.True(File.Exists(path));
-            Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
+            Assert.Single(Directory.GetFiles(_root));
         }
         Assert.Equal(original, File.ReadAllText(path));
     }
@@ -189,120 +195,32 @@ public sealed class JsonStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Load_CorruptPrimary_ReturnsDefault()
+    public async Task Load_CorruptFile_IsRefusedAndNoLaterSaveReachesIt()
     {
-        // The .bak sidecar is retired: an unreadable live file is quarantined aside (see the
-        // dedicated quarantine tests below) rather than a sidecar being consulted; earlier content
-        // is recovered, if ever needed, from the quarantine file or backups.sqlite3.
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
+        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample", recordBackups: false);
         await store.SaveAsync(new SampleDoc { Name = "one" });
-        await store.SaveAsync(new SampleDoc { Name = "two" });
-
-        File.WriteAllText(PathOf("doc.json"), "{ not valid json");
-
-        var loaded = store.Load();
-
-        Assert.Equal("", loaded.Name);
-        // No sidecar was ever written to recover from.
-        Assert.False(File.Exists(PathOf("doc.json.bak")));
-    }
-
-    [Fact]
-    public async Task Load_CorruptFile_QuarantinesTheOriginalAndReturnsDefault()
-    {
-        // Present-but-corrupt is never touched by the create-if-absent first-run path and must
-        // never be left in place for a later Save to silently overwrite (the storage-path
-        // conventions' forbidden path). The storage layer moves it aside instead, so it survives
-        // as diagnostic debris, and defaults proceed from here.
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
-        await store.SaveAsync(new SampleDoc { Name = "one" });
-        await store.SaveAsync(new SampleDoc { Name = "two" });
 
         const string corruptContent = "{ not valid json";
         File.WriteAllText(PathOf("doc.json"), corruptContent);
 
-        var loaded = store.Load();
+        Assert.Throws<UnreadableStoreException>(() => store.Load());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.SaveAsync(new SampleDoc { Name = "fresh" }));
 
-        Assert.Equal("", loaded.Name);
-        Assert.False(File.Exists(PathOf("doc.json"))); // moved aside, not left in place
-
-        var quarantined = Directory.EnumerateFiles(_root, "doc-*.invalid").ToList();
-        Assert.Single(quarantined);
-
-        // <stem>-<second-utc-stamp>.invalid — the derived-filename grammar.
-        Assert.Matches(@"^doc-\d{8}-\d{6}-utc\.invalid$", Path.GetFileName(quarantined[0]));
-
-        // A plain rename: the original bytes are preserved exactly, not copied or rewritten.
-        Assert.Equal(corruptContent, File.ReadAllText(quarantined[0]));
+        Assert.Equal(corruptContent, File.ReadAllText(PathOf("doc.json")));
+        Assert.False(File.Exists(PathOf("doc.json.bak")));
+        Assert.Equal(["doc.json"], Directory.GetFiles(_root).Select(Path.GetFileName));
     }
 
     [Fact]
-    public async Task Save_AfterQuarantine_RecreatesTheLiveFileAndLeavesTheQuarantineAlone()
-    {
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
-        File.WriteAllText(PathOf("doc.json"), "{ not valid json");
-
-        store.Load(); // quarantines the corrupt file and returns defaults
-
-        var quarantinePath = Directory.EnumerateFiles(_root, "doc-*.invalid").Single();
-        var quarantinedContentBefore = File.ReadAllText(quarantinePath);
-
-        await store.SaveAsync(new SampleDoc { Name = "fresh" });
-
-        // First-run materialization recreates the live file at the original path...
-        Assert.True(File.Exists(PathOf("doc.json")));
-        Assert.Contains("fresh", File.ReadAllText(PathOf("doc.json")));
-
-        // ...and the quarantine file is left exactly as it was: never re-touched, re-renamed, or
-        // deleted by a later save.
-        Assert.True(File.Exists(quarantinePath));
-        Assert.Equal(quarantinedContentBefore, File.ReadAllText(quarantinePath));
-    }
-
-    [Fact]
-    public void Load_UnreadableFileThatCannotBeMovedAside_NamesItAndLeavesItInPlace()
-    {
-        var path = PathOf("doc.json");
-        const string corruptContent = "{ not valid json";
-        File.WriteAllText(path, corruptContent);
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample", recordBackups: false);
-
-        // The move aside fails: on Windows an open handle that does not share deletion blocks it, and on
-        // macOS a folder that cannot be written to.
-        FileStream? holder = null;
-        if (OperatingSystem.IsWindows())
-            holder = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        else
-            File.SetUnixFileMode(_root, UnixFileMode.UserRead | UnixFileMode.UserExecute);
-        QuarantineFailedException failure;
-        try
-        {
-            failure = Assert.Throws<QuarantineFailedException>(() => store.Load());
-        }
-        finally
-        {
-            holder?.Dispose();
-            if (!OperatingSystem.IsWindows())
-                File.SetUnixFileMode(_root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        }
-
-        Assert.Equal(path, failure.FilePath);
-        Assert.Equal(corruptContent, File.ReadAllText(path));
-        Assert.Empty(Directory.EnumerateFiles(_root, "doc-*.invalid"));
-    }
-
-    [Fact]
-    public async Task Load_UnreadableRebuildableFile_ReturnsDefaultWithoutQuarantineOrNotice()
+    public async Task Load_UnreadableRebuildableFile_ReturnsDefaultWithoutNotice_AndTheNextSaveReplacesIt()
     {
         File.WriteAllText(PathOf("doc.json"), "{ not valid json");
-        QuarantineJournal.Drain();
         var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample", recordBackups: false, rebuildable: true);
 
         var loaded = store.Load();
 
         Assert.Equal("", loaded.Name);
-        Assert.Empty(Directory.EnumerateFiles(_root, "doc-*.invalid"));
-        Assert.Empty(QuarantineJournal.Drain());
+        Assert.Equal(["doc.json"], Directory.GetFiles(_root).Select(Path.GetFileName));
 
         await store.SaveAsync(new SampleDoc { Name = "rebuilt" });
 
@@ -315,14 +233,8 @@ public sealed class JsonStoreTests : IDisposable
     [InlineData("0")]
     [InlineData("-1")]
     [InlineData("null")]
-    public void Load_HeaderVersionThatIsNotOne_OrHigher_IsUnreadable(string version)
-    {
-        File.WriteAllText(PathOf("doc.json"), $$"""{"format":{"owner":"scriptdock","kind":"sample","version":{{version}}},"name":"x"}""");
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
-
-        Assert.Equal("", store.Load().Name);
-        Assert.Single(Directory.EnumerateFiles(_root, "doc-*.invalid"));
-    }
+    public void Load_HeaderVersionThatIsNotOne_OrHigher_IsUnreadable(string version) =>
+        AssertRefused($$"""{"format":{"owner":"scriptdock","kind":"sample","version":{{version}}},"name":"x"}""");
 
     [Theory]
     [InlineData("""{"name":"x"}""")]
@@ -336,15 +248,7 @@ public sealed class JsonStoreTests : IDisposable
     [InlineData("""{"format":{"owner":"pathhide","kind":"sample","version":1},"name":"x"}""")]
     [InlineData("""{"format":{"owner":"scriptdock","kind":"config","version":1},"name":"x"}""")]
     [InlineData("""{"format":{"owner":"ScriptDock","kind":"sample","version":1},"name":"x"}""")]
-    public void Load_MissingMalformedOrForeignHeader_IsUnreadable(string json)
-    {
-        File.WriteAllText(PathOf("doc.json"), json);
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
-
-        Assert.Equal("", store.Load().Name);
-        Assert.False(File.Exists(PathOf("doc.json")));
-        Assert.Equal(json, File.ReadAllText(Assert.Single(Directory.EnumerateFiles(_root, "doc-*.invalid"))));
-    }
+    public void Load_MissingMalformedOrForeignHeader_IsUnreadable(string json) => AssertRefused(json);
 
     [Fact]
     public async Task Load_TakesTheHeaderOutBeforeTheDocumentIsRead()
@@ -370,7 +274,6 @@ public sealed class JsonStoreTests : IDisposable
 
         Assert.Equal("x", store.Load().Name);
         Assert.Equal(json, File.ReadAllText(PathOf("doc.json")));
-        Assert.Empty(Directory.EnumerateFiles(_root, "doc-*.invalid"));
     }
 
     [Fact]
@@ -396,14 +299,7 @@ public sealed class JsonStoreTests : IDisposable
     [Theory]
     [InlineData("null")]
     [InlineData("[]")]
-    public void Load_DocumentThatIsNotAnObject_IsUnreadable(string json)
-    {
-        File.WriteAllText(PathOf("doc.json"), json);
-        var store = new JsonStore<SampleDoc>("doc.json", "doc", kind: "sample");
-
-        Assert.Equal("", store.Load().Name);
-        Assert.Equal(json, File.ReadAllText(Assert.Single(Directory.EnumerateFiles(_root, "doc-*.invalid"))));
-    }
+    public void Load_DocumentThatIsNotAnObject_IsUnreadable(string json) => AssertRefused(json);
 
     [Fact]
     public async Task Save_FirstTime_CreatesLiveFileButNoBakSidecar()

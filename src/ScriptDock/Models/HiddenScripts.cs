@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using ScriptDock.Storage;
 
 namespace ScriptDock.Models;
@@ -15,7 +16,11 @@ public sealed class HiddenScripts : IJsonNormalizable
     /// <summary>The hidden scripts' absolute paths.</summary>
     public List<string> Paths { get; set; } = [];
 
-    /// <summary>A member that is not a path makes the file unreadable, so it is quarantined rather than
+    /// <summary>Members this version does not know, written back unchanged so a save never drops them.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Unknown { get; set; }
+
+    /// <summary>A member that is not a path makes the file unreadable, so the launch stops on it rather than
     /// silently dropping the user's other hides. A missing list reads as empty.</summary>
     public void NormalizeAfterLoad()
     {

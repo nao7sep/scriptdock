@@ -855,7 +855,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             {
                 var hidden = _hidden.Paths.Where(path => !_keys.Same(path, item.Path)).ToList();
                 if (nowHidden) hidden.Add(item.Path);
-                await _hiddenStore.SaveAsync(new HiddenScripts { Paths = hidden });
+                await _hiddenStore.SaveAsync(new HiddenScripts { Paths = hidden, Unknown = _hidden.Unknown });
                 _hidden.Paths = hidden;
                 ResolveOperationalError("toggle hidden");
                 Log.Info("ui: toggle hidden", new { script = item.Path, hidden = nowHidden });

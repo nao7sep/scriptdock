@@ -335,7 +335,7 @@ public sealed class DialogBoundsTests : WindowTest
     {
         var notice = NoticeDialog.CreateStartupFailure(
             ScriptDock.I18n.Message.Of("startup.failedTitle"),
-            ScriptDock.I18n.Message.Of("startup.failedTitle"));
+            [ScriptDock.I18n.Message.Of("startup.failedTitle")]);
 
         try
         {
@@ -362,7 +362,7 @@ public sealed class DialogBoundsTests : WindowTest
     {
         var notice = NoticeDialog.CreateStartupFailure(
             ScriptDock.I18n.Message.Of("startup.failedTitle"),
-            ScriptDock.I18n.Message.Of("startup.failedTitle"));
+            [ScriptDock.I18n.Message.Of("startup.failedTitle")]);
         var owned = new DialogBase();
 
         try
