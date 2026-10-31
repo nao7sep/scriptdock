@@ -17,7 +17,6 @@ public sealed class StartupStoresTests
         public AppConfig Value = new() { Language = "ja" };
         public Exception? Failure;
         public IReadOnlyList<string> KeptKeys => [];
-        public IReadOnlyList<string>? MovedHidden => null;
         public AppConfig Load() { Reads++; if (Failure is not null) throw Failure; return Value; }
         public Task SaveAsync(AppConfig value, IReadOnlyCollection<string>? replaced = null) => throw new NotSupportedException();
     }

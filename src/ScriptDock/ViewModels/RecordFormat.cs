@@ -164,7 +164,7 @@ public static class RecordFormat
 
     public static string LevelFilterLabel(RecordLevelFilter level) => level switch
     {
-        RecordLevelFilter.Attention => Localizer.T("records.levelAttention"),
+        RecordLevelFilter.WarningsAndErrors => Localizer.T("records.levelWarningsAndErrors"),
         RecordLevelFilter.Error => Localizer.T("records.levelError"),
         RecordLevelFilter.Warn => Localizer.T("records.levelWarn"),
         RecordLevelFilter.Debug => Localizer.T("records.levelDebug"),

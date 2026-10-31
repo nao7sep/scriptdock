@@ -99,7 +99,7 @@ public static class ConfigSets
         JsonValueKind.False => false,
         _ => throw new JsonException("Expected true or false"),
     };
-    internal static List<string> Strings(JsonElement value) => value.EnumerateArray().Select(String).ToList();
+    private static List<string> Strings(JsonElement value) => value.EnumerateArray().Select(String).ToList();
 
     // Each member is checked before cleanup, which could otherwise conceal what makes it invalid.
     private static List<string> Texts(JsonElement value, Func<string, Message?> error) =>

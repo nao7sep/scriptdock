@@ -122,12 +122,12 @@ public sealed class RecordsWindowViewModelTests
     }
 
     [AvaloniaFact]
-    public void Offers_needs_attention_first_among_the_levels()
+    public void Offers_warnings_and_errors_first_among_the_levels()
     {
         var vm = new RecordsWindowViewModel(_reader, _stateStore, _stateStore.Value, _time);
 
         Assert.Equal(
-            new[] { "records.allLevels", "records.levelAttention", "records.levelError", "records.levelWarn", "records.levelInfo", "records.levelDebug" }
+            new[] { "records.allLevels", "records.levelWarningsAndErrors", "records.levelError", "records.levelWarn", "records.levelInfo", "records.levelDebug" }
                 .Select(key => English.Of(key)),
             vm.LevelOptions.Select(option => option.Label));
         Assert.Equal(
@@ -146,9 +146,9 @@ public sealed class RecordsWindowViewModelTests
 
         vm.SelectedLaunch = vm.LaunchOptions[1];
         vm.SelectedKind = vm.KindOptions.Single(option => Equals(option.Value, RecordKind.Run));
-        vm.SelectedLevel = vm.LevelOptions.Single(option => Equals(option.Value, RecordLevelFilter.Attention));
+        vm.SelectedLevel = vm.LevelOptions.Single(option => Equals(option.Value, RecordLevelFilter.WarningsAndErrors));
         Pump();
-        Assert.Equal(new RecordsQuery(Session, RecordKind.Run, RecordLevelFilter.Attention, "", null), _reader.LastQuery);
+        Assert.Equal(new RecordsQuery(Session, RecordKind.Run, RecordLevelFilter.WarningsAndErrors, "", null), _reader.LastQuery);
 
         var reads = _reader.PageQueries.Count;
         vm.SearchText = "quo";

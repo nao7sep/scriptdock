@@ -46,7 +46,7 @@ internal static class RecordQueries
             command.Parameters.AddWithValue("$session", query.Session);
         if (search is not null)
             command.Parameters.AddWithValue("$search", search);
-        if (query.Level is { } level and not RecordLevelFilter.Attention)
+        if (query.Level is { } level and not RecordLevelFilter.WarningsAndErrors)
             command.Parameters.AddWithValue("$level", LevelName(level));
 
         string Where(string session, string levelColumn, params string[] searched)
@@ -54,7 +54,7 @@ internal static class RecordQueries
             var where = new List<string> { "1 = 1" };
             if (query.Session is not null)
                 where.Add($"{session} = $session");
-            if (query.Level == RecordLevelFilter.Attention)
+            if (query.Level == RecordLevelFilter.WarningsAndErrors)
                 where.Add($"{levelColumn} IN ('warn', 'error')");
             else if (query.Level is not null)
                 where.Add($"{levelColumn} = $level");

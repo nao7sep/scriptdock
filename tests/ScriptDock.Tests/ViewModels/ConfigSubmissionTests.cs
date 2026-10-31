@@ -262,7 +262,6 @@ public sealed class ConfigSubmissionTests : IAsyncLifetime
         private readonly ConfigStore _inner = new();
         public AppConfig Load() => _inner.Load();
         public IReadOnlyList<string> KeptKeys => _inner.KeptKeys;
-        public IReadOnlyList<string>? MovedHidden => _inner.MovedHidden;
         public Task SaveAsync(AppConfig value, IReadOnlyCollection<string>? replaced = null) =>
             holds.Save(() => _inner.SaveAsync(value, replaced));
     }

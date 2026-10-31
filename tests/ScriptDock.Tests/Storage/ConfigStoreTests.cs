@@ -81,22 +81,18 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     public async Task Dialog_WritesEverySetThatDiffers_AndKeepsUnknownKeys()
     {
         // Keys this version does not know are kept unchanged.
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"hidden":["/hidden"],"extensions":[],"version":1,"unknown":true}""");
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[],"version":1,"unknown":true}""");
         var store = new ConfigStore();
         var config = store.Load();
         var vm = NewViewModel(store, config);
         var draft = new SettingsDialogViewModel(config) { Theme = ThemePreference.Dark };
         Assert.True(await vm.TryApplySettingsAsync(draft));
-        Assert.Equal(["extensions", "hidden", "theme", "unknown", "version"], ReadKeys());
+        Assert.Equal(["extensions", "theme", "unknown", "version"], ReadKeys());
         Assert.Equal("true", ReadRaw("unknown"));
         // An empty extension list would find nothing, so it is kept unchanged and the built-in applies.
         Assert.Equal("[]", ReadRaw("extensions"));
         Assert.Equal([ConfigDefaults.DefaultExtension], store.Load().Extensions);
         Assert.Contains("extensions", store.KeptKeys);
-        // A hidden list from before hidden.json stays until the startup move takes it, and is not a kept setting.
-        store.Load();
-        Assert.Equal(["/hidden"], store.MovedHidden);
-        Assert.DoesNotContain("hidden", store.KeptKeys);
     }
 
     // The startup notice says to fix a kept set in Settings: choosing its built-in there is a real change.
@@ -162,13 +158,13 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [Fact]
     public async Task InvalidSet_IsKeptUnchangedAtTheNextSave()
     {
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[null,".sh"],"theme":"future","hidden":["/ok"]}""");
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[null,".sh"],"theme":"future"}""");
         var store = new ConfigStore();
         var config = store.Load();
         Assert.Equal(["extensions", "theme"], store.KeptKeys.Order());
         config.RootDirs.Add("/new");
         await store.SaveAsync(config);
-        Assert.Equal(["extensions", "hidden", "rootDirs", "theme"], ReadKeys());
+        Assert.Equal(["extensions", "rootDirs", "theme"], ReadKeys());
         Assert.Equal("""[null,".sh"]""", ReadRaw("extensions"));
         Assert.Equal("\"future\"", ReadRaw("theme"));
     }
@@ -176,7 +172,7 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [Fact]
     public async Task InvalidSet_IsReplacedOnceTheUserSavesANewValue()
     {
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[null,".sh"],"hidden":["/ok"]}""");
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"extensions":[null,".sh"]}""");
         var store = new ConfigStore();
         var config = store.Load();
         config.Extensions = [".py"];
@@ -186,7 +182,7 @@ public sealed class ConfigStoreTests : IAsyncLifetime
         // Replaced for good: a later save that returns the set to its built-in removes it.
         config.Extensions = [ConfigDefaults.DefaultExtension];
         await store.SaveAsync(config);
-        Assert.Equal(["hidden"], ReadKeys());
+        Assert.Empty(ReadKeys());
     }
 
     [Fact]
@@ -222,14 +218,13 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [Fact]
     public void InvalidSet_UsesBuiltInWithoutQuarantiningOrChangingOtherSets()
     {
-        const string json = """{"formatVersion":1,"extensions":[null,".sh"],"theme":"future","language":"unknown","hidden":["/ok"]}""";
+        const string json = """{"formatVersion":1,"extensions":[null,".sh"],"theme":"future","language":"unknown"}""";
         File.WriteAllText(ConfigPath, json);
         var store = new ConfigStore();
         var loaded = store.Load();
         Assert.Equal([ConfigDefaults.DefaultExtension], loaded.Extensions);
         Assert.Equal(ThemePreference.System, loaded.Theme);
         Assert.Equal("system", loaded.Language);
-        Assert.Equal(["/ok"], store.MovedHidden);
         Assert.Equal(json, File.ReadAllText(ConfigPath));
         Assert.Empty(Directory.GetFiles(_root, "*.invalid"));
     }
@@ -246,12 +241,11 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [InlineData("""[3]""")]                                    // not a pattern at all
     public void InvalidIgnorePatterns_ReadAsTheirBuiltIn_AndKeepTheOtherSets(string patterns)
     {
-        File.WriteAllText(ConfigPath, $$"""{"formatVersion":1,"ignorePatterns":{{patterns}},"extensions":[".sh"],"hidden":["/ok"]}""");
+        File.WriteAllText(ConfigPath, $$"""{"formatVersion":1,"ignorePatterns":{{patterns}},"extensions":[".sh"]}""");
         var store = new ConfigStore();
         var loaded = store.Load();
         Assert.Equal(ConfigDefaults.BuiltInIgnorePatterns, loaded.IgnorePatterns);
         Assert.Equal([".sh"], loaded.Extensions);
-        Assert.Equal(["/ok"], store.MovedHidden);
     }
 
     [Theory]
@@ -260,12 +254,11 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [InlineData("""[".sh\n.py"]""")]         // multiline, which cleanup would flatten into ".sh .py"
     public void InvalidExtensions_ReadAsTheirBuiltIn_AndKeepTheOtherSets(string extensions)
     {
-        File.WriteAllText(ConfigPath, $$"""{"formatVersion":1,"extensions":{{extensions}},"ignorePatterns":[{"pattern":"/build/","kind":"regex"}],"hidden":["/ok"]}""");
+        File.WriteAllText(ConfigPath, $$"""{"formatVersion":1,"extensions":{{extensions}},"ignorePatterns":[{"pattern":"/build/","kind":"regex"}]}""");
         var store = new ConfigStore();
         var loaded = store.Load();
         Assert.Equal([ConfigDefaults.DefaultExtension], loaded.Extensions);
         Assert.Equal([new IgnorePattern("/build/", IgnorePatternKind.Regex)], loaded.IgnorePatterns);
-        Assert.Equal(["/ok"], store.MovedHidden);
     }
 
     // A pattern is stored with its kind, and a built-in with its id.
@@ -290,10 +283,10 @@ public sealed class ConfigStoreTests : IAsyncLifetime
     [Fact]
     public async Task InvalidIgnorePatterns_AreKeptUnchangedAtTheNextSave()
     {
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"ignorePatterns":["["],"hidden":["/ok"]}""");
+        File.WriteAllText(ConfigPath, """{"formatVersion":1,"ignorePatterns":["["]}""");
         var store = new ConfigStore();
         await store.SaveAsync(store.Load());
-        Assert.Equal(["hidden", "ignorePatterns"], ReadKeys());
+        Assert.Equal(["ignorePatterns"], ReadKeys());
         Assert.Equal("""["["]""", ReadRaw("ignorePatterns"));
     }
 
@@ -330,100 +323,6 @@ public sealed class ConfigStoreTests : IAsyncLifetime
         Assert.Equal(["/one", "/two"], store.Load().RootDirs);
         Assert.Equal([".sh"], store.Load().Extensions);
         Assert.Equal(["extensions", "rootDirs"], ReadKeys());
-    }
-
-    // A "hidden" entry that is not a list of paths is not a hidden list to move: it stays as an unknown key.
-    [Fact]
-    public async Task A_hidden_entry_that_is_not_a_list_of_paths_is_kept_as_an_unknown_key()
-    {
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"hidden":[3]}""");
-        var store = new ConfigStore();
-        var config = store.Load();
-        Assert.Null(store.MovedHidden);
-        Assert.Equal(["hidden"], store.KeptKeys);
-        await store.SaveAsync(config);
-        Assert.Equal("[3]", ReadRaw("hidden"));
-    }
-
-    // The startup move: the list leaves config.json for hidden.json, the other sets stay, and a second
-    // launch has nothing left to move.
-    [Fact]
-    public void Startup_moves_a_hidden_list_out_of_config_json_once()
-    {
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"hidden":["/a.command","/b.command"],"theme":"dark","unknown":true}""");
-        var first = new StartupStores(new ConfigStore(), AppStores.Hidden(), new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>());
-        first.ThrowIfFailed();
-        Assert.Equal(["/a.command", "/b.command"], first.Hidden.Paths);
-        Assert.Equal(["/a.command", "/b.command"], AppStores.Hidden().Load().Paths);
-        Assert.Equal(["theme", "unknown"], ReadKeys());
-        Assert.Equal(ThemePreference.Dark, first.Config.Theme);
-
-        var config = File.ReadAllText(ConfigPath);
-        var second = new StartupStores(new ConfigStore(), AppStores.Hidden(), new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>());
-        Assert.Null(second.ConfigStore.MovedHidden);
-        Assert.Equal(["/a.command", "/b.command"], second.Hidden.Paths);
-        Assert.Equal(config, File.ReadAllText(ConfigPath));
-    }
-
-    // A move cut off after its first write left the list in both files; the next launch joins them.
-    [Fact]
-    public void Startup_joins_a_hidden_list_left_in_both_files()
-    {
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"hidden":["/a.command","/b.command"]}""");
-        File.WriteAllText(Path.Combine(_root, "hidden.json"), """{"formatVersion":1,"paths":["/a.command","/c.command"]}""");
-        var loaded = new StartupStores(new ConfigStore(), AppStores.Hidden(), new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>());
-        Assert.Equal(["/a.command", "/c.command", "/b.command"], loaded.Hidden.Paths);
-        Assert.Equal(["/a.command", "/c.command", "/b.command"], AppStores.Hidden().Load().Paths);
-        Assert.Empty(ReadKeys());
-    }
-
-    // A failed hidden.json write leaves the list in config.json, where later saves keep it for the next try.
-    [Fact]
-    public async Task A_failed_move_keeps_the_hidden_list_in_config_json()
-    {
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"hidden":["/a.command"]}""");
-        var store = new ConfigStore();
-        var loaded = new StartupStores(store, new FakeJsonStore<HiddenScripts> { ThrowOnSave = true },
-            new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>());
-        loaded.ThrowIfFailed();
-        Assert.Equal(["/a.command"], loaded.Hidden.Paths); // hidden this session all the same
-        loaded.Config.Theme = ThemePreference.Dark;
-        await store.SaveAsync(loaded.Config, ["theme"]);
-        Assert.Equal("""["/a.command"]""", ReadRaw("hidden"));
-    }
-
-    // After a failed move, hidden.json takes the user's next choice and the old list leaves config.json,
-    // so a script shown in that session stays shown at the next launch.
-    [Fact]
-    public async Task A_script_shown_after_a_failed_move_stays_shown_at_the_next_launch()
-    {
-        File.WriteAllText(ConfigPath, """{"formatVersion":1,"hidden":["/a.command","/b.command"]}""");
-        var hiddenStore = new FailsOnce(AppStores.Hidden());
-        var first = new StartupStores(new ConfigStore(), hiddenStore, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>());
-        first.ThrowIfFailed();
-        Assert.False(File.Exists(Path.Combine(_root, "hidden.json"))); // the move failed
-        var vm = new MainWindowViewModel(first.ConfigStore, new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>(), hiddenStore,
-            new FakeRecordStore(), first.Config, new AppState(), new KnownPaths(), first.Hidden, new ScriptScanner(), new FakeProcessRunner());
-        _vms.Add(vm);
-
-        await vm.ToggleHiddenCommand.ExecuteAsync(new ScriptItem("/a.command"));
-        Assert.Empty(ReadKeys());
-
-        var next = new StartupStores(new ConfigStore(), AppStores.Hidden(), new FakeJsonStore<AppState>(), new FakeJsonStore<KnownPaths>());
-        Assert.Equal(["/b.command"], next.Hidden.Paths);
-    }
-
-    private sealed class FailsOnce(IJsonStore<HiddenScripts> inner) : IJsonStore<HiddenScripts>
-    {
-        private bool _failed;
-        public HiddenScripts Load() => inner.Load();
-        public Task SaveAsync(HiddenScripts value)
-        {
-            if (_failed)
-                return inner.SaveAsync(value);
-            _failed = true;
-            return Task.FromException(new IOException("save failed (test)"));
-        }
     }
 
     private MainWindowViewModel NewViewModel(ConfigStore store, AppConfig config)

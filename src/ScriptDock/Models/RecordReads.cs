@@ -15,11 +15,11 @@ public enum RecordKind
     ScanReport,
 }
 
-/// <summary>What the level filter offers: a record's own level, or every record that needs attention.</summary>
+/// <summary>What the level filter offers: a record's own level, or every warning and error.</summary>
 public enum RecordLevelFilter
 {
     /// <summary>Every record at <c>warn</c> or <c>error</c>, a failed run's output included.</summary>
-    Attention,
+    WarningsAndErrors,
     Error,
     Warn,
     Info,
