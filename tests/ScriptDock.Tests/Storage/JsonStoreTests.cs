@@ -388,7 +388,7 @@ public sealed class JsonStoreTests : IDisposable
         Assert.Equal(1, format.GetProperty("version").GetInt32());
         Assert.Equal(3, format.EnumerateObject().Count());
         var writer = document.RootElement.GetProperty("writer");
-        Assert.Equal(FileHeader.WriterName, writer.GetProperty("name").GetString());
+        Assert.Equal("scriptdock", writer.GetProperty("name").GetString());
         Assert.Equal(FileHeader.WriterVersion, writer.GetProperty("version").GetString());
         Assert.Equal(2, writer.EnumerateObject().Count());
     }

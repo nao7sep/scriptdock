@@ -54,8 +54,8 @@ public static class FileHeader
 
     private static readonly AssemblyName Assembly = typeof(FileHeader).Assembly.GetName();
 
-    /// <summary>The writing package, as its project names it.</summary>
-    public static string WriterName { get; } = Assembly.Name!;
+    /// <summary>The writing package's name, lowercase letters and digits only (file-identity-conventions).</summary>
+    public const string WriterName = "scriptdock";
 
     /// <summary>The writing package's release version.</summary>
     public static string WriterVersion { get; } = Assembly.Version!.ToString(3);

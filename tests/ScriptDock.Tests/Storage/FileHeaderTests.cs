@@ -358,7 +358,7 @@ public sealed class FileHeaderTests : IDisposable
     {
         Assert.Equal(FileHeader.Owner, Scalar(file, "SELECT value FROM file_header WHERE key = 'format.owner'"));
         Assert.Equal(kind, Scalar(file, "SELECT value FROM file_header WHERE key = 'format.kind'"));
-        Assert.Equal(FileHeader.WriterName, Scalar(file, "SELECT value FROM file_header WHERE key = 'writer.name'"));
+        Assert.Equal("scriptdock", Scalar(file, "SELECT value FROM file_header WHERE key = 'writer.name'"));
         Assert.Equal(FileHeader.WriterVersion, Scalar(file, "SELECT value FROM file_header WHERE key = 'writer.version'"));
         Assert.Equal(4L, Scalar(file, "SELECT COUNT(*) FROM file_header"));
     }
